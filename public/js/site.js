@@ -753,7 +753,7 @@
     const tour = currentTour();
     const left = selectedDepartureLeft();
     const valid = Boolean(tour && state.date && state.time && left !== null && left >= state.pax && state.pax >= (tour.minParticipants || 1));
-    button.disabled = !valid;
+    button.disabled = !valid || !state.user;
     if (tour && left !== null && left < state.pax) {
       showAvailabilityNote(`Solo quedan ${left} cupos en ese horario. Reduce los participantes o elige otro horario.`);
     }

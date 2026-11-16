@@ -14,8 +14,6 @@
   const next = params.get('next');
   if (nextInput && next) nextInput.value = next;
 
-  let role = 'user';
-
   const panels = {
     user: $('#panel-user'),
     register: $('#panel-register'),
@@ -42,20 +40,27 @@
     });
   }
 
+  function activePanel() {
+    if (panels.register?.classList.contains('is-active')) return 'register';
+    if (panels.admin?.classList.contains('is-active')) return 'admin';
+    return 'user';
+  }
+
   function setActivePanel(name) {
     Object.entries(panels).forEach(([key, panel]) => {
       if (panel) panel.classList.toggle('is-active', key === name);
+    });
+    document.querySelectorAll('.login-tab').forEach((tab) => {
+      const active =
+        (name === 'admin' && tab.dataset.role === 'admin') ||
+        ((name === 'user' || name === 'register') && tab.dataset.role === 'user');
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', String(active));
     });
     clearErrors();
   }
 
   function setRole(nextRole) {
-    role = nextRole;
-    document.querySelectorAll('.login-tab').forEach((tab) => {
-      const active = tab.dataset.role === nextRole;
-      tab.classList.toggle('is-active', active);
-      tab.setAttribute('aria-selected', String(active));
-    });
     setActivePanel(nextRole === 'admin' ? 'admin' : 'user');
   }
 
@@ -68,10 +73,12 @@
     window.location.href = '/';
   }
 
-  function busy(button, on) {
-    if (!button) return;
-    button.disabled = on;
-    button.dataset.busy = on ? '1' : '';
+  function setBusy(on) {
+    form.querySelectorAll('button[type="submit"]').forEach((button) => {
+      button.disabled = on;
+      if (on) button.dataset.busy = '1';
+      else delete button.dataset.busy;
+    });
   }
 
   async function api(url, body) {
@@ -91,58 +98,54 @@
     return data;
   }
 
-  async function submitUser(event) {
-    event.preventDefault();
-    clearErrors();
+  async function submitUser() {
     const email = $('#userEmail')?.value.trim() || '';
     const password = $('#userPassword')?.value || '';
-    const button = $('#userSubmit');
-    busy(button, true);
-    try {
-      await api('/api/auth/login', { email, password });
-      redirectAfterLogin();
-    } catch (err) {
-      showError(errors.user, err.message);
-      busy(button, false);
+    if (!email || !password) {
+      showError(errors.user, 'Ingresa tu correo y contraseña.');
+      return;
     }
+    await api('/api/auth/login', { email, password });
+    redirectAfterLogin();
   }
 
-  async function submitRegister(event) {
-    event.preventDefault();
-    clearErrors();
+  async function submitRegister() {
     const name = $('#regName')?.value.trim() || '';
     const email = $('#regEmail')?.value.trim() || '';
     const password = $('#regPassword')?.value || '';
-    const button = $('#regSubmit');
-    busy(button, true);
-    try {
-      await api('/api/auth/register', { name, email, password });
-      redirectAfterLogin();
-    } catch (err) {
-      showError(errors.register, err.message);
-      busy(button, false);
+    if (!name || !email || !password) {
+      showError(errors.register, 'Completa nombre, correo y contraseña.');
+      return;
     }
+    await api('/api/auth/register', { name, email, password });
+    redirectAfterLogin();
   }
 
-  async function submitAdmin(event) {
+  async function submitAdmin() {
+    const password = $('#adminPassword')?.value || '';
+    if (!password) {
+      showError(errors.admin, 'Ingresa la contraseña de administración.');
+      return;
+    }
+    await api('/api/admin/login', { password });
+    window.location.href = '/admin.html';
+  }
+
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
     clearErrors();
-    const password = $('#adminPassword')?.value || '';
-    const button = $('#adminSubmit');
-    busy(button, true);
+    const panel = activePanel();
+    setBusy(true);
     try {
-      await api('/api/admin/login', { password });
-      window.location.href = '/admin.html';
+      if (panel === 'register') await submitRegister();
+      else if (panel === 'admin') await submitAdmin();
+      else await submitUser();
     } catch (err) {
-      showError(errors.admin, err.message);
-      busy(button, false);
+      if (panel === 'register') showError(errors.register, err.message);
+      else if (panel === 'admin') showError(errors.admin, err.message);
+      else showError(errors.user, err.message);
+      setBusy(false);
     }
-  }
-
-  // El formulario tiene varios botones; se resuelve el submit según el panel activo.
-  form.addEventListener('submit', (event) => {
-    if (!panels.user.classList.contains('is-active')) return;
-    submitUser(event);
   });
 
   document.querySelectorAll('.login-tab').forEach((tab) => {
@@ -150,12 +153,12 @@
   });
 
   $('#goRegister')?.addEventListener('click', () => setActivePanel('register'));
-  $('#goLogin')?.addEventListener('click', () => setRole('user'));
+  $('#goLogin')?.addEventListener('click', () => setActivePanel('user'));
 
-  // Botones que no disparan el submit general del formulario
-  $('#regSubmit')?.addEventListener('click', submitRegister);
-  $('#adminSubmit')?.addEventListener('click', submitAdmin);
+  $('#backButton')?.addEventListener('click', () => {
+    if (window.history.length > 1) window.history.back();
+    else window.location.href = '/';
+  });
 
-  // Si llega ?role=admin, abre directamente el panel de administración.
   if (params.get('role') === 'admin') setRole('admin');
 })();
