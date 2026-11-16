@@ -1229,21 +1229,35 @@
     const node = $('#map');
     const fallback = $('#mapFallback');
     if (!node) return;
-    const showFallback = () => {
+    const showFallback = (err) => {
+      if (err) console.warn('Leaflet map error, falling back:', err);
       if (fallback) fallback.hidden = false;
       if (node) node.style.display = 'none';
     };
+
+    // Si Leaflet aún no está disponible (ej. por orden de ejecución o script diferido), reintentar brevemente
     if (!window.L) {
-      showFallback();
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        if (window.L) {
+          clearInterval(interval);
+          setupMap(mapIntro);
+        } else if (attempts >= 25) {
+          clearInterval(interval);
+          showFallback('Leaflet library not found on window.L');
+        }
+      }, 100);
       return;
     }
+
     try {
       if (state.map) {
         state.map.remove();
         state.map = null;
       }
-      const lat = Number(mapIntro.lat);
-      const lng = Number(mapIntro.lng);
+      const lat = Number(mapIntro?.lat ?? 15.537628);
+      const lng = Number(mapIntro?.lng ?? -89.955361);
       const map = window.L.map(node, { scrollWheelZoom: false, zoomControl: true }).setView([lat, lng], 13);
       state.map = map;
       window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1263,7 +1277,7 @@
 
       window.L.marker([lat, lng], { icon: kanbaIcon, title: 'K’anba' })
         .addTo(map)
-        .bindPopup(popup('K’anba · Cuevas Vivas', mapIntro.address || 'Lanquín, Alta Verapaz'))
+        .bindPopup(popup('K’anba · Cuevas Vivas', mapIntro?.address || 'Lanquín, Alta Verapaz'))
         .openPopup();
       window.L.marker([15.5333, -89.9667], { icon: semucIcon })
         .addTo(map)
@@ -1277,7 +1291,7 @@
       state.mapReady = true;
       setTimeout(() => map.invalidateSize(), 500);
     } catch (error) {
-      showFallback();
+      showFallback(error);
     }
   }
 
