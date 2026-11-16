@@ -138,6 +138,37 @@
       state.user = null;
     } finally {
       state.authChecked = true;
+
+      // Actualizar botón de sesión / perfil en la cabecera
+      const loginBtn = document.querySelector('.header-actions .btn-login, .header-actions .user-profile-btn');
+      if (loginBtn) {
+        if (state.user) {
+          const firstName = (state.user.name || state.user.email || 'Mi cuenta').split(' ')[0];
+          const initial = firstName.charAt(0).toUpperCase();
+          loginBtn.className = 'user-profile-btn';
+          loginBtn.removeAttribute('href');
+          loginBtn.title = 'Sesión activa: ' + (state.user.name || state.user.email);
+          loginBtn.innerHTML = `
+            <span class="user-avatar" aria-hidden="true">${initial}</span>
+            <span>${firstName}</span>
+            <span class="btn-logout-icon" title="Cerrar sesión" aria-label="Cerrar sesión">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </span>
+          `;
+          loginBtn.onclick = async (e) => {
+            if (e.target.closest('.btn-logout-icon') || confirm('¿Deseas cerrar tu sesión?')) {
+              e.preventDefault();
+              try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* noop */ }
+              window.location.reload();
+            }
+          };
+        } else {
+          loginBtn.className = 'link-subtle btn-login';
+          loginBtn.href = 'login.html';
+          loginBtn.textContent = 'Iniciar sesión';
+          loginBtn.onclick = null;
+        }
+      }
       const badge = $('#authBadge');
       if (badge) {
         if (state.user) {

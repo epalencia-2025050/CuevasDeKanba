@@ -253,6 +253,47 @@ svg { display: block; }
   box-shadow: 0 8px 20px rgba(184, 217, 140, .18);
 }
 .header-actions .btn-login:active { transform: translateY(0) scale(.98); }
+.header-actions .user-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(184, 217, 140, .35);
+  background: rgba(14, 36, 32, .8);
+  color: var(--cream);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.header-actions .user-profile-btn:hover {
+  background: rgba(23, 72, 56, .9);
+  border-color: var(--lime);
+  color: #fff;
+}
+.header-actions .user-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--deep);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 11px;
+}
+.header-actions .btn-logout-icon {
+  margin-left: 4px;
+  opacity: .7;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity .2s;
+}
+.header-actions .btn-logout-icon:hover {
+  opacity: 1;
+  color: var(--rust);
+}
 .nav-toggle {
   display: none; width: 42px; height: 42px; border-radius: 50%;
   background: rgba(246, 241, 230, .08); border: 1px solid rgba(246, 241, 230, .22);

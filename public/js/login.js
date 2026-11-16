@@ -54,7 +54,18 @@
     admin: $('#adminError')
   };
 
+  const successes = {
+    user: $('#userSuccess'),
+    register: $('#regSuccess')
+  };
+
   function showError(box, message) {
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = false;
+  }
+
+  function showSuccess(box, message) {
     if (!box) return;
     box.textContent = message;
     box.hidden = false;
@@ -62,6 +73,11 @@
 
   function clearErrors() {
     Object.values(errors).forEach((box) => {
+      if (!box) return;
+      box.textContent = '';
+      box.hidden = true;
+    });
+    Object.values(successes).forEach((box) => {
       if (!box) return;
       box.textContent = '';
       box.hidden = true;
@@ -146,7 +162,19 @@
       return;
     }
     await api('/api/auth/register', { name, email, password });
-    redirectAfterLogin();
+
+    // Redirigir al panel de iniciar sesión con correo prellenado y mensaje
+    setActivePanel('user');
+    const userEmailInput = $('#userEmail');
+    if (userEmailInput) {
+      userEmailInput.value = email;
+    }
+    const userPwInput = $('#userPassword');
+    if (userPwInput) {
+      userPwInput.value = '';
+      userPwInput.focus();
+    }
+    showSuccess(successes.user, '¡Cuenta creada con éxito! Ingresa tu contraseña para iniciar sesión.');
   }
 
   async function submitAdmin() {
@@ -189,6 +217,19 @@
   });
 
   if (params.get('role') === 'admin') setRole('admin');
+
+  // Si el usuario ya tiene sesión iniciada y entra a login.html, redirigir
+  (async () => {
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.authenticated && data.user) {
+          redirectAfterLogin();
+        }
+      }
+    } catch { /* noop */ }
+  })();
 
   initPasswordToggles();
 })();
