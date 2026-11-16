@@ -119,8 +119,15 @@
   }
 
   function requireLogin(message) {
+    const gate = $('#bookingAuthGate');
+    if (gate) {
+      gate.hidden = false;
+      const msg = $('#bookingAuthMessage');
+      if (msg) msg.textContent = message || 'Para continuar con tu reserva, inicia sesión o crea tu cuenta.';
+      gate.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     toast(message || 'Inicia sesión para reservar.');
-    window.location.href = loginUrl();
+    window.setTimeout(() => { window.location.href = loginUrl(); }, 900);
   }
 
   async function loadAuth() {
@@ -145,7 +152,7 @@
       if (gate) {
         gate.hidden = Boolean(state.user);
         const msg = $('#bookingAuthMessage');
-        if (msg && !state.user) msg.textContent = 'Para reservar necesitas iniciar sesión con tu cuenta de usuario.';
+        if (msg && !state.user) msg.textContent = 'Para continuar con tu reserva, inicia sesión o crea tu cuenta. Es rápido y necesario para guardar tus datos y cupos.';
       }
       $$('[data-requires-auth]').forEach((node) => {
         node.disabled = !state.user;
