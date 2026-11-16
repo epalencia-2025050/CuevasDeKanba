@@ -1,33 +1,42 @@
 /* ==========================================================================
-   K’anba · Glass Login Experience (Cuevas Vivas)
-   Liquid Glass Card + Cueva Subterránea + Shader WebGL de Fuego de Velas
+   K’anba · Dashboard de Login (Cuevas Vivas)
+   Diseño inmersivo integrado con la identidad del sitio web K'anba:
+   Fondo real de cueva, gradientes orgánicos, paleta verde/bosque/lima/ámbar,
+   tipografía Fraunces & Manrope, y tarjeta estilo cueva viva.
    ========================================================================== */
 
 :root {
-  --glass-bg: rgba(14, 26, 22, 0.42);
-  --glass-border: rgba(255, 255, 255, 0.16);
-  --glass-border-light: rgba(255, 255, 255, 0.35);
-  --glass-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 40px rgba(47, 107, 87, 0.2);
-  --glass-inner-glow: inset 0 1px 1px rgba(255, 255, 255, 0.4), inset 0 -1px 1px rgba(0, 0, 0, 0.35);
+  --ink: #081310;
+  --deep: #0e2420;
+  --forest: #123c32;
+  --moss: #2f6b57;
+  --lime: #b8d98c;
+  --lime-soft: #d7e8bd;
+  --amber: #e8b56a;
+  --amber-soft: #f1cd97;
+  --cream: #f6f1e6;
+  --paper: #fbf8f0;
+  --line-light: rgba(246, 241, 230, .16);
+  --sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Fraunces", Georgia, serif;
 }
 
-.login-page {
+body.login-page {
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
-  font-family: var(--sans, "Manrope", sans-serif);
-  color: #fff;
-  background-color: #070e0c;
+  font-family: var(--sans);
+  color: var(--cream);
+  background-color: var(--ink);
   overflow-x: hidden;
   position: relative;
-  user-select: none;
 }
 
 /* --------------------------------------------------------------------------
- * Fondo inmersivo: Cueva de K'anba + Llama/Vela Shader
+ * Fondo inmersivo de las Cuevas de K'anba (idéntico al Hero de index.html)
  * ----------------------------------------------------------------------- */
 
-.login-cave-bg {
+.login-cave-backdrop {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -37,42 +46,73 @@
   overflow: hidden;
 }
 
-.cave-image-layer {
-  position: absolute;
-  inset: -20px;
-  background-image: url('../assets/img/kanba-cave-02.jpg');
-  background-size: cover;
-  background-position: center 38%;
-  filter: brightness(0.62) contrast(1.15) saturate(1.1);
-  transform: scale(1.04);
-}
-
-/* Shader canvas de llamas / fuego cálido estilo vela en la cueva */
-.flame-canvas {
+.cave-bg-image {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  mix-blend-mode: screen;
-  opacity: 0.85;
+  background-image: url('../assets/img/kanba-cave-02.jpg');
+  background-size: cover;
+  background-position: center center;
+  filter: saturate(.88) contrast(1.08) brightness(.7);
+  transform: scale(1.03);
 }
 
-.cave-dark-overlay {
+.cave-veil {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(110% 70% at 50% 100%, rgba(122, 42, 12, 0.32) 0%, rgba(42, 13, 5, 0.55) 45%, rgba(6, 14, 12, 0.88) 85%),
-    radial-gradient(90% 60% at 50% 0%, rgba(6, 14, 12, 0.92) 10%, rgba(6, 14, 12, 0.4) 75%);
+    linear-gradient(180deg, rgba(8, 19, 16, .82) 0%, rgba(8, 19, 16, .45) 35%, rgba(8, 19, 16, .65) 70%, rgba(8, 19, 16, .94) 100%),
+    radial-gradient(ellipse at 50% 50%, rgba(14, 36, 32, .5) 0%, rgba(8, 19, 16, .85) 100%);
 }
 
-.cave-vignette {
+.cave-glow {
+  position: absolute;
+  width: 48vw;
+  height: 48vw;
+  max-width: 650px;
+  max-height: 650px;
+  right: -8vw;
+  bottom: 0%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 181, 106, .22), rgba(184, 217, 140, .08) 50%, transparent 70%);
+  filter: blur(35px);
+  animation: glowPulse 10s ease-in-out infinite alternate;
+}
+
+@keyframes glowPulse {
+  0% { transform: scale(1); opacity: .7; }
+  100% { transform: scale(1.15) translate(-2vw, -2vh); opacity: 1; }
+}
+
+.cave-fireflies {
   position: absolute;
   inset: 0;
-  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+
+.cave-fireflies i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: var(--amber);
+  border-radius: 50%;
+  box-shadow: 0 0 10px 2px rgba(232, 181, 106, .8), 0 0 20px 4px rgba(232, 181, 106, .4);
+  animation: fireflyFloat 14s infinite ease-in-out;
+}
+
+.cave-fireflies i:nth-child(1) { top: 20%; left: 15%; animation-duration: 12s; animation-delay: 0s; }
+.cave-fireflies i:nth-child(2) { top: 60%; left: 80%; animation-duration: 16s; animation-delay: 2s; }
+.cave-fireflies i:nth-child(3) { top: 35%; left: 70%; animation-duration: 10s; animation-delay: 4s; }
+.cave-fireflies i:nth-child(4) { top: 75%; left: 25%; animation-duration: 18s; animation-delay: 1s; }
+.cave-fireflies i:nth-child(5) { top: 15%; left: 50%; animation-duration: 15s; animation-delay: 3s; }
+.cave-fireflies i:nth-child(6) { top: 85%; left: 60%; animation-duration: 13s; animation-delay: 5s; }
+
+@keyframes fireflyFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: .3; }
+  50% { transform: translate(30px, -40px) scale(1.5); opacity: 1; }
 }
 
 /* --------------------------------------------------------------------------
- * Estructura de la pantalla
+ * Pantalla principal & Contenedores
  * ----------------------------------------------------------------------- */
 
 .login-screen {
@@ -84,11 +124,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 16px;
+  padding: 30px 18px;
   box-sizing: border-box;
 }
 
-.login-container {
+.login-wrapper {
   width: 100%;
   max-width: 440px;
   display: flex;
@@ -97,10 +137,10 @@
 }
 
 /* --------------------------------------------------------------------------
- * Barra superior de navegación en píldoras de cristal
+ * Barra superior (Regresar / Inicio) con diseño K'anba
  * ----------------------------------------------------------------------- */
 
-.login-nav-bar {
+.login-topbar {
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -109,176 +149,119 @@
   padding: 0 4px;
 }
 
-.glass-pill-btn {
+.btn-topbar {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cream);
+  background: rgba(14, 36, 32, .65);
+  border: 1px solid rgba(246, 241, 230, .22);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.2s, border-color 0.2s, transform 0.2s, color 0.2s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: all .25s var(--ease);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .25);
 }
 
-.glass-pill-btn svg {
+.btn-topbar svg {
   width: 16px;
   height: 16px;
-  stroke-width: 2.2;
 }
 
-.glass-pill-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.35);
+.btn-topbar:hover {
+  background: rgba(47, 107, 87, .65);
+  border-color: var(--lime);
   color: #fff;
-  transform: translateY(-1px);
-}
-
-.glass-pill-btn:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
 }
 
 /* --------------------------------------------------------------------------
- * Tarjeta Liquid Glass (arrastrable)
+ * Tarjeta de Login (Diseño de la página K'anba)
  * ----------------------------------------------------------------------- */
 
-.glass-card-wrapper {
+.login-card-container {
   width: 100%;
   position: relative;
-  touch-action: none;
 }
 
-.glass-card {
-  position: relative;
+.login-card {
   width: 100%;
-  background: var(--glass-bg);
-  border-radius: 28px;
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow), var(--glass-inner-glow);
-  backdrop-filter: blur(24px) saturate(1.7) brightness(1.05);
-  -webkit-backdrop-filter: blur(24px) saturate(1.7) brightness(1.05);
-  cursor: grab;
-  overflow: hidden;
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
-  user-select: none;
-}
-
-.glass-card.is-dragging {
-  cursor: grabbing !important;
-  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), 0 0 50px rgba(184, 217, 140, 0.25);
-}
-
-.glass-reflection {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: 28px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.18) 0%,
-    rgba(255, 255, 255, 0.04) 40%,
-    transparent 60%,
-    rgba(255, 255, 255, 0.05) 100%
-  );
-  z-index: 1;
-}
-
-.glass-card-content {
+  background: rgba(14, 36, 32, .82);
+  border: 1px solid rgba(246, 241, 230, .18);
+  border-radius: 26px;
+  padding: clamp(28px, 5vw, 38px) clamp(24px, 4vw, 34px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, .55),
+    0 0 0 1px rgba(184, 217, 140, .1),
+    inset 0 1px 0 rgba(255, 255, 255, .15);
   position: relative;
-  z-index: 2;
-  padding: 30px 28px 28px;
-  user-select: text;
 }
 
-@media (max-width: 480px) {
-  .glass-card-content {
-    padding: 24px 20px 22px;
-  }
-}
-
-/* --------------------------------------------------------------------------
- * Marca K'anba
- * ----------------------------------------------------------------------- */
-
-.login-brand-header {
+/* Brand header dentro de la tarjeta */
+.login-brand-wrap {
   display: flex;
   justify-content: center;
   margin-bottom: 22px;
 }
 
-.login-brand-header .brand {
-  color: #fff;
-  text-decoration: none;
+.login-brand-wrap .brand {
+  color: var(--cream);
 }
 
-.login-brand-header .brand-mark {
-  background: rgba(184, 217, 140, 0.18);
-  border: 1px solid rgba(184, 217, 140, 0.4);
-  color: var(--lime, #b8d98c);
-  box-shadow: 0 0 20px rgba(184, 217, 140, 0.3);
-}
-
-.login-brand-header .brand-type strong {
-  color: #fff;
-  font-size: 1.15rem;
-  letter-spacing: -0.01em;
-}
-
-.login-brand-header .brand-type small {
-  color: var(--lime, #b8d98c);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.login-brand-wrap .brand-mark {
+  background: rgba(184, 217, 140, .14);
+  border-color: rgba(184, 217, 140, .4);
 }
 
 /* --------------------------------------------------------------------------
- * Pestañas de Glass (Usuario / Administrador)
+ * Pestañas Usuario / Administrador
  * ----------------------------------------------------------------------- */
 
-.glass-tabs {
+.login-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  background: rgba(8, 19, 16, .65);
+  border: 1px solid rgba(246, 241, 230, .14);
+  border-radius: 12px;
   padding: 4px;
-  margin-bottom: 22px;
-  backdrop-filter: blur(8px);
+  margin-bottom: 24px;
 }
 
-.glass-tab {
+.login-tab {
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 10px 14px;
-  color: rgba(255, 255, 255, 0.65);
-  font: 700 13px/1 var(--sans, "Manrope", sans-serif);
+  color: rgba(246, 241, 230, .65);
+  font: 700 12.5px/1 var(--sans);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all .2s var(--ease);
   text-align: center;
 }
 
-.glass-tab:hover {
-  color: #fff;
+.login-tab:hover {
+  color: var(--cream);
 }
 
-.glass-tab.is-active {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+.login-tab.is-active {
+  background: rgba(184, 217, 140, .18);
+  color: var(--lime);
+  border: 1px solid rgba(184, 217, 140, .45);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
 }
 
 /* --------------------------------------------------------------------------
- * Paneles y Encabezados
+ * Encabezado de los Paneles
  * ----------------------------------------------------------------------- */
 
 .login-panels {
@@ -291,113 +274,112 @@
 
 .login-panel.is-active {
   display: block;
-  animation: glassFadeIn 0.28s ease both;
+  animation: panelIn .25s ease both;
 }
 
-@keyframes glassFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.panel-header {
-  text-align: center;
-  margin-bottom: 20px;
+.panel-head {
+  margin-bottom: 22px;
 }
 
-.glass-title {
-  margin: 0;
-  font-family: var(--display, "Fraunces", serif);
-  font-size: 2rem;
-  font-weight: 500;
-  line-height: 1.1;
-  color: #fff;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+.panel-head .eyebrow {
+  margin-bottom: 8px;
 }
 
-.glass-subtitle {
-  margin: 6px 0 0;
+.panel-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 4vw, 2.2rem);
+  line-height: 1.05;
+  color: var(--cream);
+  letter-spacing: -.02em;
+  margin: 0 0 8px;
+}
+
+.panel-subtitle {
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.45;
+  color: rgba(246, 241, 230, .72);
+  line-height: 1.5;
+  margin: 0;
 }
 
 /* --------------------------------------------------------------------------
- * Campos de Formulario Glass
+ * Campos de Entrada (Form Fields) con diseño K'anba
  * ----------------------------------------------------------------------- */
 
-.glass-field {
+.login-card .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 16px;
 }
 
-.glass-field label {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  margin-bottom: 7px;
+.login-card .field label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: rgba(246, 241, 230, .85);
   padding-left: 2px;
 }
 
-.field-input-box {
+.input-wrap {
   position: relative;
   display: flex;
   align-items: center;
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  border-radius: 12px;
+  background: rgba(8, 19, 16, .55);
+  border: 1px solid rgba(246, 241, 230, .18);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, .3);
+  transition: border-color .22s, box-shadow .22s, background .22s;
 }
 
-.field-input-box:focus-within {
-  background: rgba(0, 0, 0, 0.35);
-  border-color: rgba(184, 217, 140, 0.75);
-  box-shadow: 0 0 0 3px rgba(184, 217, 140, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.35);
+.input-wrap:focus-within {
+  background: rgba(8, 19, 16, .75);
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px rgba(184, 217, 140, .2), inset 0 2px 5px rgba(0, 0, 0, .3);
 }
 
-.field-icon {
+.input-icon {
   position: absolute;
   left: 14px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(246, 241, 230, .45);
   pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s;
+  transition: color .22s;
 }
 
-.field-input-box:focus-within .field-icon {
-  color: var(--lime, #b8d98c);
+.input-wrap:focus-within .input-icon {
+  color: var(--lime);
 }
 
-.field-icon svg {
-  width: 18px;
-  height: 18px;
+.input-icon svg {
+  width: 17px;
+  height: 17px;
 }
 
-.field-input-box input {
+.input-wrap input {
   width: 100%;
   height: 48px;
   padding: 0 44px 0 44px;
   background: transparent;
   border: 0;
-  color: #fff;
-  font: 500 14.5px/1 var(--sans, "Manrope", sans-serif);
+  color: var(--cream);
+  font: 500 14px/1 var(--sans);
   outline: none;
-  border-radius: 16px;
+  border-radius: 12px;
 }
 
-.field-input-box input::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+.input-wrap input::placeholder {
+  color: rgba(246, 241, 230, .35);
 }
 
-.toggle-password-btn {
+.pw-toggle {
   position: absolute;
   right: 10px;
   width: 32px;
@@ -405,162 +387,94 @@
   background: transparent;
   border: 0;
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(246, 241, 230, .55);
   cursor: pointer;
   display: grid;
   place-items: center;
   padding: 0;
-  transition: color 0.2s, background 0.2s;
+  transition: color .2s, background .2s;
 }
 
-.toggle-password-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+.pw-toggle:hover {
+  color: var(--cream);
+  background: rgba(246, 241, 230, .1);
 }
 
-.toggle-password-btn svg {
+.pw-toggle svg {
   width: 17px;
   height: 17px;
 }
 
 /* Errores */
-.form-error {
-  margin: 0 0 14px;
+.login-card .form-error {
+  margin: 4px 0 16px;
   padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(220, 38, 38, 0.18);
-  color: #fca5a5;
-  font-size: 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(189, 96, 65, .4);
+  background: rgba(189, 96, 65, .2);
+  color: #f0b6a2;
+  font-size: 12.5px;
   line-height: 1.45;
-  backdrop-filter: blur(8px);
 }
 
 /* --------------------------------------------------------------------------
- * Botones de Cristal (Liquid Glass Buttons)
+ * Botones de Acción (Botones del sitio K'anba)
  * ----------------------------------------------------------------------- */
 
-.glass-btn {
-  position: relative;
+.btn-submit {
   width: 100%;
-  height: 50px;
+  margin-top: 10px;
+  height: 48px;
   border-radius: 999px;
-  border: 1px solid var(--glass-border-light);
-  display: flex;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 700 15px/1 var(--sans, "Manrope", sans-serif);
-  color: #fff;
-  cursor: pointer;
-  text-decoration: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.45);
-  margin-top: 8px;
-  overflow: hidden;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
 }
 
-.glass-btn-primary {
-  background: linear-gradient(180deg, rgba(184, 217, 140, 0.35) 0%, rgba(47, 107, 87, 0.55) 100%);
-  border-color: rgba(184, 217, 140, 0.55);
+.btn-submit svg {
+  width: 16px;
+  height: 16px;
+  transition: transform .25s var(--ease);
 }
 
-.glass-btn-primary:hover {
-  background: linear-gradient(180deg, rgba(184, 217, 140, 0.48) 0%, rgba(47, 107, 87, 0.68) 100%);
-  border-color: rgba(184, 217, 140, 0.85);
-  box-shadow: 0 12px 30px rgba(47, 107, 87, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.65);
-  transform: translateY(-1.5px);
+.btn-submit:hover svg {
+  transform: translateX(4px);
 }
 
-.glass-btn-dark {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(0, 0, 0, 0.45) 100%);
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
-.glass-btn-dark:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24) 0%, rgba(0, 0, 0, 0.55) 100%);
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.65);
-  transform: translateY(-1.5px);
-}
-
-.glass-btn:active {
-  transform: translateY(0) scale(0.985);
-}
-
-.glass-btn[disabled] {
-  opacity: 0.75;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-.btn-spinner {
-  display: none;
-  width: 18px;
-  height: 18px;
-  border: 2.2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: btnSpin 0.7s linear infinite;
-  margin-left: 8px;
-}
-
-button[data-busy="1"] .btn-spinner {
-  display: inline-block;
-}
-
-@keyframes btnSpin {
-  to { transform: rotate(360deg); }
-}
-
-/* Divisores y notas al pie */
-.glass-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 18px 0 12px;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.glass-divider::before,
-.glass-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-}
-
-.glass-footer-note {
-  margin: 14px 0 0;
+.panel-foot-note {
+  margin: 20px 0 0;
   text-align: center;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 12.5px;
+  color: rgba(246, 241, 230, .68);
 }
 
-.glass-link-btn {
+.link-switch {
   background: transparent;
   border: 0;
-  color: var(--lime, #b8d98c);
+  color: var(--lime);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
   padding: 0 4px;
-  transition: color 0.18s;
+  transition: color .2s;
 }
 
-.glass-link-btn:hover {
+.link-switch:hover {
   color: #fff;
 }
 
-.glass-ambient-note {
+.login-footer-info {
   margin-top: 24px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
   text-align: center;
-  letter-spacing: 0.03em;
+  font-size: 11.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(246, 241, 230, .45);
 }
