@@ -8,6 +8,10 @@
   min-height: 100vh;
 }
 
+/* El atributo hidden debe ganar a display:grid/flex de las pantallas */
+.admin-shell[hidden],
+.login-screen[hidden] { display: none !important; }
+
 .admin-body .field input,
 .admin-body .field textarea,
 .admin-body .field select {
