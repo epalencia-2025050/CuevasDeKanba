@@ -19,6 +19,12 @@
   <div class="login-screen" id="loginScreen">
     <div class="login-glow" aria-hidden="true"></div>
     <form class="login-card" id="loginForm" novalidate>
+      <div class="login-card-topbar">
+        <a class="btn-admin-back" href="index.html" aria-label="Regresar al inicio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>Regresar al sitio</span>
+        </a>
+      </div>
       <a class="brand brand-light login-brand" href="index.html" aria-label="K’anba, inicio">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 40 40"><path d="M5 35V20a15 15 0 0 1 30 0v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 31c-4.7-3.6-7-6.8-7-10.4a7 7 0 0 1 14 0c0 3.6-2.3 6.8-7 10.4Z" fill="currentColor"/><path d="M19 25.8c.1-2.9.8-4.7 1.8-6.3.6 2 1.9 3 2.4 5 .3 1.2-.4 2.5-2 2.8-1.6.3-2.3-.7-2.2-1.5Z" fill="#0e2420"/></svg>
@@ -121,6 +127,10 @@
           <h1 id="viewTitle">Resumen</h1>
         </div>
         <div class="topbar-actions">
+          <a class="btn-back-site" href="index.html" title="Regresar al sitio web">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <span>Ir al sitio</span>
+          </a>
           <span class="sync-pill" id="syncPill"><span></span> Datos en vivo</span>
           <button class="icon-button" type="button" id="refreshButton" title="Actualizar datos" aria-label="Actualizar datos">
             <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.3M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
