@@ -113,6 +113,54 @@
     button.disabled = Boolean(on);
   }
 
+  function loginUrl() {
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    return `/login.html?next=${next}`;
+  }
+
+  function requireLogin(message) {
+    toast(message || 'Inicia sesión para reservar.');
+    window.location.href = loginUrl();
+  }
+
+  async function loadAuth() {
+    try {
+      const data = await api('/api/auth/me');
+      state.user = data?.user || null;
+    } catch {
+      state.user = null;
+    } finally {
+      state.authChecked = true;
+      const badge = $('#authBadge');
+      if (badge) {
+        if (state.user) {
+          badge.textContent = state.user.name || state.user.email || 'Sesión activa';
+          badge.hidden = false;
+        } else {
+          badge.textContent = '';
+          badge.hidden = true;
+        }
+      }
+      const gate = $('#bookingAuthGate');
+      if (gate) {
+        gate.hidden = Boolean(state.user);
+        const msg = $('#bookingAuthMessage');
+        if (msg && !state.user) msg.textContent = 'Para reservar necesitas iniciar sesión con tu cuenta de usuario.';
+      }
+      $$('[data-requires-auth]').forEach((node) => {
+        node.disabled = !state.user;
+      });
+    }
+  }
+
+  function guardAuth() {
+    if (!state.user) {
+      requireLogin('Inicia sesión para continuar con tu reserva.');
+      return false;
+    }
+    return true;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Estado del sitio                                                    */
   /* ------------------------------------------------------------------ */
@@ -131,7 +179,9 @@
     galleryIndex: 0,
     videos: [],
     map: null,
-    mapReady: false
+    mapReady: false,
+    user: null,
+    authChecked: false
   };
 
   const DEFAULT_WHATSAPP = '50240002026';
@@ -747,6 +797,7 @@
   /* ------------------------------------------------------------------ */
 
   function goStep(step) {
+    if (step > 1 && !guardAuth()) return;
     state.step = step;
     $$('.wizard-panel').forEach((panel) => { panel.hidden = Number(panel.dataset.panel) !== step; });
     $$('[data-step-indicator]').forEach((indicator) => {
@@ -894,6 +945,7 @@
     const form = event.currentTarget;
     const errorBox = $('#bookingError');
     if (errorBox) errorBox.hidden = true;
+    if (!guardAuth()) return;
     if (!validateBookingForm(form)) return;
 
     const tour = currentTour();
@@ -916,16 +968,25 @@
         acceptPolicies: form.elements.acceptPolicies.checked,
         acceptTerms: form.elements.acceptTerms.checked
       };
-      const data = await api('/api/reservations', {
-        method: 'POST',
-        body: JSON.stringify({
-          tourId: tour.id,
-          date: state.date,
-          time: state.time,
-          participants: state.pax,
-          customer
-        })
-      });
+      let data;
+      try {
+        data = await api('/api/reservations', {
+          method: 'POST',
+          body: JSON.stringify({
+            tourId: tour.id,
+            date: state.date,
+            time: state.time,
+            participants: state.pax,
+            customer
+          })
+        });
+      } catch (error) {
+        if (error.status === 401) {
+          requireLogin('Inicia sesión para poder reservar.');
+          return;
+        }
+        throw error;
+      }
       sessionStorage.setItem(`kanba:${data.code}`, JSON.stringify({ code: data.code, token: data.token }));
       window.location.href = data.paymentUrl;
     } catch (error) {
@@ -1447,6 +1508,7 @@
     setupMapButtons();
     setupKeyboard();
     setText('year', String(new Date().getFullYear()));
+    await loadAuth();
 
     try {
       const site = await api('/api/site');

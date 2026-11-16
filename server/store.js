@@ -747,6 +747,18 @@ function seedDatabase() {
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     admin: { password: admin, updatedAt: now },
+    users: [
+      {
+        id: 'usr_demo',
+        name: 'Usuario Demo',
+        email: 'usuario@kanba.gt',
+        password: hashPassword('user2026'),
+        phone: '+502 5555 0000',
+        country: 'Guatemala',
+        role: 'user',
+        createdAt: now
+      }
+    ],
     counters: { reservation: 1036, receipt: 483 },
     content,
     tours,
@@ -893,11 +905,15 @@ export async function initStore() {
   if (rows.length) {
     db = rows[0].doc;
     db.sessions = db.sessions || {};
+    db.users = db.users || [];
+    db.userSessions = db.userSessions || {};
     return db;
   }
 
   db = seedDatabase();
   db.sessions = db.sessions || {};
+  db.users = db.users || [];
+  db.userSessions = db.userSessions || {};
   await writeSnapshot(JSON.stringify(db));
   return db;
 }
@@ -913,6 +929,8 @@ export function loadDb() {
     try {
       db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
       db.sessions = db.sessions || {};
+      db.users = db.users || [];
+      db.userSessions = db.userSessions || {};
       return db;
     } catch (err) {
       console.error('[store] db.json corrupto, creando respaldo y reiniciando.', err.message);
@@ -926,6 +944,8 @@ export function loadDb() {
 
 export function getDb() {
   if (!db) loadDb();
+  if (!db.users) db.users = [];
+  if (!db.userSessions) db.userSessions = {};
   return db;
 }
 
@@ -951,6 +971,90 @@ export async function flushDb() {
   // Espera cualquier escritura en curso y luego vacía la última instantánea.
   if (flushPromise) await flushPromise.catch(() => {});
   if (pendingSnapshot) await scheduleFlush();
+}
+
+/* ------------------------------------------------------------------ */
+/* Usuarios (rol "user") y sesiones de usuario                          */
+/* ------------------------------------------------------------------ */
+
+const USER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function publicUser(u) {
+  const { password, ...rest } = u;
+  return rest;
+}
+
+export function findUserByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  return getDb().users.find((u) => u.email.toLowerCase() === normalized) || null;
+}
+
+export function findUserById(id) {
+  return getDb().users.find((u) => u.id === id) || null;
+}
+
+export function registerUser(input) {
+  const d = getDb();
+  const name = String(input.name || '').trim();
+  const email = String(input.email || '').trim().toLowerCase();
+  const password = String(input.password || '');
+  const phone = String(input.phone || '').trim();
+  const country = String(input.country || '').trim();
+
+  if (name.length < 3) throw new AppError('El nombre es obligatorio (mínimo 3 caracteres).', 422, 'validation');
+  if (!USER_EMAIL_RE.test(email)) throw new AppError('Correo electrónico inválido.', 422, 'validation');
+  if (password.length < 6) throw new AppError('La contraseña debe tener al menos 6 caracteres.', 422, 'validation');
+  if (findUserByEmail(email)) throw new AppError('Ya existe una cuenta con ese correo.', 409, 'email_taken');
+
+  const user = {
+    id: `usr_${randomToken(6)}`,
+    name,
+    email,
+    password: hashPassword(password),
+    phone,
+    country,
+    role: 'user',
+    createdAt: new Date().toISOString()
+  };
+  d.users.push(user);
+  saveDb();
+  return publicUser(user);
+}
+
+export function loginUser(email, password) {
+  const user = findUserByEmail(email);
+  if (!user || !verifyPassword(password, user.password)) {
+    throw new AppError('Correo o contraseña incorrectos.', 401, 'invalid_credentials');
+  }
+  const token = randomToken();
+  const expiresAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
+  getDb().userSessions[token] = { userId: user.id, createdAt: new Date().toISOString(), expiresAt };
+  saveDb();
+  return { token, expiresAt, user: publicUser(user) };
+}
+
+export function getUserSession(token) {
+  if (!token) return null;
+  const d = getDb();
+  const session = d.userSessions?.[token];
+  if (!session) return null;
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    delete d.userSessions[token];
+    saveDb();
+    return null;
+  }
+  const user = findUserById(session.userId);
+  if (!user) return null;
+  return { token, ...session, user: publicUser(user) };
+}
+
+export function logoutUser(token) {
+  if (!token) return;
+  const d = getDb();
+  if (d.userSessions?.[token]) {
+    delete d.userSessions[token];
+    saveDb();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1154,7 +1258,7 @@ export function getReservation(code, token = null) {
   return r;
 }
 
-export function createReservation(input) {
+export function createReservation(input, { user = null } = {}) {
   const d = getDb();
   const tour = findTour(input.tourId);
   const date = String(input.date || '');
@@ -1203,6 +1307,8 @@ export function createReservation(input) {
     currency: d.settings.booking.currency || 'GTQ',
     customer,
     status: 'pending_payment',
+    userId: user ? user.id : null,
+    createdByRole: user ? user.role : null,
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
     holdExpiresAt: new Date(now + holdMinutes * 60000).toISOString(),

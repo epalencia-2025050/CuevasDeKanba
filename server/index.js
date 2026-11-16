@@ -9,7 +9,8 @@ import {
   getDb, saveDb, publicSite, publicTour, buildAvailability, occupancyFor,
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
-  AppError, nextReceiptNumber, TZ
+  AppError, nextReceiptNumber, TZ,
+  registerUser, loginUser, getUserSession, logoutUser, findUserByEmail
 } from './store.js';
 import { hashPassword, verifyPassword, randomToken, signPayload, verifySignature } from './security.js';
 import { charge } from './gateway.js';
@@ -26,6 +27,7 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kanba2026';
 const SESSION_COOKIE = 'kanba_session';
+const USER_COOKIE = 'kanba_user';
 const SESSION_MS = 8 * 3600 * 1000;
 const MAX_BODY = 12 * 1024 * 1024;
 
@@ -176,6 +178,25 @@ function requireAdmin(req) {
   const session = getSession(req);
   if (!session) throw new AppError('Inicia sesión para continuar.', 401, 'unauthorized');
   return session;
+}
+
+function getSessionUser(req) {
+  const token = parseCookies(req)[USER_COOKIE];
+  if (!token) return null;
+  const session = getUserSession(token);
+  if (!session) return null;
+  return session;
+}
+
+function requireUser(req) {
+  const session = getSessionUser(req);
+  if (!session) throw new AppError('Debes iniciar sesión para reservar.', 401, 'login_required');
+  return session;
+}
+
+function setUserCookie(res, token, expiresAt) {
+  const maxAge = Math.max(1, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+  res.setHeader('Set-Cookie', `${USER_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`);
 }
 
 function cleanupSessions() {
@@ -521,6 +542,40 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, publicSite());
   }
 
+  /* ---------- Auth de usuarios (rol user) ---------- */
+  if (method === 'GET' && p === '/api/auth/me') {
+    const session = getSessionUser(req);
+    return sendJson(res, 200, {
+      ok: true,
+      authenticated: Boolean(session),
+      user: session ? session.user : null
+    });
+  }
+
+  if (method === 'POST' && p === '/api/auth/register') {
+    rateLimit(`register:${clientIp(req)}`, 10, 10 * 60000);
+    const body = await readJson(req);
+    const user = registerUser(body);
+    const login = loginUser(user.email, body.password);
+    setUserCookie(res, login.token, login.expiresAt);
+    return sendJson(res, 201, { ok: true, user: login.user });
+  }
+
+  if (method === 'POST' && p === '/api/auth/login') {
+    rateLimit(`userlogin:${clientIp(req)}`, 10, 10 * 60000);
+    const body = await readJson(req);
+    const login = loginUser(String(body.email || ''), String(body.password || ''));
+    setUserCookie(res, login.token, login.expiresAt);
+    return sendJson(res, 200, { ok: true, user: login.user });
+  }
+
+  if (method === 'POST' && p === '/api/auth/logout') {
+    const token = parseCookies(req)[USER_COOKIE] || '';
+    logoutUser(token);
+    res.setHeader('Set-Cookie', `${USER_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (method === 'GET' && p === '/api/availability') {
     const tourId = url.searchParams.get('tour') || null;
     const from = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('from') || '') ? url.searchParams.get('from') : todayISO();
@@ -529,8 +584,9 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'POST' && p === '/api/reservations') {
+    const session = requireUser(req);
     const body = await readJson(req);
-    const reservation = createReservation(body);
+    const reservation = createReservation(body, { user: session.user });
     try {
       await notifyPending(reservation);
     } catch (err) {
@@ -708,12 +764,23 @@ async function handleApi(req, res, url) {
     rateLimit(`login:${clientIp(req)}`, 8, 10 * 60000);
     const body = await readJson(req);
     const password = String(body.password || '');
-    if (!verifyPassword(password, getDb().admin.password)) {
-      throw new AppError('Contraseña incorrecta.', 401, 'invalid_credentials');
+    const email = String(body.email || '').trim().toLowerCase();
+    const adminUser = email ? findUserByEmail(email) : null;
+    const ok = adminUser
+      ? adminUser.role === 'admin' && verifyPassword(password, adminUser.password)
+      : verifyPassword(password, getDb().admin.password);
+    if (!ok) {
+      throw new AppError('Credenciales de administración incorrectas.', 401, 'invalid_credentials');
     }
     const token = randomToken();
     const expiresAt = new Date(Date.now() + SESSION_MS).toISOString();
-    getDb().sessions[token] = { createdAt: new Date().toISOString(), expiresAt, ip: clientIp(req) };
+    getDb().sessions[token] = {
+      createdAt: new Date().toISOString(),
+      expiresAt,
+      ip: clientIp(req),
+      role: 'admin',
+      userId: adminUser ? adminUser.id : null
+    };
     saveDb();
     res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_MS / 1000)}`);
     return sendJson(res, 200, { ok: true, expiresAt });
