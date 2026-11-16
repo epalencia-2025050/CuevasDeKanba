@@ -1527,6 +1527,9 @@
     setupLightbox();
     setupVideoModal();
     setupMapButtons();
+    if ($('#map')) {
+      setupMap({ lat: 15.537628, lng: -89.955361, address: "Cuevas de K'anba, Lanquín, Alta Verapaz, Guatemala" });
+    }
     setupKeyboard();
     setText('year', String(new Date().getFullYear()));
     await loadAuth();

@@ -54,6 +54,7 @@ button { cursor: pointer; }
 h1, h2, h3, h4, p, dl, dd, dt, figure { margin: 0; }
 ul, ol { margin: 0; padding: 0; list-style: none; }
 svg { display: block; }
+[hidden] { display: none !important; }
 ::selection { background: var(--lime); color: var(--deep); }
 
 .skip-link {
@@ -928,6 +929,7 @@ svg { display: block; }
 .map-badge .pulse-dot { width: 5px; height: 5px; }
 .map-coords { background: rgba(246,241,230,.9); color: var(--deep); border-radius: 6px; padding: 4px 8px; font-size: 9px; font-weight: 700; letter-spacing: .05em; font-family: ui-monospace, monospace; }
 .map-fallback { position: absolute; inset: 0; z-index: 600; display: grid; place-items: center; padding: 40px; text-align: center; background: var(--deep); color: var(--cream); font-size: 13px; }
+.map-fallback[hidden] { display: none !important; }
 .location-info { display: flex; flex-direction: column; gap: 0; }
 .location-address { display: flex; gap: 14px; padding: 6px 0 22px; border-bottom: 1px solid var(--line); }
 .location-address svg { width: 24px; height: 24px; color: var(--moss); flex: none; margin-top: 2px; }
