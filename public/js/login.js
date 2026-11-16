@@ -147,6 +147,7 @@
     const password = $('#userPassword')?.value || '';
     if (!email || !password) {
       showError(errors.user, 'Ingresa tu correo y contraseña.');
+      setBusy(false);
       return;
     }
     await api('/api/auth/login', { email, password });
