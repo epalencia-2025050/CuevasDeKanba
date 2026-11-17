@@ -260,6 +260,7 @@
 .status-badge::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .status-badge.confirmed, .status-badge.paid, .status-badge.processed, .status-badge.sent { background: rgba(47, 107, 87, .1); color: #27604e; }
 .status-badge.pending_payment, .status-badge.pending, .status-badge.queued { background: rgba(201, 142, 69, .13); color: #8a5e20; }
+.status-badge.sending { background: rgba(47, 107, 87, .15); color: #164d3c; }
 .status-badge.cancelled, .status-badge.expired, .status-badge.failed { background: rgba(189, 96, 65, .1); color: #8e3b25; }
 .status-badge.refund_pending { background: rgba(201, 142, 69, .13); color: #8a5e20; }
 .status-badge.refunded { background: rgba(47, 107, 87, .1); color: #27604e; }

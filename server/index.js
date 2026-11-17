@@ -15,7 +15,8 @@ import {
 import { hashPassword, verifyPassword, randomToken, signPayload, verifySignature } from './security.js';
 import { charge } from './gateway.js';
 import {
-  notifyPending, notifyConfirmed, notifyExpired, notifyCancellation, notifyRefund, resendMail
+  notifyPending, notifyConfirmed, notifyExpired, notifyCancellation, notifyRefund, resendMail,
+  testSmtpConnection, getPublicSmtpStatus, processEmailRetryQueue
 } from './mailer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -997,7 +998,19 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'GET' && p === '/api/admin/settings') {
-    return sendJson(res, 200, { ok: true, settings: getDb().settings });
+    return sendJson(res, 200, {
+      ok: true,
+      settings: getDb().settings,
+      smtpStatus: getPublicSmtpStatus()
+    });
+  }
+  if (method === 'POST' && p === '/api/admin/settings/test-smtp') {
+    rateLimit(`test-smtp:${clientIp(req)}`, 5, 5 * 60000); // Máximo 5 pruebas cada 5 minutos
+    const body = await readJson(req);
+    const to = String(body.to || '').trim();
+    if (!to) throw new AppError('Ingresa un correo destinatario para la prueba.', 422, 'validation');
+    const result = await testSmtpConnection(to);
+    return sendJson(res, 200, { ok: true, result });
   }
   if (method === 'PUT' && p === '/api/admin/settings') {
     const body = await readJson(req);
@@ -1171,7 +1184,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Worker: libera cupos cuando vence el plazo de pago.
+// Worker: libera cupos cuando vence el plazo de pago y reintenta correos pendientes.
 const expiryTimer = setInterval(() => {
   try {
     const expired = closeExpiredHolds();
@@ -1179,6 +1192,7 @@ const expiryTimer = setInterval(() => {
       notifyExpired(r).catch((err) => console.error('[expiración] correo:', err.message));
     }
     cleanupSessions();
+    processEmailRetryQueue().catch((err) => console.error('[worker-retry]', err.message));
   } catch (err) {
     console.error('[worker]', err);
   }

@@ -318,6 +318,212 @@ function plainText({ title, body }) {
   return `${title}\n\n${body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}\n\nK’anba Cuevas Vivas · Lanquín, Alta Verapaz, Guatemala\n`;
 }
 
+function isPermanentSmtpError(errMsg = '') {
+  const msg = String(errMsg).toLowerCase();
+  // Códigos 5xx típicos de error permanente (535 credenciales, 550 usuario inexistente, 501 sintaxis, etc.)
+  if (/smtp (500|501|502|503|504|530|535|550|551|552|553|554)/.test(msg)) return true;
+  if (msg.includes('bad credentials') || msg.includes('authentication failed') || msg.includes('auth fail')) return true;
+  if (msg.includes('recipient rejected') || msg.includes('user not found') || msg.includes('mailbox unavailable')) return true;
+  return false;
+}
+
+export function getEffectiveSmtpConfig() {
+  const d = getDb();
+  const dbSmtp = d.settings.smtp || {};
+
+  const envHost = process.env.SMTP_HOST;
+  const envPort = process.env.SMTP_PORT;
+  const envSecure = process.env.SMTP_SECURE;
+  const envUser = process.env.SMTP_USER;
+  const envPass = process.env.SMTP_PASS;
+  const envFrom = process.env.SMTP_FROM;
+  const envFromName = process.env.SMTP_FROM_NAME;
+
+  const hasEnvHost = Boolean(envHost && envHost.trim());
+  const hasEnvUser = Boolean(envUser && envUser.trim());
+  const hasEnvConfig = hasEnvHost || hasEnvUser;
+
+  const host = (hasEnvHost ? envHost : dbSmtp.host) || '';
+  const port = Number((envPort !== undefined ? envPort : dbSmtp.port) || 465);
+  const secure = envSecure !== undefined ? envSecure === 'true' : dbSmtp.secure !== false;
+  const user = (hasEnvUser ? envUser : dbSmtp.user) || '';
+  const pass = (envPass !== undefined ? envPass : dbSmtp.pass) || '';
+  const fromEmail = (envFrom !== undefined ? envFrom : (dbSmtp.fromEmail || user)) || 'reservas@kanba.gt';
+  const fromName = (envFromName !== undefined ? envFromName : (dbSmtp.fromName || 'K’anba Cuevas Vivas')) || 'K’anba Cuevas Vivas';
+
+  let source = 'none';
+  if (hasEnvConfig) {
+    source = 'env';
+  } else if (dbSmtp.host && dbSmtp.host.trim()) {
+    source = 'database';
+  }
+
+  const isConfigured = Boolean(host && user && pass);
+
+  return {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    fromEmail,
+    fromName,
+    source,
+    isConfigured,
+    hasEnvOverrides: {
+      host: Boolean(envHost),
+      port: Boolean(envPort),
+      secure: Boolean(envSecure),
+      user: Boolean(envUser),
+      pass: Boolean(envPass),
+      fromEmail: Boolean(envFrom),
+      fromName: Boolean(envFromName)
+    }
+  };
+}
+
+export function maskUser(user = '') {
+  if (!user) return '—';
+  if (user.includes('@')) {
+    const [name, domain] = user.split('@');
+    const masked = name.length <= 2 ? name[0] + '***' : name.slice(0, 2) + '***' + name.slice(-1);
+    return `${masked}@${domain}`;
+  }
+  if (user.length <= 4) return '***';
+  return user.slice(0, 2) + '***' + user.slice(-2);
+}
+
+export function getPublicSmtpStatus() {
+  const cfg = getEffectiveSmtpConfig();
+  return {
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    userMasked: maskUser(cfg.user),
+    fromEmail: cfg.fromEmail,
+    fromName: cfg.fromName,
+    source: cfg.source, // 'env' | 'database' | 'none'
+    isConfigured: cfg.isConfigured,
+    hasEnvOverrides: cfg.hasEnvOverrides
+  };
+}
+
+export async function testSmtpConnection(testRecipient) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!testRecipient || !emailRegex.test(String(testRecipient).trim())) {
+    throw new Error('Dirección de correo de prueba inválida.');
+  }
+  const cleanTo = String(testRecipient).trim();
+  const cfg = getEffectiveSmtpConfig();
+  if (!cfg.host || !cfg.user) {
+    throw new Error('El servicio SMTP no está configurado (falta host o usuario en variables de entorno o base de datos).');
+  }
+
+  const testSubject = `Prueba de conexión SMTP · K’anba (${new Date().toLocaleTimeString('es-GT', { timeZone: 'America/Guatemala' })})`;
+  const testHtml = layout({
+    preheader: 'Comprobación de envío exitosa',
+    title: 'Conexión SMTP exitosa',
+    body: `<p style="${p}">Este es un correo de prueba enviado desde el Panel de Administración de <strong>K’anba Cuevas Vivas</strong>.</p>
+           <p style="${p}">La conexión con el servidor <code>${esc(cfg.host)}:${cfg.port}</code> se estableció y autenticó correctamente.</p>`,
+    note: `Origen de la configuración: <strong>${cfg.source === 'env' ? 'Variables de entorno (Render)' : 'Base de datos (Panel Admin)'}</strong>.`
+  });
+  const testText = plainText({
+    title: 'Conexión SMTP exitosa',
+    body: `Este es un correo de prueba enviado desde el Panel de Administración de K’anba Cuevas Vivas. Servidor: ${cfg.host}:${cfg.port}.`
+  });
+
+  await sendSmtpMail({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    user: cfg.user,
+    pass: cfg.pass,
+    fromEmail: cfg.fromEmail,
+    fromName: cfg.fromName,
+    to: cleanTo,
+    subject: testSubject,
+    html: testHtml,
+    text: testText
+  });
+
+  return { ok: true, recipient: cleanTo, host: cfg.host, source: cfg.source };
+}
+
+// Bandera para evitar carreras durante el procesamiento de la cola de reintentos
+let isProcessingQueue = false;
+
+export async function processEmailRetryQueue() {
+  if (isProcessingQueue) return;
+  isProcessingQueue = true;
+  try {
+    const d = getDb();
+    if (!Array.isArray(d.emails)) return;
+
+    const cfg = getEffectiveSmtpConfig();
+    if (!cfg.host || !cfg.user) return; // No hay SMTP para enviar
+
+    const now = Date.now();
+    // Buscar correos pendientes de reintento
+    for (const record of d.emails) {
+      if (record.status !== 'queued') continue;
+      if (record.permanentFailed) continue;
+      if (record.attempts >= 5) {
+        record.status = 'failed';
+        continue;
+      }
+      if (record.nextAttemptAt && Date.parse(record.nextAttemptAt) > now) {
+        continue;
+      }
+
+      // Procesar reintento
+      record.status = 'sending';
+      record.attempts = (record.attempts || 0) + 1;
+      saveDb();
+
+      try {
+        await sendSmtpMail({
+          host: cfg.host,
+          port: cfg.port,
+          secure: cfg.secure,
+          user: cfg.user,
+          pass: cfg.pass,
+          fromEmail: cfg.fromEmail || cfg.user,
+          fromName: cfg.fromName || 'K’anba Cuevas Vivas',
+          to: record.to,
+          subject: record.subject,
+          html: record.html,
+          text: record.text
+        });
+        record.status = 'sent';
+        record.provider = 'smtp';
+        record.error = null;
+        record.sentAt = new Date().toISOString();
+        saveDb();
+        console.log(`[smtp-queue] Correo ${record.id} entregado con éxito (intento ${record.attempts})`);
+      } catch (err) {
+        record.error = err.message;
+        const permanent = isPermanentSmtpError(err.message);
+        if (permanent || record.attempts >= 5) {
+          record.status = 'failed';
+          record.permanentFailed = permanent;
+          console.error(`[smtp-queue] Correo ${record.id} falló de forma permanente o alcanzó 5 intentos:`, err.message);
+        } else {
+          record.status = 'queued';
+          // Backoff exponencial: 1 min, 4 min, 9 min, 16 min...
+          const delayMinutes = Math.pow(record.attempts, 2);
+          record.nextAttemptAt = new Date(Date.now() + delayMinutes * 60000).toISOString();
+          console.warn(`[smtp-queue] Correo ${record.id} falló temporalmente (intento ${record.attempts}), próximo reintento en ${delayMinutes}m`);
+        }
+        saveDb();
+      }
+    }
+  } catch (globalErr) {
+    console.error('[smtp-queue] Error procesando cola:', globalErr.message);
+  } finally {
+    isProcessingQueue = false;
+  }
+}
+
 export async function sendMail({ to, template, reservation, extra = {} }) {
   const d = getDb();
   const tpl = templates(reservation, extra)[template];
@@ -342,6 +548,8 @@ export async function sendMail({ to, template, reservation, extra = {} }) {
     reservationCode: reservation.code,
     status: 'queued',
     provider: 'outbox',
+    attempts: 0,
+    nextAttemptAt: null,
     createdAt: new Date().toISOString(),
     html,
     text,
@@ -351,23 +559,17 @@ export async function sendMail({ to, template, reservation, extra = {} }) {
   if (d.emails.length > 500) d.emails.length = 500;
   saveDb();
 
-  const dbSmtp = d.settings.smtp || {};
-  const smtp = {
-    host: process.env.SMTP_HOST || dbSmtp.host || '',
-    port: Number(process.env.SMTP_PORT || dbSmtp.port || 465),
-    secure: process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === 'true' : dbSmtp.secure !== false,
-    user: process.env.SMTP_USER || dbSmtp.user || '',
-    pass: process.env.SMTP_PASS || dbSmtp.pass || '',
-    fromEmail: process.env.SMTP_FROM || dbSmtp.fromEmail || dbSmtp.user || 'reservas@kanba.gt',
-    fromName: process.env.SMTP_FROM_NAME || dbSmtp.fromName || 'K’anba Cuevas Vivas'
-  };
+  const smtp = getEffectiveSmtpConfig();
 
   if (smtp.host && smtp.user) {
+    record.status = 'sending';
+    record.attempts = 1;
+    saveDb();
     try {
       await sendSmtpMail({
         host: smtp.host,
-        port: Number(smtp.port || 465),
-        secure: smtp.secure !== false,
+        port: smtp.port,
+        secure: smtp.secure,
         user: smtp.user,
         pass: smtp.pass,
         fromEmail: smtp.fromEmail || smtp.user,
@@ -379,16 +581,25 @@ export async function sendMail({ to, template, reservation, extra = {} }) {
       });
       record.status = 'sent';
       record.provider = 'smtp';
+      record.sentAt = new Date().toISOString();
       saveDb();
       return record;
     } catch (err) {
-      record.status = 'failed';
       record.error = err.message;
+      const permanent = isPermanentSmtpError(err.message);
+      if (permanent) {
+        record.status = 'failed';
+        record.permanentFailed = true;
+      } else {
+        record.status = 'queued';
+        // Primer reintento en 1 minuto
+        record.nextAttemptAt = new Date(Date.now() + 60000).toISOString();
+      }
       console.error('[smtp] error enviando correo:', err.message);
     }
   }
 
-  // Si no hay SMTP configurado o falló, se guarda en el buzón local (disco).
+  // Si no hay SMTP configurado o falló, se guarda copia en el buzón local (disco).
   try {
     const dir = ensureOutbox();
     const safe = `${record.reservationCode}_${record.template}_${record.id}`;

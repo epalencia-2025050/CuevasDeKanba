@@ -327,7 +327,18 @@
               </div>
               <div class="admin-card">
                 <div class="card-head"><div><span class="card-kicker">Correo</span><h2>SMTP saliente</h2></div></div>
+                <div id="smtpBanner" style="margin-bottom:12px;font-size:12px;padding:10px 14px;border-radius:8px;line-height:1.5;" hidden></div>
                 <div class="form-grid" id="settingsSmtp"></div>
+                <div class="smtp-test-area" style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(22,33,29,.12);">
+                  <label class="field" style="margin-bottom:8px;">
+                    <span>Enviar correo de prueba a</span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <input type="email" id="testSmtpEmail" placeholder="admin@ejemplo.com" style="flex:1;">
+                      <button class="btn btn-outline btn-sm" type="button" id="btnTestSmtp">Probar conexión</button>
+                    </div>
+                  </label>
+                  <div class="form-error" id="smtpTestResult" role="alert" style="margin-top:6px;" hidden></div>
+                </div>
                 <p class="form-hint">Si dejas el host vacío, los correos se guardan en la bandeja de salida y en <code>data/outbox</code> sin enviarse.</p>
               </div>
             </div>

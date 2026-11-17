@@ -1,12 +1,21 @@
 import net from 'node:net';
 import tls from 'node:tls';
 
+function sanitizeSmtpHeader(value = '') {
+  return String(value).replace(/[\r\n]+/g, ' ').trim();
+}
+
 /**
  * Cliente SMTP mínimo (sin dependencias) para envío real de correos.
  * Soporta TLS directo (465), STARTTLS (587/25) y AUTH LOGIN / PLAIN.
  * Si el servidor no está configurado, el sistema usa la bandeja de salida local.
  */
 export function sendSmtpMail({ host, port = 465, secure = true, user, pass, fromEmail, fromName, to, subject, html, text }) {
+  const cleanFrom = sanitizeSmtpHeader(fromEmail);
+  const cleanTo = sanitizeSmtpHeader(to);
+  const cleanName = sanitizeSmtpHeader(fromName);
+  const cleanSubject = sanitizeSmtpHeader(subject);
+
   return new Promise((resolve, reject) => {
     let socket = secure
       ? tls.connect({ host, port, servername: host, rejectUnauthorized: false })
@@ -112,15 +121,15 @@ export function sendSmtpMail({ host, port = 465, secure = true, user, pass, from
 
       await auth();
 
-      await cmd(`MAIL FROM:<${fromEmail}>`);
-      await cmd(`RCPT TO:<${to}>`, [250, 251]);
+      await cmd(`MAIL FROM:<${cleanFrom}>`);
+      await cmd(`RCPT TO:<${cleanTo}>`, [250, 251]);
       await cmd('DATA', [354]);
 
-      const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+      const encodedSubject = `=?UTF-8?B?${Buffer.from(cleanSubject, 'utf8').toString('base64')}?=`;
       const boundary = `kanba-${Date.now().toString(36)}`;
       const headers = [
-        `From: "=?UTF-8?B?${Buffer.from(fromName, 'utf8').toString('base64')}?=" <${fromEmail}>`,
-        `To: <${to}>`,
+        `From: "=?UTF-8?B?${Buffer.from(cleanName, 'utf8').toString('base64')}?=" <${cleanFrom}>`,
+        `To: <${cleanTo}>`,
         `Subject: ${encodedSubject}`,
         `Date: ${new Date().toUTCString()}`,
         'MIME-Version: 1.0',

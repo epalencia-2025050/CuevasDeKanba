@@ -44,6 +44,7 @@
     pending: 'Pendiente',
     processed: 'Procesado',
     sent: 'Enviado',
+    sending: 'Enviando…',
     queued: 'En cola',
     failed: 'Falló',
     paid: 'Pagado',
@@ -1869,9 +1870,14 @@
       ['Plantilla', email.template],
       ['Reserva', email.reservationCode],
       ['Estado', STATUS_LABEL[email.status] || email.status],
+      ['Intentos', email.attempts != null ? `${email.attempts}/5` : '—'],
+      ['Próximo reintento', email.nextAttemptAt ? longDateTime(email.nextAttemptAt) : '—'],
       ['Proveedor', email.provider],
       ['Creado', longDateTime(email.createdAt)]
     ];
+    if (email.error) {
+      entries.push(['Último error', email.error]);
+    }
     entries.forEach(([label, value]) => {
       const item = el('span');
       item.append(el('b', '', `${label}: `), document.createTextNode(value || '—'));
@@ -1999,6 +2005,7 @@
     try {
       const data = await api('/api/admin/settings');
       state.settings = clone(data.settings);
+      state.smtpStatus = data.smtpStatus || null;
       renderSettings();
     } catch (error) {
       handleError(error);
@@ -2037,6 +2044,10 @@
       if (opts.step !== undefined) input.step = String(opts.step);
       if (opts.placeholder) input.placeholder = opts.placeholder;
       wrap.append(input);
+    }
+    if (opts.disabled) {
+      input.disabled = true;
+      wrap.style.opacity = '0.75';
     }
     input.dataset.settingsPath = path;
     container.append(wrap);
@@ -2077,13 +2088,42 @@
     }
     if (smtp) {
       smtp.replaceChildren();
-      settingsField(smtp, 'smtp.host', 'Host', { full: true, placeholder: 'smtp.ejemplo.com' });
-      settingsField(smtp, 'smtp.port', 'Puerto', { type: 'number', min: 1, max: 65535 });
-      settingsField(smtp, 'smtp.secure', 'Conexión segura', { checkbox: true, checkboxLabel: 'TLS/SSL' });
-      settingsField(smtp, 'smtp.user', 'Usuario', { full: true });
-      settingsField(smtp, 'smtp.pass', 'Contraseña', { type: 'password', full: true });
-      settingsField(smtp, 'smtp.fromEmail', 'Correo remitente');
-      settingsField(smtp, 'smtp.fromName', 'Nombre remitente');
+      const status = state.smtpStatus;
+      const banner = $('#smtpBanner');
+      const overrides = status?.hasEnvOverrides || {};
+
+      if (banner) {
+        banner.hidden = false;
+        if (status?.source === 'env') {
+          banner.style.background = 'rgba(47, 107, 87, 0.12)';
+          banner.style.color = '#1b4a3c';
+          banner.style.border = '1px solid rgba(47, 107, 87, 0.3)';
+          banner.innerHTML = `<strong>Configuración activa desde variables de entorno (Render)</strong><br>` +
+            `Host: <code>${status.host || '—'}</code> · Puerto: <code>${status.port}</code> (${status.secure ? 'TLS' : 'STARTTLS/Plano'})<br>` +
+            `Usuario: <code>${status.userMasked}</code> · Remitente: <code>${status.fromEmail}</code><br>` +
+            `<small style="color:#4a6358;">Los campos sobreescritos por Render no se pueden editar desde aquí.</small>`;
+        } else if (status?.source === 'database') {
+          banner.style.background = 'rgba(201, 142, 69, 0.12)';
+          banner.style.color = '#734e18';
+          banner.style.border = '1px solid rgba(201, 142, 69, 0.3)';
+          banner.innerHTML = `<strong>Configuración activa desde base de datos (Panel Admin)</strong><br>` +
+            `Usuario activo: <code>${status.userMasked}</code> en <code>${status.host}:${status.port}</code>`;
+        } else {
+          banner.style.background = 'rgba(189, 96, 65, 0.1)';
+          banner.style.color = '#8e3b25';
+          banner.style.border = '1px solid rgba(189, 96, 65, 0.25)';
+          banner.innerHTML = `<strong>SMTP no configurado</strong><br>` +
+            `Los correos se guardan localmente en la bandeja de salida y <code>data/outbox/</code>.`;
+        }
+      }
+
+      settingsField(smtp, 'smtp.host', 'Host', { full: true, placeholder: 'smtp.ejemplo.com', disabled: overrides.host });
+      settingsField(smtp, 'smtp.port', 'Puerto', { type: 'number', min: 1, max: 65535, disabled: overrides.port });
+      settingsField(smtp, 'smtp.secure', 'Conexión segura', { checkbox: true, checkboxLabel: 'TLS/SSL', disabled: overrides.secure });
+      settingsField(smtp, 'smtp.user', 'Usuario', { full: true, disabled: overrides.user });
+      settingsField(smtp, 'smtp.pass', 'Contraseña', { type: 'password', full: true, disabled: overrides.pass });
+      settingsField(smtp, 'smtp.fromEmail', 'Correo remitente', { disabled: overrides.fromEmail });
+      settingsField(smtp, 'smtp.fromName', 'Nombre remitente', { disabled: overrides.fromName });
     }
   }
 
@@ -2103,6 +2143,7 @@
         body: JSON.stringify({ settings: state.settings })
       });
       state.settings = clone(data.settings);
+      state.smtpStatus = data.smtpStatus || state.smtpStatus;
       renderSettings();
       toast('Configuración guardada.');
     } catch (error) {
@@ -2226,6 +2267,58 @@
       saveSettings($('#saveSettings'));
     });
     $('#passwordForm')?.addEventListener('submit', savePassword);
+
+    $('#btnTestSmtp')?.addEventListener('click', async (event) => {
+      const emailInput = $('#testSmtpEmail');
+      const resultBox = $('#smtpTestResult');
+      const button = event.currentTarget;
+      const email = emailInput?.value.trim();
+
+      if (resultBox) {
+        resultBox.hidden = true;
+        resultBox.textContent = '';
+        resultBox.className = 'form-error';
+      }
+
+      if (!email || !email.includes('@')) {
+        if (resultBox) {
+          resultBox.textContent = 'Ingresa un correo electrónico válido para la prueba.';
+          resultBox.hidden = false;
+        } else {
+          toast('Ingresa un correo válido.');
+        }
+        return;
+      }
+
+      busy(button, true);
+      try {
+        const res = await api('/api/admin/settings/test-smtp', {
+          method: 'POST',
+          body: JSON.stringify({ to: email })
+        });
+        if (resultBox) {
+          resultBox.className = 'panel-alert';
+          resultBox.style.background = 'rgba(47, 107, 87, 0.12)';
+          resultBox.style.color = '#1b4a3c';
+          resultBox.style.border = '1px solid rgba(47, 107, 87, 0.3)';
+          resultBox.textContent = `✓ Conexión exitosa. Correo de prueba enviado a ${res.result?.recipient || email} usando ${res.result?.host}.`;
+          resultBox.hidden = false;
+        }
+        toast('Prueba de conexión SMTP exitosa.');
+      } catch (err) {
+        if (resultBox) {
+          resultBox.className = 'form-error';
+          resultBox.style.background = '';
+          resultBox.style.color = '';
+          resultBox.style.border = '';
+          resultBox.textContent = `Error SMTP: ${err.message}`;
+          resultBox.hidden = false;
+        }
+        toast(`Error: ${err.message}`);
+      } finally {
+        busy(button, false);
+      }
+    });
   }
 
   function init() {
