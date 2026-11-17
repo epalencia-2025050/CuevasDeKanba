@@ -22,12 +22,12 @@ La aplicación no incluye cargadores automáticos tipo `dotenv` en producción. 
 | `NODE_ENV` | `production` \| `development` \| `test` | **Sí** | En `production` se bloquean pagos sandbox/live y se activan todas las validaciones estrictas de seguridad. |
 | `ADMIN_PASSWORD` | Cadena (12-256 caracteres) | **Sí** (en prod) | Contraseña maestra del administrador. Debe cumplir política de robustez (versión 2: mayúsculas, minúsculas, números y símbolos). |
 | `DATABASE_URL` | URI PostgreSQL | **Sí** | Cadena de conexión al servidor PostgreSQL (ej. `postgres://usuario:pass@pg.empresa.local:5432/kanba_db`). |
-| `PGSSLMODE` | `verify-full` | Recomendada | Modo TLS de PostgreSQL. Valores no estrictos como `disable` o `require` sin validación son rechazados. |
+| `PGSSLMODE` | `verify-full` \| `require` | Recomendada | Modo TLS de PostgreSQL. `verify-full` (por defecto) exige CA e identidad para conexiones externas y servidor empresarial. `require` se permite EXCLUSIVAMENTE en la red privada interna de Render (`*.render.internal` o `dpg-*`). Modos inseguros como `disable` o degradaciones arbitrarias son rechazados. |
 | `PG_TLS_CA` | Texto PEM | Opcional | Certificado de la Autoridad Certificadora (CA) para PostgreSQL en texto PEM. |
 | `PG_TLS_CA_FILE` | Ruta de archivo | Opcional | Ruta absoluta al certificado CA en formato PEM. Mutuamente excluyente con `PG_TLS_CA`. |
 | `PG_TLS_SERVERNAME` | Nombre de host | Opcional | Nombre del servidor (SNI) esperado en el certificado de PostgreSQL. Por defecto usa el host de `DATABASE_URL`. |
 | `PUBLIC_URL` | URL HTTPS | **Sí** (en prod) | Origen canónico público exacto de la aplicación (ej. `https://cuevasdekanba.com`). Requerido para mitigación de CSRF y Host Header Injection. |
-| `TRUSTED_PROXY_CIDRS` | Lista CIDR separada por comas | **Sí** (en prod) | Rangos IP confiables del proxy inverso (ej. `127.0.0.1/32,10.0.0.0/8`). Solo se confía en cabeceras `X-Forwarded-*` provenientes de estas IPs. |
+| `TRUSTED_PROXY_CIDRS` | Lista CIDR separada por comas | **Sí** (en prod) | Rangos IP confiables del proxy inverso inmediato (ej. `127.0.0.1/32` o la IP/subred específica del gateway balanceador). Solo se confía en cabeceras `X-Forwarded-*` provenientes de estas IPs. No use rangos amplios genéricos como `10.0.0.0/8` salvo que estén explícitamente documentados y justificados. |
 | `DB_SCHEMA` | Identificador SQL | Opcional | Esquema de base de datos a utilizar (por defecto `kanba` o `public`). |
 | `SMTP_HOST` | Nombre de host / IP | **Sí** (correos) | Servidor SMTP corporativo o MTA local (ej. `smtp.empresa.local`). |
 | `SMTP_PORT` | Número (`465`, `587`, etc.) | **Sí** (correos) | Puerto del servicio SMTP (`465` para TLS implícito, `587` para STARTTLS). |
@@ -52,8 +52,14 @@ La aplicación no incluye cargadores automáticos tipo `dotenv` en producción. 
 
 ### 3.1 Conexión con PostgreSQL
 - Se requiere TLS `>= 1.2`.
-- Si PostgreSQL utiliza un certificado firmado por una CA privada corporativa, configure `PG_TLS_CA_FILE=/ruta/ca-empresa.crt`.
-- Quedan prohibidas opciones en la cadena de conexión que intenten omitir la validación de certificados (`sslmode=disable`, `sslmode=no-verify` o parámetros espurios).
+- **Servidores Empresariales y PostgreSQL Externo**:
+  - Utilizan la modalidad estricta `verify-full` (comportamiento predeterminado).
+  - Valida la Autoridad Certificadora (CA) y la identidad del host.
+  - Si PostgreSQL utiliza un certificado firmado por una CA privada corporativa, configure `PG_TLS_CA_FILE=/ruta/ca-empresa.crt`.
+- **Render PostgreSQL Interno (Entorno de Pruebas / Staging en Render)**:
+  - Cuando el servicio web y PostgreSQL están en la red interna privada de Render (utilizando el *Internal Database URL* con hostname `*.render.internal` o `dpg-*`), Render emite certificados TLS autofirmados que Node.js no puede validar contra CAs públicas, produciendo `DEPTH_ZERO_SELF_SIGNED_CERT`.
+  - Para este entorno específico se permite configurar `PGSSLMODE=require`. La aplicación mantiene el cifrado de transporte con TLS `>= 1.2` (`rejectUnauthorized: false`), pero **únicamente si el hostname corresponde a la red privada de Render**. Cualquier intento de usar `require` con un host externo o empresarial es rechazado inmediatamente.
+- Quedan estrictamente prohibidas opciones en la cadena de conexión que intenten desactivar el cifrado (`sslmode=disable`, texto plano o parámetros espurios).
 
 ### 3.2 Conexión con SMTP
 - En puerto `465`: configure `SMTP_SECURE=true` (TLS implícito directo).
@@ -156,7 +162,9 @@ La aplicación debe ubicarse detrás de un proxy inverso que provea:
    - `X-Forwarded-Proto: https`
    - `X-Forwarded-Host`
 
-*Nota*: La aplicación verifica `TRUSTED_PROXY_CIDRS` para descartar solicitudes con cabeceras `X-Forwarded-*` forjadas provenientes de clientes directos.
+*Nota sobre Proxies Confiables*: La aplicación evalúa `TRUSTED_PROXY_CIDRS` para descartar solicitudes con cabeceras `X-Forwarded-*` forjadas provenientes de clientes directos o saltos intermediarios no autorizados.
+- **Determinación de la IP del Proxy**: Debe configurarse con la IP exacta o la subred más pequeña posible del proxy inverso inmediato que entrega las peticiones a Node.js (por ejemplo, `127.0.0.1/32` si el proxy reside en el mismo host, o la IP fija del balanceador corporativo).
+- **Entornos Multi-tenant o Nube**: En plataformas como Render, determine la IP del balanceador observando los registros de arranque (`req.socket.remoteAddress`) o la documentación del proveedor. **No configure bloques amplios como `10.0.0.0/8` o `172.16.0.0/12` de forma genérica**, ya que confiar en toda una red privada de terceros permitiría que otros clientes o contenedores en la misma infraestructura forjen la identidad IP del cliente.
 
 ---
 

@@ -85,6 +85,8 @@ PUBLIC_URL=https://cuevasdekanba.com
 
 # --- BASE DE DATOS POSTGRESQL ---
 DATABASE_URL=postgres://kanba_user:PasswordPostgresSeguro@pg-host.empresa.local:5432/kanba_db
+# En servidores empresariales y proveedores externos: verify-full (valida CA y certificado)
+# En entorno de staging interno de Render (Internal Database URL): require (cifrado TLS en red privada)
 PGSSLMODE=verify-full
 # Si la empresa usa una CA privada interna:
 PG_TLS_CA_FILE=/etc/ssl/certs/ca-corporativa.crt
@@ -94,8 +96,10 @@ PG_TLS_SERVERNAME=pg-host.empresa.local
 DB_SCHEMA=kanba
 
 # --- RED Y PROXY INVERSO ---
-# Lista obligatoria de CIDRs de donde proviene el proxy inverso real:
-TRUSTED_PROXY_CIDRS=127.0.0.1/32,10.0.1.0/24
+# Lista obligatoria de CIDRs exactos del proxy inverso o balanceador inmediato.
+# Use 127.0.0.1/32 si Nginx/Caddy está en el mismo host, o la IP fija del balanceador corporativo.
+# Evite rangos amplios genéricos como 10.0.0.0/8 en redes multi-tenant.
+TRUSTED_PROXY_CIDRS=127.0.0.1/32
 
 # --- SERVIDOR DE CORREO SMTP ---
 SMTP_HOST=smtp.empresa.local

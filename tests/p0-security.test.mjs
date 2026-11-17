@@ -88,12 +88,41 @@ test('PostgreSQL TLS verifies host and certificates; URL/environment overrides c
   assert(!config.connectionString.includes('sslmode'));
   assert(config.ssl.checkServerIdentity('ignored', { subjectaltname: 'DNS:other.invalid' }) instanceof Error);
   assert.equal(config.ssl.checkServerIdentity('ignored', { subjectaltname: 'DNS:db.example.invalid' }), undefined);
+
+  // Insecure modes or unauthorized hosts requesting sslmode=require fail closed
   for (const query of ['sslmode=disable', 'sslmode=require', 'sslmode=no-verify', 'ssl=false', 'sslrootcert=file', 'host=other.invalid', 'uselibpqcompat=true']) {
     assert.throws(() => postgresConnectionOptions('postgres://test.invalid/app?' + query, {}));
   }
   for (const env of [{ PGSSLMODE: 'disable' }, { PGSSLMODE: 'prefer' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' }]) {
     assert.throws(() => postgresConnectionOptions('postgres://test.invalid/app', env));
   }
+
+  // Render internal hosts allow sslmode=require without global compromise
+  const renderDpg = postgresConnectionOptions('postgres://usr:pwd@dpg-c12345678-a/dbname', { PGSSLMODE: 'require' });
+  assert.equal(renderDpg.ssl.rejectUnauthorized, false);
+  assert.equal(renderDpg.ssl.minVersion, 'TLSv1.2');
+  assert(!renderDpg.connectionString.includes('sslmode'));
+
+  // Negative tests: other subdomains or arbitrary hosts on render.internal are rejected
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@other-service.render.internal/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@redis.render.internal/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-c12345678-a.render.internal/dbname?sslmode=require', {}));
+
+  // External hostname attempting sslmode=require is rejected
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@external-postgres.render.com/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@db.empresa.local/dbname', { PGSSLMODE: 'require' }));
+
+  // Negative tests: public hostnames with dpg- prefix, malformed hostnames, conflicts and global bypass attempts
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-attacker.com/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-fake.empresa.local/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-invalid_chars!/dbname', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-short/dbname', { PGSSLMODE: 'require' }));
+  // Conflicto entre PGSSLMODE y query param de DATABASE_URL
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-c12345678-a/dbname?sslmode=verify-full', { PGSSLMODE: 'require' }));
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-c12345678-a/dbname?sslmode=require', { PGSSLMODE: 'verify-full' }));
+  // Intento de desactivar verificación global
+  assert.throws(() => postgresConnectionOptions('postgres://usr:pwd@dpg-c12345678-a/dbname', { PGSSLMODE: 'require', NODE_TLS_REJECT_UNAUTHORIZED: '0' }));
 });
 
 test('custom TLS identity and CA configuration are validated without exposing values', () => {
