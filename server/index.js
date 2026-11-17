@@ -10,7 +10,8 @@ import {
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
   AppError, nextReceiptNumber, TZ,
-  registerUser, loginUser, getUserSession, logoutUser, findUserByEmail
+  registerUser, loginUser, getUserSession, logoutUser, findUserByEmail,
+  createUserSession, registerGoogleUser, linkGoogleAccount
 } from './store.js';
 import { hashPassword, verifyPassword, randomToken, signPayload, verifySignature } from './security.js';
 import { charge } from './gateway.js';
@@ -30,6 +31,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kanba2026';
 const SESSION_COOKIE = 'kanba_session';
 const USER_COOKIE = 'kanba_user';
 const SESSION_MS = 8 * 3600 * 1000;
+// Inicio de sesión con Google (OAuth 2.0). Configurar en Render o en .env.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || '';
 const MAX_BODY = 12 * 1024 * 1024;
 
 fs.mkdirSync(UPLOADS, { recursive: true });
@@ -157,6 +162,38 @@ function rateLimit(key, max, windowMs) {
   }
   entry.count += 1;
   if (entry.count > max) throw new AppError('Demasiados intentos. Espera unos minutos.', 429, 'rate_limited');
+}
+
+/* ------------------------------------------------------------------ */
+/* Inicio de sesión con Google                                        */
+/* ------------------------------------------------------------------ */
+
+const GOOGLE_STATE_MS = 10 * 60 * 1000;
+const googleStates = new Map();
+
+function googleConfigured() {
+  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+}
+
+function requestOrigin(req) {
+  const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
+function googleCallbackUri(req) {
+  return GOOGLE_REDIRECT_URI || `${requestOrigin(req)}/api/auth/google/callback`;
+}
+
+// Solo permite rutas internas como destino posterior al login.
+function safeNextPath(value) {
+  const next = String(value || '').trim();
+  if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return '/';
+  return next;
+}
+
+function googleLoginError(code) {
+  return `/login.html?error=${encodeURIComponent(code)}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -552,6 +589,95 @@ async function handleApi(req, res, url) {
       authenticated: Boolean(session),
       user: session ? session.user : null
     });
+  }
+
+  /* ---------- Inicio de sesión con Google (OAuth 2.0) ---------- */
+  if (method === 'GET' && p === '/api/auth/google') {
+    rateLimit(`google-start:${clientIp(req)}`, 20, 10 * 60000);
+    if (!googleConfigured()) return sendRedirect(res, googleLoginError('google_unconfigured'));
+
+    const now = Date.now();
+    for (const [key, entry] of googleStates) {
+      if (entry.expiresAt <= now) googleStates.delete(key);
+    }
+
+    const state = randomToken(18);
+    googleStates.set(state, {
+      next: safeNextPath(url.searchParams.get('next')),
+      expiresAt: now + GOOGLE_STATE_MS
+    });
+
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: googleCallbackUri(req),
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      prompt: 'select_account',
+      access_type: 'online'
+    });
+    return sendRedirect(res, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  }
+
+  if (method === 'GET' && p === '/api/auth/google/callback') {
+    const state = url.searchParams.get('state') || '';
+    const entry = googleStates.get(state);
+    googleStates.delete(state);
+
+    if (!entry || entry.expiresAt <= Date.now()) {
+      return sendRedirect(res, googleLoginError('google_state'));
+    }
+    if (!googleConfigured()) return sendRedirect(res, googleLoginError('google_unconfigured'));
+    if (url.searchParams.get('error')) {
+      // El usuario canceló o rechazó el acceso en la pantalla de Google.
+      return sendRedirect(res, googleLoginError('google_cancelled'));
+    }
+
+    const code = url.searchParams.get('code') || '';
+    if (!code) return sendRedirect(res, googleLoginError('google_failed'));
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          redirect_uri: googleCallbackUri(req),
+          grant_type: 'authorization_code'
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      const tokens = await tokenRes.json();
+      if (!tokenRes.ok || !tokens.access_token) {
+        throw new Error(tokens.error_description || tokens.error || 'token_exchange_failed');
+      }
+
+      const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+      const profile = await infoRes.json();
+      if (!infoRes.ok || !profile.email) throw new Error(profile.error_description || 'userinfo_failed');
+      if (profile.email_verified === false) {
+        return sendRedirect(res, googleLoginError('google_email_unverified'));
+      }
+
+      const email = String(profile.email).trim().toLowerCase();
+      const googleProfile = { googleId: String(profile.sub || ''), avatar: String(profile.picture || '') };
+      const existing = findUserByEmail(email);
+      const user = existing
+        ? linkGoogleAccount(existing, googleProfile)
+        : registerGoogleUser({ ...googleProfile, email, name: profile.name });
+
+      const session = createUserSession(user);
+      setUserCookie(res, session.token, session.expiresAt);
+      return sendRedirect(res, entry.next);
+    } catch (err) {
+      console.error('[auth/google] no se pudo completar el inicio de sesión:', err.message);
+      return sendRedirect(res, googleLoginError('google_failed'));
+    }
   }
 
   if (method === 'POST' && p === '/api/auth/register') {
