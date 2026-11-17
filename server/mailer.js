@@ -351,7 +351,17 @@ export async function sendMail({ to, template, reservation, extra = {} }) {
   if (d.emails.length > 500) d.emails.length = 500;
   saveDb();
 
-  const smtp = d.settings.smtp || {};
+  const dbSmtp = d.settings.smtp || {};
+  const smtp = {
+    host: process.env.SMTP_HOST || dbSmtp.host || '',
+    port: Number(process.env.SMTP_PORT || dbSmtp.port || 465),
+    secure: process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === 'true' : dbSmtp.secure !== false,
+    user: process.env.SMTP_USER || dbSmtp.user || '',
+    pass: process.env.SMTP_PASS || dbSmtp.pass || '',
+    fromEmail: process.env.SMTP_FROM || dbSmtp.fromEmail || dbSmtp.user || 'reservas@kanba.gt',
+    fromName: process.env.SMTP_FROM_NAME || dbSmtp.fromName || 'K’anba Cuevas Vivas'
+  };
+
   if (smtp.host && smtp.user) {
     try {
       await sendSmtpMail({
