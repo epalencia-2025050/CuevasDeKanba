@@ -101,6 +101,7 @@
       tab.classList.toggle('is-active', active);
       tab.setAttribute('aria-selected', String(active));
     });
+    setBusy(false);
     clearErrors();
   }
 
@@ -160,12 +161,14 @@
     const password = $('#regPassword')?.value || '';
     if (!name || !email || !password) {
       showError(errors.register, 'Completa nombre, correo y contraseña.');
+      setBusy(false);
       return;
     }
     await api('/api/auth/register', { name, email, password });
 
     // Redirigir al panel de iniciar sesión con correo prellenado y mensaje
     setActivePanel('user');
+    setBusy(false);
     const userEmailInput = $('#userEmail');
     if (userEmailInput) {
       userEmailInput.value = email;
