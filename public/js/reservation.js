@@ -10,6 +10,7 @@
   const state = {
     code: '',
     token: '',
+    email: '',
     reservation: null,
     timer: null,
     secondsLeft: 0,
@@ -443,6 +444,7 @@
     if (!silent) busy(lookupButton, true);
     try {
       const data = await api(`/api/reservations/${encodeURIComponent(state.code)}?token=${encodeURIComponent(state.token)}`);
+      state.email = data.reservation?.customer?.email || '';
       state.loaded = true;
       render(data.reservation);
     } catch (error) {
@@ -493,11 +495,13 @@
       });
       state.code = data.reservation.code;
       state.token = data.token;
+      state.email = data.reservation?.customer?.email || '';
       state.loaded = true;
       setLocation(state.code, state.token);
       render(data.reservation);
       toast('Reserva encontrada.');
     } catch (err) {
+      if (err.status === 401) { window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`; return; }
       if (error) {
         error.hidden = false;
         error.textContent = err.status === 404
@@ -531,7 +535,7 @@
     try {
       const data = await api(`/api/reservations/${encodeURIComponent(state.code)}/cancel`, {
         method: 'POST',
-        body: JSON.stringify({ token: state.token, reason })
+        body: JSON.stringify({ token: state.token, email: state.email, reason })
       });
       state.reservation = data.reservation;
       render(data.reservation);
@@ -541,6 +545,7 @@
         : 'Cancelación registrada. No aplica reembolso según la política.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
+      if (err.status === 401) { window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`; return; }
       if (error) {
         error.hidden = false;
         error.textContent = err.message;

@@ -1,130 +1,157 @@
 import net from 'node:net';
 import tls from 'node:tls';
+import { verifiedTlsOptions } from './tls-config.js';
 
 function sanitizeSmtpHeader(value = '') {
   return String(value).replace(/[\r\n]+/g, ' ').trim();
 }
 
-/**
- * Cliente SMTP mínimo (sin dependencias) para envío real de correos.
- * Soporta TLS directo (465), STARTTLS (587/25) y AUTH LOGIN / PLAIN.
- * Si el servidor no está configurado, el sistema usa la bandeja de salida local.
- */
-export function sendSmtpMail({ host, port = 465, secure = true, user, pass, fromEmail, fromName, to, subject, html, text }) {
+// All messages are local constants: SMTP responses and transport errors may contain secrets.
+function smtpError(code) {
+  const error = new Error(`SMTP ${code}: operaci\u00f3n rechazada o transporte seguro no disponible.`);
+  error.code = 'SMTP_SECURE_FAILURE';
+  return error;
+}
+
+export function sendSmtpMail({ host, port = 465, secure = true, user, pass, fromEmail, fromName, to, subject, html, text, messageId }) {
   const cleanFrom = sanitizeSmtpHeader(fromEmail);
   const cleanTo = sanitizeSmtpHeader(to);
   const cleanName = sanitizeSmtpHeader(fromName);
   const cleanSubject = sanitizeSmtpHeader(subject);
+  let tlsOptions;
+  try { tlsOptions = verifiedTlsOptions('SMTP', host); }
+  catch { return Promise.reject(smtpError('TLS_CONFIG')); }
 
   return new Promise((resolve, reject) => {
-    let socket = secure
-      ? tls.connect({ host, port, servername: host, rejectUnauthorized: false })
-      : net.connect({ host, port });
-
+    let socket;
     let buffer = '';
-    let stage = 'greeting';
+    let lines = [];
+    let responseCode = null;
     let settled = false;
-    let inData = false;
+    let tlsVerified = false;
+    let terminalError;
+    const responses = [];
     const waiters = [];
-
-    const timer = setTimeout(() => fail(new Error('Tiempo de espera SMTP agotado (20 s).')), 20000);
+    const timer = setTimeout(() => fail(smtpError('TIMEOUT')), 20000);
 
     function cleanup() {
       clearTimeout(timer);
-      try { socket.end(); } catch { /* noop */ }
-      try { socket.destroy(); } catch { /* noop */ }
+      try { socket?.destroy(); } catch { /* noop */ }
     }
-    function fail(err) {
+    function fail(error) {
       if (settled) return;
       settled = true;
+      terminalError = error;
+      for (const waiter of waiters.splice(0)) waiter.reject(error);
       cleanup();
-      reject(err);
+      reject(error);
     }
-    function succeed() {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve({ ok: true });
-    }
-
     function readResponse() {
-      return new Promise((res) => waiters.push(res));
+      if (terminalError) return Promise.reject(terminalError);
+      if (responses.length) return Promise.resolve(responses.shift());
+      return new Promise((resolve, reject) => waiters.push({ resolve, reject }));
     }
-
-    function processBuffer() {
-      if (inData) return;
-      // SMTP lines end with CRLF; multi-line replies use "250-".
-      while (true) {
+    function onData(chunk) {
+      buffer += chunk;
+      if (buffer.length + lines.join('').length > 65536) return fail(smtpError('RESPONSE_LIMIT'));
+      while (!settled) {
         const idx = buffer.indexOf('\r\n');
-        if (idx < 0) break;
+        if (idx < 0) return;
         const line = buffer.slice(0, idx);
-        if (/^\d{3}-/.test(line)) {
-          buffer = buffer.slice(idx + 2);
-          continue;
-        }
-        if (/^\d{3} /.test(line)) {
-          const code = Number(line.slice(0, 3));
-          buffer = buffer.slice(idx + 2);
-          const waiter = waiters.shift();
-          if (waiter) waiter({ code, line });
-          break;
-        }
         buffer = buffer.slice(idx + 2);
+        const match = /^(\d{3})([ -])(.*)$/.exec(line);
+        if (!match || (responseCode !== null && responseCode !== Number(match[1]))) {
+          return fail(smtpError('PROTOCOL'));
+        }
+        responseCode = Number(match[1]);
+        lines.push(match[3]);
+        if (match[2] === '-') continue;
+        const response = { code: responseCode, lines };
+        lines = [];
+        responseCode = null;
+        const waiter = waiters.shift();
+        if (waiter) waiter.resolve(response);
+        else {
+          if (responses.length >= 8) return fail(smtpError('PROTOCOL'));
+          responses.push(response);
+        }
       }
     }
-
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk) => {
-      buffer += chunk;
-      processBuffer();
-    });
-    socket.on('error', fail);
-    socket.on('timeout', () => fail(new Error('Socket SMTP sin actividad.')));
-
-    async function cmd(line, expected = [250]) {
-      const promise = readResponse();
-      socket.write(line + '\r\n');
-      const res = await promise;
-      if (!expected.includes(res.code)) throw new Error(`SMTP ${res.code}: ${res.line}`);
-      return res;
+    const onError = () => fail(smtpError('TRANSPORT'));
+    const onClose = () => fail(smtpError('CLOSED'));
+    function attach(connection) {
+      connection.setEncoding('utf8');
+      connection.on('data', onData);
+      connection.on('error', onError);
+      connection.on('close', onClose);
     }
-
-    async function auth() {
+    async function connectTls(options) {
+      socket = tls.connect({ ...options, ...tlsOptions });
+      attach(socket);
+      await new Promise((resolve, reject) => {
+        const failed = () => { detach(); reject(smtpError('TLS')); };
+        const connected = () => {
+          detach();
+          if (!socket.authorized) return reject(smtpError('TLS'));
+          tlsVerified = true;
+          resolve();
+        };
+        const detach = () => {
+          socket.removeListener('error', failed);
+          socket.removeListener('close', failed);
+          socket.removeListener('secureConnect', connected);
+        };
+        socket.once('error', failed);
+        socket.once('close', failed);
+        socket.once('secureConnect', connected);
+      });
+    }
+    async function cmd(line, expected = [250]) {
+      if (terminalError) throw terminalError;
+      socket.write(line + '\r\n');
+      const response = await readResponse();
+      if (!expected.includes(response.code)) throw smtpError(response.code);
+      return response;
+    }
+    async function auth(ehlo) {
+      if (!tlsVerified || !socket.authorized) throw smtpError('TLS_REQUIRED');
       if (!user || !pass) return;
-      const res = await cmd(`EHLO kanba.local`);
-      const supportsPlain = /AUTH[^\r\n]*PLAIN/i.test(res.line) || /AUTH[^\r\n]*PLAIN/i.test(buffer);
-      if (supportsPlain) {
+      const capabilities = ehlo.lines.join('\n');
+      if (/^AUTH[ =].*\bPLAIN\b/im.test(capabilities)) {
         await cmd(`AUTH PLAIN ${Buffer.from(`\0${user}\0${pass}`).toString('base64')}`, [235]);
-      } else {
-        await cmd(`AUTH LOGIN`, [334]);
+      } else if (/^AUTH[ =].*\bLOGIN\b/im.test(capabilities)) {
+        await cmd('AUTH LOGIN', [334]);
         await cmd(Buffer.from(user).toString('base64'), [334]);
         await cmd(Buffer.from(pass).toString('base64'), [235]);
+      } else {
+        throw smtpError('AUTH_UNSUPPORTED');
       }
     }
-
     async function start() {
-      const greet = await readResponse();
-      if (greet.code !== 220) throw new Error(`SMTP ${greet.code}: ${greet.line}`);
-
-      let ehlo = await cmd('EHLO kanba.local');
-      if (!secure && /STARTTLS/i.test(ehlo.line)) {
-        await cmd('STARTTLS', [220]);
-        socket.removeAllListeners('data');
-        socket.removeAllListeners('error');
-        buffer = '';
-        socket = tls.connect({ socket, servername: host, rejectUnauthorized: false });
-        socket.setEncoding('utf8');
-        socket.on('data', (chunk) => { buffer += chunk; processBuffer(); });
-        socket.on('error', fail);
-        await cmd('EHLO kanba.local');
+      if (secure) await connectTls({ host, port });
+      else {
+        socket = net.connect({ host, port });
+        attach(socket);
       }
-
-      await auth();
-
+      const greeting = await readResponse();
+      if (greeting.code !== 220) throw smtpError(greeting.code);
+      let ehlo = await cmd('EHLO kanba.local');
+      if (!secure) {
+        if (!ehlo.lines.some(line => /^STARTTLS(?:\s|$)/i.test(line))) throw smtpError('STARTTLS_REQUIRED');
+        await cmd('STARTTLS', [220]);
+        // Never carry plaintext replies/capabilities over into the authenticated channel.
+        if (buffer || lines.length || responses.length) throw smtpError('PROTOCOL');
+        const plain = socket;
+        plain.removeListener('data', onData);
+        plain.removeListener('error', onError);
+        plain.removeListener('close', onClose);
+        await connectTls({ socket: plain });
+        ehlo = await cmd('EHLO kanba.local');
+      }
+      await auth(ehlo);
       await cmd(`MAIL FROM:<${cleanFrom}>`);
       await cmd(`RCPT TO:<${cleanTo}>`, [250, 251]);
       await cmd('DATA', [354]);
-
       const encodedSubject = `=?UTF-8?B?${Buffer.from(cleanSubject, 'utf8').toString('base64')}?=`;
       const boundary = `kanba-${Date.now().toString(36)}`;
       const headers = [
@@ -132,6 +159,7 @@ export function sendSmtpMail({ host, port = 465, secure = true, user, pass, from
         `To: <${cleanTo}>`,
         `Subject: ${encodedSubject}`,
         `Date: ${new Date().toUTCString()}`,
+        ...(messageId ? [`Message-ID: <${String(messageId).replace(/[^a-zA-Z0-9_-]/g, '')}@kanba.invalid>`] : []),
         'MIME-Version: 1.0',
         `Content-Type: multipart/alternative; boundary="${boundary}"`
       ];
@@ -154,20 +182,19 @@ export function sendSmtpMail({ host, port = 465, secure = true, user, pass, from
       ].join('\r\n');
 
       const dotted = payload
+        .replace(/\r\n|\r|\n/g, '\r\n')
         .split('\r\n')
         .map((line) => (line.startsWith('.') ? '.' + line : line))
         .join('\r\n');
 
-      inData = true;
-      const finalPromise = readResponse();
-      socket.write(dotted + '\r\n.\r\n');
-      const finalRes = await finalPromise;
-      inData = false;
-      if (finalRes.code !== 250) throw new Error(`SMTP ${finalRes.code}: ${finalRes.line}`);
-      try { await cmd('QUIT', [221, 250]); } catch { /* noop */ }
-      succeed();
-    }
 
-    start().catch(fail);
+      await cmd(dotted + '\r\n.', [250]);
+      // Delivery is acknowledged. QUIT is best effort and must not create a retry.
+      settled = true;
+      try { socket.write('QUIT\r\n'); } catch { /* noop */ }
+      cleanup();
+      resolve({ ok: true });
+    }
+    start().catch(error => fail(error?.code === 'SMTP_SECURE_FAILURE' ? error : smtpError('TRANSPORT')));
   });
 }

@@ -6,7 +6,7 @@ export function hashPassword(password, salt = crypto.randomBytes(16).toString('h
 }
 
 export function verifyPassword(password, stored) {
-  if (!stored?.salt || !stored?.hash) return false;
+  if (String(password).length > 256 || !stored?.salt || !stored?.hash) return false;
   const candidate = crypto.scryptSync(String(password), stored.salt, 64);
   const expected = Buffer.from(stored.hash, 'hex');
   if (candidate.length !== expected.length) return false;

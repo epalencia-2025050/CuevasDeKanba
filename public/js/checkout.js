@@ -336,6 +336,12 @@
       return;
     }
 
+    if (!reservation.paymentsEnabled) {
+      showState({ tone: 'amber', title: 'Pagos en línea no disponibles',
+        text: 'La pasarela de pago aún no está habilitada. No ingreses datos de tarjeta. Contacta a la administración para consultar tu reserva.',
+        actions: [{ label: 'Mi reserva', href: `/mi-reserva.html?code=${encodeURIComponent(reservation.code)}&token=${encodeURIComponent(state.token)}`, variant: 'btn-primary' }] });
+      return;
+    }
     const panel = $('#paymentPanel');
     const policy = $('#policyMini');
     if (panel) panel.hidden = false;
@@ -406,17 +412,14 @@
     busy(button, true);
     state.paying = true;
     try {
+      // Los datos de la tarjeta no salen del navegador: se genera un token de
+      // demostración local. En producción, la pasarela tokeniza (campos alojados).
+      const digits = $('#cardNumber').value.replace(/\D/g, '');
+      const suffix = digits.slice(-4);
+      const paymentToken = `tok_demo_${suffix || '4242'}`;
       const data = await api(`/api/payments/${encodeURIComponent(reservation.payment.intentId)}/pay`, {
         method: 'POST',
-        body: JSON.stringify({
-          token: state.token,
-          card: {
-            number: $('#cardNumber').value.replace(/\s/g, ''),
-            name: $('#cardName').value.trim(),
-            expiry: $('#cardExpiry').value.trim(),
-            cvc: $('#cardCvc').value.trim()
-          }
-        })
+        body: JSON.stringify({ token: state.token, paymentToken })
       });
       clearInterval(state.timer);
       window.location.href = data.redirect || `/confirmacion.html?code=${encodeURIComponent(state.code)}&token=${encodeURIComponent(state.token)}`;

@@ -56,7 +56,7 @@
 
           <section class="panel-card" id="paymentPanel" hidden>
             <h2>Datos de la tarjeta</h2>
-            <p class="panel-sub">El cargo se procesa en quetzales guatemaltecos (GTQ). No guardamos el número completo ni el CVV.</p>
+            <p class="panel-sub">El cargo se procesa en quetzales guatemaltecos (GTQ). Los datos de tu tarjeta no se envían a nuestro servidor: la pasarela los tokeniza.</p>
             <form class="card-form" id="paymentForm" novalidate>
               <div class="form-grid">
                 <label class="field field-full">
@@ -82,7 +82,7 @@
               </div>
 
               <div class="sandbox-note">
-                <strong>Modo demostración.</strong> Tarjeta de prueba: <code>4242 4242 4242 4242</code>, cualquier fecha futura y CVV de 3 dígitos. Las tarjetas terminadas en <code>0002</code> se rechazan por fondos insuficientes y las terminadas en <code>0003</code> piden autenticación.
+                <strong>Modo demostración.</strong> Tarjeta de prueba: <code>4242 4242 4242 4242</code>, cualquier fecha futura y CVV de 3 dígitos. Los datos se validan solo en tu navegador y se envía un token de prueba. Las terminaciones <code>0002</code> y <code>0003</code> reproducen rechazos. En producción, la pasarela real tokeniza los datos.
               </div>
 
               <div class="form-error" id="payError" role="alert" hidden></div>
