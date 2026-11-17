@@ -42,6 +42,12 @@
   const next = params.get('next');
   if (nextInput && next) nextInput.value = next;
 
+  // Conserva el destino (?next=...) al iniciar sesión con Google.
+  const googleSignIn = $('#googleSignIn');
+  if (googleSignIn) {
+    googleSignIn.href = `/api/auth/google${next ? `?next=${encodeURIComponent(next)}` : ''}`;
+  }
+
   const panels = {
     user: $('#panel-user'),
     register: $('#panel-register'),
@@ -221,6 +227,20 @@
   });
 
   if (params.get('role') === 'admin') setRole('admin');
+
+  // Mensajes cuando el flujo de Google regresa con error.
+  const GOOGLE_ERRORS = {
+    google_unconfigured: 'El inicio de sesión con Google aún no está disponible. Usa tu correo y contraseña.',
+    google_cancelled: 'Cancelaste el inicio de sesión con Google.',
+    google_state: 'La sesión de Google expiró. Inténtalo de nuevo.',
+    google_failed: 'No pudimos completar el inicio de sesión con Google. Inténtalo de nuevo.',
+    google_email_unverified: 'El correo de tu cuenta de Google no está verificado.'
+  };
+  const googleError = params.get('error');
+  if (googleError && GOOGLE_ERRORS[googleError]) {
+    setActivePanel('user');
+    showError(errors.user, GOOGLE_ERRORS[googleError]);
+  }
 
   // Si el usuario ya tiene sesión iniciada y entra a login.html, redirigir
   (async () => {
