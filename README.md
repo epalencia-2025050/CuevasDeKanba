@@ -19,6 +19,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - [Correos](#correos)
 - [Pagos](#pagos)
 - [Pruebas y QA](#pruebas-y-qa)
+- [Analítica](#analítica)
 - [Reiniciar los datos](#reiniciar-los-datos)
 - [Despliegue en Render (gratis)](#despliegue-en-render-gratis)
 - [Notas para producción](#notas-para-producción)
@@ -347,6 +348,43 @@ node server/index.js
 ```
 
 Se volverán a crear el contenido, los tours y las cinco reservas de ejemplo. Las imágenes subidas a `public/uploads/` no se eliminan automáticamente; puedes borrarlas si ya no están referenciadas.
+
+---
+
+## Analítica
+
+El sitio está conectado al contenedor **Google Tag Manager `GTM-N8ZD2LM3`**. El contenedor se carga en todas las páginas públicas (no en `admin.html`, para no mezclar el tráfico interno con las métricas) y envía eventos a `dataLayer` para medir el embudo de reservas.
+
+### Archivos
+
+| Archivo | Función |
+| --- | --- |
+| `public/js/analytics.js` | Define `window.kanbaTrack(event, params)` y `window.kanbaTrackBooking(event, reservation)`, más eventos automáticos. |
+| `scripts/install-analytics.cjs` | Reinstala/actualiza el contenedor en todas las páginas públicas. Es idempotente: `node scripts/install-analytics.cjs`. |
+| `server/index.js` | La política CSP permite `googletagmanager.com`, `google-analytics.com` y `*.analytics.google.com`. |
+
+### Eventos enviados
+
+| Evento | Cuándo se dispara |
+| --- | --- |
+| `select_tour` | El usuario elige una experiencia. |
+| `reservation_created` | Se crea la reserva y se redirige al pago. |
+| `begin_checkout` | Se abre la página de pago de una reserva pendiente (una vez por sesión). |
+| `add_payment_info` | El usuario envía el formulario de pago. |
+| `purchase` | Se muestra una reserva confirmada (una vez por código en el navegador). |
+| `scroll_depth` | Se alcanza 25 %, 50 %, 75 % y 90 % de la página. |
+| `video_play` | Se abre un video de la videoteca. |
+| `contact_whatsapp`, `contact_phone`, `contact_email` | Clic en WhatsApp, teléfono o correo. |
+| `get_directions` | Clic en Google Maps o Waze. |
+| `outbound_click` | Clic en un enlace externo. |
+
+`begin_checkout`, `add_payment_info` y `purchase` incluyen `currency: "GTQ"`, `value`, `transaction_id` e `items`, listos para el e-commerce de GA4.
+
+### Configurar Google Analytics 4
+
+El contenedor de GTM por sí solo no envía datos: dentro de [tagmanager.google.com](https://tagmanager.google.com) hay que crear una etiqueta **Google Analytics: Configuración de GA4** con el ID de medición (`G-XXXXXXXXXX`), activada en **All Pages** (o en el evento `Initialization`), y publicar el contenedor. Después, en GA4 se pueden marcar como conversiones `purchase`, `begin_checkout` y `reservation_created`.
+
+Si se prefiere cargar GA4 directamente (sin GTM), se puede añadir un `gtag.js` con el ID de medición; conviene no duplicar entonces la etiqueta de GA4 en GTM.
 
 ---
 
