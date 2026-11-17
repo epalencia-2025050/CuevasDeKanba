@@ -37,3 +37,9 @@ services:
       # Render pedirá este valor al crear el servicio (no se guarda en el repositorio).
       - key: ADMIN_PASSWORD
         sync: false
+      # Inicio de sesión con Google (Google Cloud Console → Credenciales → OAuth client ID).
+      # Si no se configuran, el botón muestra un aviso y se sigue usando correo/contraseña.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
