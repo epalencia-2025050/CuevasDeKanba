@@ -173,10 +173,19 @@ La aplicación debe ubicarse detrás de un proxy inverso que provea:
 1. **Fallo de Conexión a Base de Datos**:
    - La aplicación responderá con código de estado `500` con mensaje seguro predeterminado `Internal server error` sin filtrar trazas de PostgreSQL.
    - El servicio se reiniciará automáticamente vía systemd.
-2. **Bloqueo Administrativo / Olvido de Contraseña**:
-   - Inyectar la variable `FORCE_ADMIN_PASSWORD=1` y reiniciar el servicio una sola vez.
-   - Acceder al panel con la contraseña configurada en `ADMIN_PASSWORD`.
-   - Retirar la variable `FORCE_ADMIN_PASSWORD` y reiniciar el servicio.
+2. **Rotación de Credencial Administrativa y Bloqueo / Olvido de Contraseña**:
+   - **Error en arranque**: Si el arranque en producción se detiene con:
+     `Error: La credencial administrativa heredada requiere rotación controlada antes de producción.`
+     indica que la base de datos persistida contiene un registro administrativo con `passwordPolicyVersion` anterior a la versión 2.
+   - **Procedimiento de rotación controlada**:
+     1. Inyectar en las variables de entorno del servicio:
+        `ADMIN_PASSWORD=<contraseña_robusta_12_a_256_caracteres>`
+        `FORCE_ADMIN_PASSWORD=1`
+     2. Reiniciar o desplegar el servicio una sola vez.
+     3. Durante el arranque, el sistema calcula el hash criptográfico `scrypt`, establece `admin.passwordPolicyVersion = 2`, actualiza la fecha `updatedAt`, invalida todas las sesiones administrativas activas (`sessions = {}`) y persiste atómicamente el documento en PostgreSQL mediante `withStoreTransaction`.
+     4. **Preservación total de datos**: Este procedimiento no altera ni corrompe las reservas (`reservations`), usuarios registrados (`users`), tours, contenidos ni cierres.
+     5. Acceder al panel administrativo (`/admin`) con la contraseña configurada en `ADMIN_PASSWORD`.
+     6. **Paso indispensable**: Retirar la variable `FORCE_ADMIN_PASSWORD` (o cambiar su valor a `0`) del entorno para evitar cálculos repetitivos en reinicios posteriores.
 3. **Compromiso o Exposición de Secretos**:
    - Proceder inmediatamente con la revocación en los proveedores respectivos (correo, pasarela de pago).
    - Generar nuevas credenciales y actualizar las variables de entorno en el servidor.

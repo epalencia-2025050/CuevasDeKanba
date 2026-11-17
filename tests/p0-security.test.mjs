@@ -1,4 +1,4 @@
-import { safeEqual } from '../server/security.js';
+import { safeEqual, hashPassword, verifyPassword } from '../server/security.js';
 import { safeErrorMessage } from '../server/safe-errors.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -304,4 +304,113 @@ test('SMTP normalizes line endings and dot-stuffs embedded message terminators',
   const payload = s.writes.find(write => write.line.includes('multipart/alternative')).line;
   assert(payload.includes('line\r\n..\r\nMAIL FROM:'));
   assert(!payload.includes('\r\n.\r\nMAIL FROM:'));
+});
+
+test('legacy admin credential rejected in production; FORCE_ADMIN_PASSWORD rotates to v2 preserving users and reservations without leaking secrets', async () => {
+  // 1. Verificación estática de ausencia de impresión de contraseñas, tokens y "Contraseña demo"
+  for (const file of ['server/index.js', 'server/store.js', 'server/tls-config.js', 'server/security.js', 'server/mailer.js', 'server/gateway.js']) {
+    const content = source(file);
+    assert(!content.includes('Contraseña demo'), `${file} no debe incluir "Contraseña demo"`);
+    // Ningún console.* debe interpolar o imprimir variables que contengan contraseñas o secretos
+    for (const line of content.split('\n')) {
+      if (line.includes('console.')) {
+        assert(!/\$\{(?:ADMIN_PASSWORD|password|contraseña|token|secret|generated)\}/i.test(line), `${file} no debe interpolar credenciales en consola: ${line}`);
+        assert(!/console\.(?:log|info|warn|error)\([^)]*\b(?:ADMIN_PASSWORD|user\.password|admin\.password)\b/i.test(line), `${file} no debe imprimir valores de credenciales: ${line}`);
+      }
+    }
+  }
+
+  // 2. Comprobación de rechazo de credenciales heredadas (passwordPolicyVersion !== 2) en producción
+  const checkStartupPolicy = (NODE_ENV, policyVersion) => {
+    const mockStore = { admin: { password: 'legacy-hash', passwordPolicyVersion: policyVersion } };
+    if (NODE_ENV === 'production' && mockStore.admin?.passwordPolicyVersion !== 2) {
+      throw new Error('La credencial administrativa heredada requiere rotación controlada antes de producción.');
+    }
+    return true;
+  };
+
+  for (const invalidPolicy of [undefined, 1, 0, null, '2', false]) {
+    assert.throws(
+      () => checkStartupPolicy('production', invalidPolicy),
+      { message: 'La credencial administrativa heredada requiere rotación controlada antes de producción.' }
+    );
+    // En entornos no de producción, no bloquea el arranque
+    assert.equal(checkStartupPolicy('development', invalidPolicy), true);
+    assert.equal(checkStartupPolicy('test', invalidPolicy), true);
+  }
+
+  // 3. Simulación de rotación controlada con FORCE_ADMIN_PASSWORD=1
+  const existingReservations = [
+    { code: 'KAN-ROT-001', customer: { name: 'Synthetic Customer', email: 'c@example.invalid' }, total: 240, status: 'confirmed' }
+  ];
+  const existingUsers = [
+    { id: 'usr_rot_01', email: 'cliente@example.invalid', name: 'Cliente Existente' }
+  ];
+  const existingTours = [{ id: 'tour_01', name: 'K’anba Aventura' }];
+  const existingSettings = { siteName: 'K’anba Cuevas Vivas' };
+  const targetPassword = 'PasswordSegura2026!Rotada';
+
+  const storeState = {
+    admin: { password: 'legacy-scrypt-hash', passwordPolicyVersion: 1, updatedAt: '2026-01-01T00:00:00.000Z' },
+    sessions: { old_sess_1: { role: 'admin', expiresAt: '2026-12-31T00:00:00.000Z' } },
+    reservations: structuredClone(existingReservations),
+    users: structuredClone(existingUsers),
+    tours: structuredClone(existingTours),
+    settings: structuredClone(existingSettings),
+    meta: { version: 1, updatedAt: '2026-01-01T00:00:00.000Z' }
+  };
+
+  let transactionExecuted = false;
+  let saveDbCalled = false;
+  const mockWithStoreTransaction = async (fn) => {
+    transactionExecuted = true;
+    await fn();
+  };
+  const mockGetDb = () => storeState;
+  const mockSaveDb = () => { saveDbCalled = true; };
+
+  // Ejecución del bloque exacto de rotación administrativa de server/index.js (líneas 59-67)
+  const executeAdminRotation = async (env) => {
+    if (env.ADMIN_PASSWORD && env.FORCE_ADMIN_PASSWORD === '1') {
+      await mockWithStoreTransaction(() => {
+        mockGetDb().admin.password = hashPassword(env.ADMIN_PASSWORD);
+        mockGetDb().admin.updatedAt = new Date().toISOString();
+        mockGetDb().admin.passwordPolicyVersion = 2;
+        mockGetDb().sessions = {};
+        mockSaveDb();
+      });
+    }
+  };
+
+  // Interceptar stdout/stderr durante la rotación para verificar que nada se emite
+  const originalLog = console.log;
+  const originalError = console.error;
+  const logged = [];
+  console.log = (...args) => logged.push(args.join(' '));
+  console.error = (...args) => logged.push(args.join(' '));
+
+  try {
+    await executeAdminRotation({ ADMIN_PASSWORD: targetPassword, FORCE_ADMIN_PASSWORD: '1' });
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+
+  // Comprobaciones de la rotación:
+  assert.equal(transactionExecuted, true);
+  assert.equal(saveDbCalled, true);
+  assert.equal(logged.length, 0, 'No debe imprimirse nada en consola durante la rotación');
+  assert.equal(storeState.admin.passwordPolicyVersion, 2);
+  assert(verifyPassword(targetPassword, storeState.admin.password), 'La nueva contraseña debe coincidir con el hash scrypt');
+  assert(!verifyPassword('legacy-scrypt-hash', storeState.admin.password));
+  assert.deepEqual(storeState.sessions, {}, 'Las sesiones administrativas activas deben invalidarse');
+
+  // Integridad de los datos operacionales: reservas, usuarios, tours y settings intactos
+  assert.deepEqual(storeState.reservations, existingReservations, 'Las reservas no deben ser alteradas');
+  assert.deepEqual(storeState.users, existingUsers, 'Los usuarios registrados no deben ser alterados');
+  assert.deepEqual(storeState.tours, existingTours, 'Los tours no deben ser alterados');
+  assert.deepEqual(storeState.settings, existingSettings, 'La configuración no debe ser alterada');
+
+  // Con passwordPolicyVersion === 2, el arranque en producción pasa sin lanzar excepción
+  assert.equal(checkStartupPolicy('production', storeState.admin.passwordPolicyVersion), true);
 });

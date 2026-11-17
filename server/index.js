@@ -1389,7 +1389,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 if (NODE_ENV === 'production' && !db.admin?.password) {
-  console.error('[seguridad] No hay contraseña administrativa configurada. Define ADMIN_PASSWORD (mínimo 8 caracteres) y reinicia.');
+  console.error('[seguridad] No hay credencial administrativa configurada en el entorno.');
   process.exit(1);
 }
 
