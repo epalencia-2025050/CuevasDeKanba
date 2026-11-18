@@ -11,6 +11,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - [Características](#características)
 - [Requisitos y arranque](#requisitos-y-arranque)
 - [Acceso al panel](#acceso-al-panel)
+- [Inicio de sesión con Google](#inicio-de-sesión-con-google)
 - [Flujo de reserva y pago](#flujo-de-reserva-y-pago)
 - [Datos de demostración](#datos-de-demostración)
 - [Variables de entorno](#variables-de-entorno)
@@ -19,6 +20,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - [Correos](#correos)
 - [Pagos](#pagos)
 - [Pruebas y QA](#pruebas-y-qa)
+- [Analítica](#analítica)
 - [Reiniciar los datos](#reiniciar-los-datos)
 - [Despliegue en Render (gratis)](#despliegue-en-render-gratis)
 - [Notas para producción](#notas-para-producción)
@@ -41,6 +43,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - Bloqueo temporal de cupos durante el pago, con liberación automática al vencer el plazo.
 - Páginas de pago, confirmación, comprobante imprimible, consulta de reserva y verificación pública de comprobantes.
 - Consulta por código + correo o por enlace privado con token; cancelación desde la página de la reserva y aviso de reembolso según política.
+- Inicio de sesión con Google (OAuth 2.0) además de correo y contraseña.
 
 **Panel administrativo**
 
@@ -84,6 +87,16 @@ Para desarrollo con recarga automática del servidor:
 npm run dev
 ```
 
+Para cargar las credenciales de Google desde `.env` en local (copia `.env.example` como `.env` y complétalo):
+
+```bash
+npm run start:local
+# o con recarga automática
+npm run dev:local
+```
+
+`npm start` y `npm run dev` siguen funcionando sin `.env`; en ese caso el botón de Google muestra un aviso y el acceso por contraseña continúa disponible.
+
 La primera ejecución crea `data/db.json` con contenido, tours, ajustes y cinco reservas de ejemplo.
 
 ---
@@ -96,6 +109,38 @@ La primera ejecución crea `data/db.json` con contenido, tours, ajustes y cinco 
 | Contraseña | `kanba2026` |
 
 La contraseña se guarda con hash `scrypt` en `data/db.json`. Puedes cambiarla desde **Configuración → Actualizar contraseña**.
+
+---
+
+## Inicio de sesión con Google
+
+El acceso de visitantes acepta dos métodos: correo/contraseña y **Google OAuth 2.0**. La cuenta se crea automáticamente la primera vez y, si ya existe una cuenta con ese correo, se vincula a Google sin perder reservas.
+
+### Configurar Google Cloud
+
+1. En [console.cloud.google.com](https://console.cloud.google.com) selecciona el proyecto **K'anba**.
+2. **APIs y servicios → Pantalla de consentimiento OAuth**:
+   - Tipo: **Externo**.
+   - Nombre de la app: `K'anba Cuevas Vivas`, correo de asistencia y de contacto.
+   - Permisos: `email`, `profile`, `openid`.
+   - En *Usuarios de prueba*, agrega tu correo mientras la app esté en modo prueba; o publícala en producción.
+3. **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**:
+   - Tipo: **Aplicación web**.
+   - **Orígenes de JavaScript autorizados**:
+     - `https://cuevas-de-kanba.onrender.com`
+     - `http://localhost:3000` (desarrollo)
+   - **URI de redirección autorizados**:
+     - `https://cuevas-de-kanba.onrender.com/api/auth/google/callback`
+     - `http://localhost:3000/api/auth/google/callback`
+4. Copia el **Client ID** y el **Client Secret**.
+5. En Render → servicio `cuevas-de-kanba` → **Environment**, agrega `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y redespliega. En local puedes definirlos como variables de entorno antes de `npm start`.
+
+### Flujo técnico
+
+- `GET /api/auth/google?next=/reservar.html` genera un `state` de un solo uso (10 minutos) y redirige a Google.
+- `GET /api/auth/google/callback` intercambia el código por un token, valida el perfil con `userinfo` y crea o vincula la cuenta.
+- Se reutiliza la cookie de sesión `kanba_user` (`HttpOnly`, `SameSite=Strict`); no se guardan tokens de Google.
+- Si faltan las variables de entorno, el botón regresa al login con un aviso y el acceso por contraseña sigue funcionando.
 
 ---
 
@@ -160,6 +205,9 @@ Los correos se guardan como archivos `.eml` en `data/outbox/` y también se list
 | `PGSSLMODE` | — | Con `disable` desactiva SSL (solo para PostgreSQL local sin TLS). |
 | `DATA_DIR` | `./data` | Modo archivo: carpeta de `db.json` y `outbox/`. También sirve para montar un disco de pago. |
 | `UPLOADS_DIR` | `./public/uploads` | Modo archivo: carpeta de imágenes subidas desde el panel. |
+| `GOOGLE_CLIENT_ID` | — | ID de cliente OAuth de Google para el botón "Continuar con Google". |
+| `GOOGLE_CLIENT_SECRET` | — | Secreto del cliente OAuth de Google. No se guarda en el repositorio. |
+| `GOOGLE_REDIRECT_URI` | — | Opcional. URI de redirección si se usa un dominio propio; por defecto se detecta desde la petición (`/api/auth/google/callback`). |
 
 Ejemplo en PowerShell:
 
@@ -239,6 +287,8 @@ node server/index.js
 | `GET` | `/api/receipt/:code?token=` | Comprobante digital. |
 | `GET` | `/api/verify/:code` | Verificación pública de un comprobante. |
 | `POST` | `/api/webhooks/payments` | Webhook firmado de la pasarela. |
+| `GET` | `/api/auth/google?next=` | Inicia el flujo OAuth con Google. |
+| `GET` | `/api/auth/google/callback` | Retorno de Google: crea o vincula la cuenta e inicia sesión. |
 
 ### Administrativas
 
@@ -347,6 +397,43 @@ node server/index.js
 ```
 
 Se volverán a crear el contenido, los tours y las cinco reservas de ejemplo. Las imágenes subidas a `public/uploads/` no se eliminan automáticamente; puedes borrarlas si ya no están referenciadas.
+
+---
+
+## Analítica
+
+El sitio está conectado al contenedor **Google Tag Manager `GTM-N8ZD2LM3`**. El contenedor se carga en todas las páginas públicas (no en `admin.html`, para no mezclar el tráfico interno con las métricas) y envía eventos a `dataLayer` para medir el embudo de reservas.
+
+### Archivos
+
+| Archivo | Función |
+| --- | --- |
+| `public/js/analytics.js` | Define `window.kanbaTrack(event, params)` y `window.kanbaTrackBooking(event, reservation)`, más eventos automáticos. |
+| `scripts/install-analytics.cjs` | Reinstala/actualiza el contenedor en todas las páginas públicas. Es idempotente: `node scripts/install-analytics.cjs`. |
+| `server/index.js` | La política CSP permite `googletagmanager.com`, `google-analytics.com` y `*.analytics.google.com`. |
+
+### Eventos enviados
+
+| Evento | Cuándo se dispara |
+| --- | --- |
+| `select_tour` | El usuario elige una experiencia. |
+| `reservation_created` | Se crea la reserva y se redirige al pago. |
+| `begin_checkout` | Se abre la página de pago de una reserva pendiente (una vez por sesión). |
+| `add_payment_info` | El usuario envía el formulario de pago. |
+| `purchase` | Se muestra una reserva confirmada (una vez por código en el navegador). |
+| `scroll_depth` | Se alcanza 25 %, 50 %, 75 % y 90 % de la página. |
+| `video_play` | Se abre un video de la videoteca. |
+| `contact_whatsapp`, `contact_phone`, `contact_email` | Clic en WhatsApp, teléfono o correo. |
+| `get_directions` | Clic en Google Maps o Waze. |
+| `outbound_click` | Clic en un enlace externo. |
+
+`begin_checkout`, `add_payment_info` y `purchase` incluyen `currency: "GTQ"`, `value`, `transaction_id` e `items`, listos para el e-commerce de GA4.
+
+### Configurar Google Analytics 4
+
+El contenedor de GTM por sí solo no envía datos: dentro de [tagmanager.google.com](https://tagmanager.google.com) hay que crear una etiqueta **Google Analytics: Configuración de GA4** con el ID de medición (`G-XXXXXXXXXX`), activada en **All Pages** (o en el evento `Initialization`), y publicar el contenedor. Después, en GA4 se pueden marcar como conversiones `purchase`, `begin_checkout` y `reservation_created`.
+
+Si se prefiere cargar GA4 directamente (sin GTM), se puede añadir un `gtag.js` con el ID de medición; conviene no duplicar entonces la etiqueta de GA4 en GTM.
 
 ---
 

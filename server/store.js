@@ -1015,12 +1015,63 @@ export function loginUser(email, password) {
   if (String(password).length > 256 || !user || !verifyPassword(password, user.password)) {
     throw new AppError('Correo o contraseña incorrectos.', 401, 'invalid_credentials');
   }
+  return createUserSession(user);
+}
+
+export function createUserSession(user) {
   const token = randomToken();
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
   getDb().userSessions[token] = { userId: user.id, createdAt, lastSeenAt: createdAt, expiresAt };
   saveDb();
   return { token, expiresAt, user: publicUser(user) };
+}
+
+/**
+ * Crea una cuenta a partir del perfil verificado de Google (sin contraseña).
+ * El usuario podrá definir una contraseña más adelante si lo necesita.
+ */
+export function registerGoogleUser({ name, email, googleId, avatar }) {
+  const d = getDb();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!USER_EMAIL_RE.test(normalizedEmail)) {
+    throw new AppError('Google no devolvió un correo válido.', 422, 'validation');
+  }
+  if (findUserByEmail(normalizedEmail)) {
+    throw new AppError('Ya existe una cuenta con ese correo.', 409, 'email_taken');
+  }
+  const cleanName = String(name || '').trim() || normalizedEmail.split('@')[0];
+  const user = {
+    id: `usr_${randomToken(6)}`,
+    name: cleanName,
+    email: normalizedEmail,
+    phone: '',
+    country: '',
+    role: 'user',
+    provider: 'google',
+    googleId: String(googleId || ''),
+    avatar: String(avatar || ''),
+    createdAt: new Date().toISOString()
+  };
+  d.users.push(user);
+  saveDb();
+  return publicUser(user);
+}
+
+/** Vincula una cuenta existente (creada con correo y contraseña) a Google. */
+export function linkGoogleAccount(user, { googleId, avatar }) {
+  if (!user) return null;
+  let changed = false;
+  if (googleId && user.googleId !== googleId) {
+    user.googleId = String(googleId);
+    changed = true;
+  }
+  if (avatar && user.avatar !== avatar) {
+    user.avatar = String(avatar);
+    changed = true;
+  }
+  if (changed) saveDb();
+  return publicUser(user);
 }
 
 export function getUserSession(token) {

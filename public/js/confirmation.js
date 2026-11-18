@@ -122,6 +122,15 @@
     }
   }
 
+  function trackPurchase(reservation) {
+    const key = `kanba:ga:purchase:${reservation.code}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+    } catch { /* almacenamiento no disponible */ }
+    try { window.kanbaTrackBooking?.('purchase', reservation); } catch { /* analítica no disponible */ }
+  }
+
   function showState(title, text, actions) {
     const card = $('#confirmCard');
     const panel = $('#confirmState');
@@ -165,6 +174,7 @@
       if (code) code.textContent = reservation.code;
 
       if (reservation.status === 'confirmed') {
+        trackPurchase(reservation);
         setBand('Tu lugar bajo tierra está listo', 'Gracias por reservar con guías locales de Lanquín. Revisa los detalles y llega 20 minutos antes.');
         if (statusText) statusText.textContent = 'Reserva confirmada';
         if (lead) lead.textContent = `Tu pago fue aprobado y tus cupos están asegurados. Te esperamos el ${reservation.dateLong} a las ${reservation.time}.`;
