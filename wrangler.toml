@@ -1,0 +1,28 @@
+name = "kanba-cuevas-vivas"
+main = "server/worker.js"
+compatibility_date = "2026-11-18"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+html_handling = "none"
+not_found_handling = "none"
+
+[vars]
+NODE_ENV = "production"
+PUBLIC_URL = "https://kanba.example.invalid" # Sustituir por el dominio real.
+DB_SCHEMA = "kanba"
+
+[triggers]
+crons = ["* * * * *"]
+
+# Opción recomendada en Workers: crear Hyperdrive hacia PostgreSQL y desactivar
+# query caching para datos de sesiones/reservas. Activar este bloque con su ID real.
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "REEMPLAZAR_CON_ID_REAL"
+# Sin este binding se usa el secret DATABASE_URL con conexión TLS directa.
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, PAYMENTS_*, MAIL_API_*:
+# cargar mediante `wrangler secret put NOMBRE`, nunca escribirlos aquí.

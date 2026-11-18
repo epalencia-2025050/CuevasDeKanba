@@ -1,0 +1,34 @@
+{
+  "name": "kanba-cuevas-vivas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sitio web y sistema de reservas para las Cuevas de K'anba, Lanquín, Alta Verapaz, Guatemala.",
+  "scripts": {
+    "test:p0": "node --experimental-vm-modules --test tests/p0-security.test.mjs",
+    "start": "node server/node.js",
+    "dev": "node --watch server/node.js",
+    "start:local": "node --env-file=.env server/node.js",
+    "dev:local": "node --env-file=.env --watch server/node.js",
+    "test": "node --experimental-vm-modules --test tests/*.test.mjs",
+    "release:source": "node scripts/package-release.mjs",
+    "dev:worker": "wrangler dev",
+    "build:worker": "wrangler deploy --dry-run --outdir dist/worker",
+    "deploy:worker": "wrangler deploy",
+    "db:init": "node --env-file=.env scripts/initialize-database.mjs",
+    "db:rotate-admin": "node --env-file=.env scripts/rotate-admin.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.9",
+    "hono": "^4.13.19",
+    "postgres": "^4.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "miniflare": "^5.20261117.0-beta",
+    "wrangler": "^4.164.0"
+  }
+}

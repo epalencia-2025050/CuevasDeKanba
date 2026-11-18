@@ -1,0 +1,11 @@
+NODE_ENV=development
+PUBLIC_URL=http://localhost:8787
+DB_SCHEMA=kanba
+DATABASE_URL=postgres://usuario:password@localhost:5432/kanba
+# PostgreSQL debe ofrecer un certificado confiable; PG_TLS_CA admite una CA privada.
+# ADMIN_PASSWORD se usa únicamente en la inicialización explícita desde Node.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8787/api/auth/google/callback
+MAIL_API_URL=
+MAIL_API_TOKEN=

@@ -1,0 +1,557 @@
+/* ==========================================================================
+   K’anba · Dashboard de Login (Cuevas Vivas)
+   Diseño inmersivo integrado con la identidad del sitio web K'anba:
+   Fondo real de cueva, gradientes orgánicos, paleta verde/bosque/lima/ámbar,
+   tipografía Fraunces & Manrope, y tarjeta estilo cueva viva.
+   ========================================================================== */
+
+:root {
+  --ink: #081310;
+  --deep: #0e2420;
+  --forest: #123c32;
+  --moss: #2f6b57;
+  --lime: #b8d98c;
+  --lime-soft: #d7e8bd;
+  --amber: #e8b56a;
+  --amber-soft: #f1cd97;
+  --cream: #f6f1e6;
+  --paper: #fbf8f0;
+  --line-light: rgba(246, 241, 230, .16);
+  --sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Fraunces", Georgia, serif;
+}
+
+body.login-page {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--sans);
+  color: var(--cream);
+  background-color: var(--ink);
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* --------------------------------------------------------------------------
+ * Fondo inmersivo de las Cuevas de K'anba (idéntico al Hero de index.html)
+ * ----------------------------------------------------------------------- */
+
+.login-cave-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cave-bg-image {
+  position: absolute;
+  inset: 0;
+  background-image: url('../assets/img/kanba-cave-02.jpg');
+  background-size: cover;
+  background-position: center center;
+  filter: saturate(.88) contrast(1.08) brightness(.7);
+  transform: scale(1.03);
+}
+
+.cave-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(8, 19, 16, .82) 0%, rgba(8, 19, 16, .45) 35%, rgba(8, 19, 16, .65) 70%, rgba(8, 19, 16, .94) 100%),
+    radial-gradient(ellipse at 50% 50%, rgba(14, 36, 32, .5) 0%, rgba(8, 19, 16, .85) 100%);
+}
+
+.cave-glow {
+  position: absolute;
+  width: 48vw;
+  height: 48vw;
+  max-width: 650px;
+  max-height: 650px;
+  right: -8vw;
+  bottom: 0%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 181, 106, .22), rgba(184, 217, 140, .08) 50%, transparent 70%);
+  filter: blur(35px);
+  animation: glowPulse 10s ease-in-out infinite alternate;
+}
+
+@keyframes glowPulse {
+  0% { transform: scale(1); opacity: .7; }
+  100% { transform: scale(1.15) translate(-2vw, -2vh); opacity: 1; }
+}
+
+.cave-fireflies {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cave-fireflies i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: var(--amber);
+  border-radius: 50%;
+  box-shadow: 0 0 10px 2px rgba(232, 181, 106, .8), 0 0 20px 4px rgba(232, 181, 106, .4);
+  animation: fireflyFloat 14s infinite ease-in-out;
+}
+
+.cave-fireflies i:nth-child(1) { top: 20%; left: 15%; animation-duration: 12s; animation-delay: 0s; }
+.cave-fireflies i:nth-child(2) { top: 60%; left: 80%; animation-duration: 16s; animation-delay: 2s; }
+.cave-fireflies i:nth-child(3) { top: 35%; left: 70%; animation-duration: 10s; animation-delay: 4s; }
+.cave-fireflies i:nth-child(4) { top: 75%; left: 25%; animation-duration: 18s; animation-delay: 1s; }
+.cave-fireflies i:nth-child(5) { top: 15%; left: 50%; animation-duration: 15s; animation-delay: 3s; }
+.cave-fireflies i:nth-child(6) { top: 85%; left: 60%; animation-duration: 13s; animation-delay: 5s; }
+
+@keyframes fireflyFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: .3; }
+  50% { transform: translate(30px, -40px) scale(1.5); opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+ * Pantalla principal & Contenedores
+ * ----------------------------------------------------------------------- */
+
+.login-screen {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 18px;
+  box-sizing: border-box;
+}
+
+.login-wrapper {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* --------------------------------------------------------------------------
+ * Barra superior (Regresar / Inicio) con diseño K'anba
+ * ----------------------------------------------------------------------- */
+
+.login-topbar {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+
+.btn-topbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cream);
+  background: rgba(14, 36, 32, .65);
+  border: 1px solid rgba(246, 241, 230, .22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .25s var(--ease);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .25);
+}
+
+.btn-topbar svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-topbar:hover {
+  background: rgba(47, 107, 87, .65);
+  border-color: var(--lime);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+/* --------------------------------------------------------------------------
+ * Tarjeta de Login (Diseño de la página K'anba)
+ * ----------------------------------------------------------------------- */
+
+.login-card-container {
+  width: 100%;
+  position: relative;
+}
+
+.login-card {
+  width: 100%;
+  background: rgba(14, 36, 32, .82);
+  border: 1px solid rgba(246, 241, 230, .18);
+  border-radius: 26px;
+  padding: clamp(28px, 5vw, 38px) clamp(24px, 4vw, 34px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, .55),
+    0 0 0 1px rgba(184, 217, 140, .1),
+    inset 0 1px 0 rgba(255, 255, 255, .15);
+  position: relative;
+}
+
+/* Brand header dentro de la tarjeta */
+.login-brand-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.login-brand-wrap .brand {
+  color: var(--cream);
+}
+
+.login-brand-wrap .brand-mark {
+  background: rgba(184, 217, 140, .14);
+  border-color: rgba(184, 217, 140, .4);
+}
+
+/* --------------------------------------------------------------------------
+ * Pestañas Usuario / Administrador
+ * ----------------------------------------------------------------------- */
+
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: rgba(8, 19, 16, .65);
+  border: 1px solid rgba(246, 241, 230, .14);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.login-tab {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: rgba(246, 241, 230, .65);
+  font: 700 12.5px/1 var(--sans);
+  cursor: pointer;
+  transition: all .2s var(--ease);
+  text-align: center;
+}
+
+.login-tab:hover {
+  color: var(--cream);
+}
+
+.login-tab.is-active {
+  background: rgba(184, 217, 140, .18);
+  color: var(--lime);
+  border: 1px solid rgba(184, 217, 140, .45);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
+}
+
+/* --------------------------------------------------------------------------
+ * Encabezado de los Paneles
+ * ----------------------------------------------------------------------- */
+
+.login-panels {
+  position: relative;
+}
+
+.login-panel {
+  display: none;
+}
+
+.login-panel.is-active {
+  display: block;
+  animation: panelIn .25s ease both;
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.panel-head {
+  margin-bottom: 22px;
+}
+
+.panel-head .eyebrow {
+  margin-bottom: 8px;
+}
+
+.panel-title {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 4vw, 2.2rem);
+  line-height: 1.05;
+  color: var(--cream);
+  letter-spacing: -.02em;
+  margin: 0 0 8px;
+}
+
+.panel-subtitle {
+  font-size: 13.5px;
+  color: rgba(246, 241, 230, .72);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Campos de Entrada (Form Fields) con diseño K'anba
+ * ----------------------------------------------------------------------- */
+
+.login-card .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.login-card .field label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: rgba(246, 241, 230, .85);
+  padding-left: 2px;
+}
+
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 12px;
+  background: rgba(8, 19, 16, .55);
+  border: 1px solid rgba(246, 241, 230, .18);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, .3);
+  transition: border-color .22s, box-shadow .22s, background .22s;
+}
+
+.input-wrap:focus-within {
+  background: rgba(8, 19, 16, .75);
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px rgba(184, 217, 140, .2), inset 0 2px 5px rgba(0, 0, 0, .3);
+}
+
+.input-icon {
+  position: absolute;
+  left: 14px;
+  color: rgba(246, 241, 230, .45);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color .22s;
+}
+
+.input-wrap:focus-within .input-icon {
+  color: var(--lime);
+}
+
+.input-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.input-wrap input {
+  width: 100%;
+  height: 48px;
+  padding: 0 44px 0 44px;
+  background: transparent;
+  border: 0;
+  color: var(--cream);
+  font: 500 14px/1 var(--sans);
+  outline: none;
+  border-radius: 12px;
+}
+
+.input-wrap input::placeholder {
+  color: rgba(246, 241, 230, .35);
+}
+
+.pw-toggle {
+  position: absolute;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(246, 241, 230, .55);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color .2s, background .2s;
+}
+
+.pw-toggle:hover {
+  color: var(--cream);
+  background: rgba(246, 241, 230, .1);
+}
+
+.pw-toggle svg {
+  width: 17px;
+  height: 17px;
+}
+
+.pw-toggle svg[hidden] {
+  display: none !important;
+}
+
+/* Errores */
+.login-card .form-error {
+  margin: 4px 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(189, 96, 65, .4);
+  background: rgba(189, 96, 65, .2);
+  color: #f0b6a2;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.login-card .form-success {
+  margin: 4px 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(184, 217, 140, .4);
+  background: rgba(184, 217, 140, .15);
+  color: var(--lime);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* --------------------------------------------------------------------------
+ * Botones de Acción (Botones del sitio K'anba)
+ * ----------------------------------------------------------------------- */
+
+.btn-submit {
+  width: 100%;
+  margin-top: 10px;
+  height: 48px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+}
+
+.btn-submit svg {
+  width: 16px;
+  height: 16px;
+  transition: transform .25s var(--ease);
+}
+
+.btn-submit:hover svg {
+  transform: translateX(4px);
+}
+
+.panel-foot-note {
+  margin: 20px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: rgba(246, 241, 230, .68);
+}
+
+/* Inicio de sesión con Google */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(246, 241, 230, .42);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(246, 241, 230, .16);
+}
+
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 241, 230, .85);
+  background: var(--cream);
+  color: var(--ink);
+  font: 700 13.5px/1 var(--sans);
+  letter-spacing: .01em;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  transition: transform .22s var(--ease), box-shadow .22s var(--ease), background .22s;
+}
+
+.btn-google:hover {
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .32);
+}
+
+.btn-google:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+}
+
+.btn-google svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.btn-google.is-loading {
+  opacity: .7;
+  pointer-events: none;
+}
+
+.link-switch {
+  background: transparent;
+  border: 0;
+  color: var(--lime);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0 4px;
+  transition: color .2s;
+}
+
+.link-switch:hover {
+  color: #fff;
+}
+
+.login-footer-info {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(246, 241, 230, .45);
+}

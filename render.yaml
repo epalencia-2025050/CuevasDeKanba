@@ -1,0 +1,45 @@
+# Blueprint de Render para K'anba · Cuevas Vivas — plan gratuito
+# Documentación: https://render.com/docs/blueprint-spec
+#
+# Un único Web Service Free sirve el sitio público, el panel y la API.
+# La persistencia va a PostgreSQL mediante DATABASE_URL.
+#
+# Este Blueprint NO crea una base de datos: Render solo permite UNA base
+# Postgres Free por workspace. Si ya tienes otra (por ejemplo tu CRM),
+# reutilízala con un esquema propio (DB_SCHEMA=kanba) o usa una base
+# gratuita externa (Neon, Supabase). Ver README → "Despliegue en Render (gratis)".
+
+services:
+  - type: web
+    name: cuevas-de-kanba
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Render pedirá este valor al crear el servicio (no se guarda en el repositorio).
+      # Pega la cadena de conexión de tu PostgreSQL:
+      #   - Render Postgres existente → "Internal Database URL" (mismo workspace/región)
+      #   - Neon / Supabase            → su connection string
+      - key: DATABASE_URL
+        sync: false
+      # Esquema propio dentro de esa base para no chocar con las tablas de otra app.
+      # Si usas una base exclusiva para K'anba puedes dejarlo o cambiar a "public".
+      - key: DB_SCHEMA
+        value: kanba
+      # Render pedirá este valor al crear el servicio (no se guarda en el repositorio).
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Inicio de sesión con Google (Google Cloud Console → Credenciales → OAuth client ID).
+      # Si no se configuran, el botón muestra un aviso y se sigue usando correo/contraseña.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
