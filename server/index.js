@@ -1,3 +1,4 @@
+import { logHttpsRejection } from './https-diagnostic.js';
 import { createRequestSecurity, parseJsonObject, RequestSecurityError } from './request-security.js';
 import { bufferedResponse } from './store-transaction.js';
 import { safeErrorMessage } from './safe-errors.js';
@@ -1343,6 +1344,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (err instanceof AppError || err instanceof PaymentPolicyError || err instanceof RequestSecurityError) {
+      logHttpsRejection(err, req);
       return sendError(res, err.status, err.message, err.code);
     }
     console.error('[server]', safeErrorMessage(err));
