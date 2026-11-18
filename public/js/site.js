@@ -1017,11 +1017,17 @@
         acceptPolicies: form.elements.acceptPolicies.checked,
         acceptTerms: form.elements.acceptTerms.checked
       };
+      const requestFingerprint = JSON.stringify({ tourId: tour.id, date: state.date, time: state.time, participants: state.pax, customer });
+      if (state.bookingFingerprint !== requestFingerprint) {
+        state.bookingFingerprint = requestFingerprint;
+        state.bookingRequestId = crypto.randomUUID();
+      }
       let data;
       try {
         data = await api('/api/reservations', {
           method: 'POST',
           body: JSON.stringify({
+            requestId: state.bookingRequestId,
             tourId: tour.id,
             date: state.date,
             time: state.time,

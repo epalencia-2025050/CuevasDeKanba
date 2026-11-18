@@ -1,6 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { getDb, saveDb, ensureOutbox, formatDateLong, dateToEpoch } from './store.js';
+import { safeErrorMessage } from './safe-errors.js';
+import crypto from 'node:crypto';
+import { getDb, saveDb, withStoreTransaction, formatDateLong, dateToEpoch } from './store.js';
 import { sendSmtpMail } from './smtp.js';
 
 const money = (n, currency = 'GTQ') =>
@@ -329,7 +329,8 @@ function isPermanentSmtpError(errMsg = '') {
 
 export function getEffectiveSmtpConfig() {
   const d = getDb();
-  const dbSmtp = d.settings.smtp || {};
+  // Production transport endpoints are operator-managed, never selected through the panel.
+  const dbSmtp = process.env.NODE_ENV === 'production' ? {} : (d.settings.smtp || {});
 
   const envHost = process.env.SMTP_HOST;
   const envPort = process.env.SMTP_PORT;
@@ -347,7 +348,7 @@ export function getEffectiveSmtpConfig() {
   const port = Number((envPort !== undefined ? envPort : dbSmtp.port) || 465);
   const secure = envSecure !== undefined ? envSecure === 'true' : dbSmtp.secure !== false;
   const user = (hasEnvUser ? envUser : dbSmtp.user) || '';
-  const pass = (envPass !== undefined ? envPass : dbSmtp.pass) || '';
+  const pass = envPass || ''; // Never load a credential from persisted settings.
   const fromEmail = (envFrom !== undefined ? envFrom : (dbSmtp.fromEmail || user)) || 'reservas@kanba.gt';
   const fromName = (envFromName !== undefined ? envFromName : (dbSmtp.fromName || 'K’anba Cuevas Vivas')) || 'K’anba Cuevas Vivas';
 
@@ -375,7 +376,7 @@ export function getEffectiveSmtpConfig() {
       port: Boolean(envPort),
       secure: Boolean(envSecure),
       user: Boolean(envUser),
-      pass: Boolean(envPass),
+      pass: true, // This field is always environment-managed.
       fromEmail: Boolean(envFrom),
       fromName: Boolean(envFromName)
     }
@@ -449,79 +450,63 @@ export async function testSmtpConnection(testRecipient) {
   return { ok: true, recipient: cleanTo, host: cfg.host, source: cfg.source };
 }
 
-// Bandera para evitar carreras durante el procesamiento de la cola de reintentos
+// Claim a committed outbox record, send outside the transaction, then acknowledge.
+// SMTP delivery is at-least-once; a crash after delivery can cause a retry.
 let isProcessingQueue = false;
-
-export async function processEmailRetryQueue() {
+export async function processEmailRetryQueue(shouldContinue = () => true) {
   if (isProcessingQueue) return;
   isProcessingQueue = true;
   try {
-    const d = getDb();
-    if (!Array.isArray(d.emails)) return;
-
-    const cfg = getEffectiveSmtpConfig();
-    if (!cfg.host || !cfg.user) return; // No hay SMTP para enviar
-
-    const now = Date.now();
-    // Buscar correos pendientes de reintento
-    for (const record of d.emails) {
-      if (record.status !== 'queued') continue;
-      if (record.permanentFailed) continue;
-      if (record.attempts >= 5) {
-        record.status = 'failed';
-        continue;
-      }
-      if (record.nextAttemptAt && Date.parse(record.nextAttemptAt) > now) {
-        continue;
-      }
-
-      // Procesar reintento
-      record.status = 'sending';
-      record.attempts = (record.attempts || 0) + 1;
-      saveDb();
-
-      try {
-        await sendSmtpMail({
-          host: cfg.host,
-          port: cfg.port,
-          secure: cfg.secure,
-          user: cfg.user,
-          pass: cfg.pass,
-          fromEmail: cfg.fromEmail || cfg.user,
-          fromName: cfg.fromName || 'K’anba Cuevas Vivas',
-          to: record.to,
-          subject: record.subject,
-          html: record.html,
-          text: record.text
-        });
-        record.status = 'sent';
-        record.provider = 'smtp';
-        record.error = null;
-        record.sentAt = new Date().toISOString();
+    for (let index = 0; index < 20 && shouldContinue(); index++) {
+      const claim = await withStoreTransaction(() => {
+        const cfg = getEffectiveSmtpConfig();
+        if (!cfg.isConfigured) return null;
+        const now = Date.now();
+        for (const mail of getDb().emails) {
+          if (mail.attempts >= 5 && (mail.status === 'queued' || (mail.status === 'sending' && (!mail.leaseExpiresAt || Date.parse(mail.leaseExpiresAt) <= now)))) {
+            mail.status = 'failed';
+            delete mail.claimId;
+            delete mail.leaseExpiresAt;
+            saveDb();
+          }
+        }
+        const record = getDb().emails.find(mail => !mail.permanentFailed && mail.attempts < 5 &&
+          ((mail.status === 'queued' && (!mail.nextAttemptAt || Date.parse(mail.nextAttemptAt) <= now)) ||
+           (mail.status === 'sending' && (!mail.leaseExpiresAt || Date.parse(mail.leaseExpiresAt) <= now))));
+        if (!record) return null;
+        record.status = 'sending';
+        record.attempts = (record.attempts || 0) + 1;
+        record.claimId = crypto.randomUUID();
+        record.leaseExpiresAt = new Date(now + 120000).toISOString();
         saveDb();
-        console.log(`[smtp-queue] Correo ${record.id} entregado con éxito (intento ${record.attempts})`);
-      } catch (err) {
-        record.error = err.message;
-        const permanent = isPermanentSmtpError(err.message);
-        if (permanent || record.attempts >= 5) {
-          record.status = 'failed';
-          record.permanentFailed = permanent;
-          console.error(`[smtp-queue] Correo ${record.id} falló de forma permanente o alcanzó 5 intentos:`, err.message);
+        return { cfg, record: structuredClone(record) };
+      });
+      if (!claim) break;
+      let failure;
+      try {
+        await sendSmtpMail({ ...claim.cfg, to: claim.record.to, subject: claim.record.subject,
+          html: claim.record.html, text: claim.record.text, messageId: claim.record.id });
+      } catch (error) { failure = error; }
+      await withStoreTransaction(() => {
+        const record = getDb().emails.find(mail => mail.id === claim.record.id);
+        if (!record || record.claimId !== claim.record.claimId) return;
+        delete record.leaseExpiresAt;
+        delete record.claimId;
+        if (!failure) {
+          record.status = 'sent';
+          record.provider = 'smtp';
+          record.error = null;
+          record.sentAt = new Date().toISOString();
         } else {
-          record.status = 'queued';
-          // Backoff exponencial: 1 min, 4 min, 9 min, 16 min...
-          const delayMinutes = Math.pow(record.attempts, 2);
-          record.nextAttemptAt = new Date(Date.now() + delayMinutes * 60000).toISOString();
-          console.warn(`[smtp-queue] Correo ${record.id} falló temporalmente (intento ${record.attempts}), próximo reintento en ${delayMinutes}m`);
+          record.error = safeErrorMessage(failure);
+          record.permanentFailed = isPermanentSmtpError(failure.message);
+          record.status = record.permanentFailed || record.attempts >= 5 ? 'failed' : 'queued';
+          record.nextAttemptAt = new Date(Date.now() + record.attempts ** 2 * 60000).toISOString();
         }
         saveDb();
-      }
+      });
     }
-  } catch (globalErr) {
-    console.error('[smtp-queue] Error procesando cola:', globalErr.message);
-  } finally {
-    isProcessingQueue = false;
-  }
+  } finally { isProcessingQueue = false; }
 }
 
 export async function sendMail({ to, template, reservation, extra = {} }) {
@@ -541,7 +526,7 @@ export async function sendMail({ to, template, reservation, extra = {} }) {
   });
   const text = plainText(tpl);
   const record = {
-    id: `mail_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `mail_${crypto.randomUUID()}`,
     to,
     subject: tpl.subject,
     template,
@@ -556,79 +541,7 @@ export async function sendMail({ to, template, reservation, extra = {} }) {
     error: null
   };
   d.emails.unshift(record);
-  if (d.emails.length > 500) d.emails.length = 500;
-  saveDb();
-
-  const smtp = getEffectiveSmtpConfig();
-
-  if (smtp.host && smtp.user) {
-    record.status = 'sending';
-    record.attempts = 1;
-    saveDb();
-    try {
-      await sendSmtpMail({
-        host: smtp.host,
-        port: smtp.port,
-        secure: smtp.secure,
-        user: smtp.user,
-        pass: smtp.pass,
-        fromEmail: smtp.fromEmail || smtp.user,
-        fromName: smtp.fromName || 'K’anba Cuevas Vivas',
-        to,
-        subject: tpl.subject,
-        html,
-        text
-      });
-      record.status = 'sent';
-      record.provider = 'smtp';
-      record.sentAt = new Date().toISOString();
-      saveDb();
-      return record;
-    } catch (err) {
-      record.error = err.message;
-      const permanent = isPermanentSmtpError(err.message);
-      if (permanent) {
-        record.status = 'failed';
-        record.permanentFailed = true;
-      } else {
-        record.status = 'queued';
-        // Primer reintento en 1 minuto
-        record.nextAttemptAt = new Date(Date.now() + 60000).toISOString();
-      }
-      console.error('[smtp] error enviando correo:', err.message);
-    }
-  }
-
-  // Si no hay SMTP configurado o falló, se guarda copia en el buzón local (disco).
-  try {
-    const dir = ensureOutbox();
-    const safe = `${record.reservationCode}_${record.template}_${record.id}`;
-    const eml = [
-      `From: "K’anba Cuevas Vivas" <${smtp.fromEmail || 'reservas@kanba.gt'}>`,
-      `To: ${to}`,
-      `Subject: ${tpl.subject}`,
-      `Date: ${new Date().toUTCString()}`,
-      'MIME-Version: 1.0',
-      `Content-Type: multipart/alternative; boundary="kanba-${safe}"`,
-      '',
-      `--kanba-${safe}`,
-      'Content-Type: text/plain; charset=utf-8',
-      '',
-      text,
-      '',
-      `--kanba-${safe}`,
-      'Content-Type: text/html; charset=utf-8',
-      '',
-      html,
-      '',
-      `--kanba-${safe}--`,
-      ''
-    ].join('\r\n');
-    fs.writeFileSync(path.join(dir, `${safe}.eml`), eml, 'utf8');
-  } catch (err) {
-    console.error('[mail] no se pudo escribir el .eml:', err.message);
-  }
-
+  // Persist in the same transaction as the reservation. Worker sends only after commit.
   saveDb();
   return record;
 }

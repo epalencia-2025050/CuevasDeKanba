@@ -2037,13 +2037,21 @@
       wrap.append(input);
     } else {
       input = el('input');
-      input.type = opts.type || 'text';
+      input.type = opts.secret ? 'password' : (opts.type || 'text');
       input.value = value == null ? '' : String(value);
+      if (opts.secret) {
+        input.autocomplete = 'new-password';
+        input.placeholder = opts.placeholder || 'Déjalo vacío para conservar la actual';
+      }
       if (opts.min !== undefined) input.min = String(opts.min);
       if (opts.max !== undefined) input.max = String(opts.max);
       if (opts.step !== undefined) input.step = String(opts.step);
-      if (opts.placeholder) input.placeholder = opts.placeholder;
+      if (opts.placeholder && !opts.secret) input.placeholder = opts.placeholder;
       wrap.append(input);
+    }
+    if (opts.secret && opts.configured) {
+      const hint = el('small', 'form-hint', 'Configurada. Déjalo vacío para no cambiarla.');
+      wrap.append(hint);
     }
     if (opts.disabled) {
       input.disabled = true;
@@ -2051,6 +2059,10 @@
     }
     input.dataset.settingsPath = path;
     container.append(wrap);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   }
 
   function renderSettings() {
@@ -2082,8 +2094,8 @@
       settingsField(payments, 'payments.mode', 'Modo', { select: [['sandbox', 'Sandbox'], ['live', 'Producción']] });
       settingsField(payments, 'payments.merchantId', 'Merchant ID');
       settingsField(payments, 'payments.publicKey', 'Llave pública', { full: true });
-      settingsField(payments, 'payments.secretKey', 'Llave secreta', { full: true });
-      settingsField(payments, 'payments.webhookSecret', 'Secreto de webhook', { full: true });
+      settingsField(payments, 'payments.secretKey', 'Llave secreta', { full: true, secret: true, disabled: true, placeholder: 'Variable PAYMENTS_SECRET_KEY', configured: Boolean(state.settings.payments?.secretKeyConfigured) });
+      settingsField(payments, 'payments.webhookSecret', 'Secreto de webhook', { full: true, secret: true, disabled: true, placeholder: 'Variable PAYMENTS_WEBHOOK_SECRET', configured: Boolean(state.settings.payments?.webhookSecretConfigured) });
       settingsField(payments, 'payments.statement', 'Descriptor del estado de cuenta', { full: true });
     }
     if (smtp) {
@@ -2099,15 +2111,15 @@
           banner.style.color = '#1b4a3c';
           banner.style.border = '1px solid rgba(47, 107, 87, 0.3)';
           banner.innerHTML = `<strong>Configuración activa desde variables de entorno (Render)</strong><br>` +
-            `Host: <code>${status.host || '—'}</code> · Puerto: <code>${status.port}</code> (${status.secure ? 'TLS' : 'STARTTLS/Plano'})<br>` +
-            `Usuario: <code>${status.userMasked}</code> · Remitente: <code>${status.fromEmail}</code><br>` +
+            `Host: <code>${escapeHtml(status.host) || '—'}</code> · Puerto: <code>${status.port}</code> (${status.secure ? 'TLS' : 'STARTTLS/Plano'})<br>` +
+            `Usuario: <code>${escapeHtml(status.userMasked)}</code> · Remitente: <code>${escapeHtml(status.fromEmail)}</code><br>` +
             `<small style="color:#4a6358;">Los campos sobreescritos por Render no se pueden editar desde aquí.</small>`;
         } else if (status?.source === 'database') {
           banner.style.background = 'rgba(201, 142, 69, 0.12)';
           banner.style.color = '#734e18';
           banner.style.border = '1px solid rgba(201, 142, 69, 0.3)';
           banner.innerHTML = `<strong>Configuración activa desde base de datos (Panel Admin)</strong><br>` +
-            `Usuario activo: <code>${status.userMasked}</code> en <code>${status.host}:${status.port}</code>`;
+            `Usuario activo: <code>${escapeHtml(status.userMasked)}</code> en <code>${escapeHtml(status.host)}:${status.port}</code>`;
         } else {
           banner.style.background = 'rgba(189, 96, 65, 0.1)';
           banner.style.color = '#8e3b25';
@@ -2121,7 +2133,7 @@
       settingsField(smtp, 'smtp.port', 'Puerto', { type: 'number', min: 1, max: 65535, disabled: overrides.port });
       settingsField(smtp, 'smtp.secure', 'Conexión segura', { checkbox: true, checkboxLabel: 'TLS/SSL', disabled: overrides.secure });
       settingsField(smtp, 'smtp.user', 'Usuario', { full: true, disabled: overrides.user });
-      settingsField(smtp, 'smtp.pass', 'Contraseña', { type: 'password', full: true, disabled: overrides.pass });
+      settingsField(smtp, 'smtp.pass', 'Contraseña', { type: 'password', full: true, secret: true, configured: Boolean(state.settings.smtp?.passConfigured), disabled: true });
       settingsField(smtp, 'smtp.fromEmail', 'Correo remitente', { disabled: overrides.fromEmail });
       settingsField(smtp, 'smtp.fromName', 'Nombre remitente', { disabled: overrides.fromName });
     }

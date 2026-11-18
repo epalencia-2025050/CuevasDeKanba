@@ -5,10 +5,13 @@
   "type": "module",
   "description": "Sitio web y sistema de reservas para las Cuevas de K'anba, Lanquín, Alta Verapaz, Guatemala.",
   "scripts": {
+    "test:p0": "node --experimental-vm-modules --test tests/p0-security.test.mjs",
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "start:local": "node --env-file=.env server/index.js",
-    "dev:local": "node --env-file=.env --watch server/index.js"
+    "dev:local": "node --env-file=.env --watch server/index.js",
+    "test": "node --experimental-vm-modules --test tests/*.test.mjs",
+    "release:source": "node scripts/package-release.mjs"
   },
   "engines": {
     "node": ">=20"

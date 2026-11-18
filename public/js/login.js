@@ -117,7 +117,7 @@
 
   function redirectAfterLogin() {
     const target = nextInput?.value;
-    if (target && target.startsWith('/')) {
+    if (target && target.startsWith('/') && !target.startsWith('//') && !target.includes('\\') && new URL(target, window.location.origin).origin === window.location.origin) {
       window.location.href = target;
       return;
     }

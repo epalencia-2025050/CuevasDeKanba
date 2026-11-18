@@ -85,16 +85,7 @@
 
     const grid = document.createElement('div');
     grid.className = 'confirm-grid';
-    grid.append(
-      detail('Código', data.code),
-      detail('Comprobante', data.receiptNumber || '—'),
-      detail('Experiencia', data.tourName || '—'),
-      detail('Fecha', formatDate(data.date)),
-      detail('Horario', data.time || '—'),
-      detail('Participantes', String(data.participants || '—')),
-      detail('Total', money(data.total)),
-      detail('Pagado el', formatDateTime(data.paidAt))
-    );
+    grid.append(detail('Código', data.code), detail('Estado', 'Confirmada'));
 
     const note = document.createElement('p');
     note.className = 'confirm-note';

@@ -1,8 +1,12 @@
+import { safeErrorMessage } from './safe-errors.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { hashPassword, verifyPassword, randomToken } from './security.js';
+import { hashPassword, verifyPassword, randomToken, safeEqual } from './security.js';
+import { StoreTransaction } from './store-transaction.js';
+import { postgresConnectionOptions } from './tls-config.js';
+import { settingsWithoutSecrets, serializeStore } from './runtime-secrets.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
@@ -561,8 +565,9 @@ function defaultSettings() {
       mode: 'sandbox',
       merchantId: 'KANBA-GT-001',
       publicKey: 'pk_sandbox_kanba_2026',
-      secretKey: 'sk_sandbox_kanba_2026',
-      webhookSecret: 'whsec_kanba_demo_2026',
+      // Secrets are read from the environment at use time, never from settings.
+      secretKey: '',
+      webhookSecret: '',
       statement: 'KANBA CUEVAS'
     },
     smtp: {
@@ -577,12 +582,25 @@ function defaultSettings() {
   };
 }
 
+/**
+ * Contraseña administrativa inicial.
+ * - Con ADMIN_PASSWORD: se usa esa.
+ * - Sin ADMIN_PASSWORD y en producción: se detiene el arranque (no hay valor por defecto).
+ * - Sin ADMIN_PASSWORD y en desarrollo: se genera una temporal aleatoria que se
+ *   no se muestra ni se guarda en claro; configura ADMIN_PASSWORD para acceder.
+ */
+function initialAdminPassword() {
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (password.length < 12 || password.length > 256) throw new Error('ADMIN_PASSWORD debe tener entre 12 y 256 caracteres.');
+  return hashPassword(password);
+}
+
 function seedDatabase() {
   const now = new Date().toISOString();
   const content = defaultContent();
   const tours = defaultTours();
   const settings = defaultSettings();
-  const admin = hashPassword(process.env.ADMIN_PASSWORD || 'kanba2026');
+  const admin = initialAdminPassword();
 
   const makeCode = (n) => `KAN-${new Date().getFullYear()}-${String(n).padStart(5, '0')}`;
   const r1 = {
@@ -746,13 +764,13 @@ function seedDatabase() {
 
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
-    admin: { password: admin, updatedAt: now },
+    admin: { password: admin, passwordPolicyVersion: 2, updatedAt: now },
     users: [
       {
         id: 'usr_demo',
         name: 'Usuario Demo',
         email: 'usuario@kanba.gt',
-        password: hashPassword('user2026'),
+        password: hashPassword(randomToken()),
         phone: '+502 5555 0000',
         country: 'Guatemala',
         role: 'user',
@@ -802,11 +820,9 @@ function seedDatabase() {
 let db = null;
 let pool = null;
 let usingPostgres = false;
-let pendingSnapshot = null;
-let flushPromise = null;
-let retryTimer = null;
+let transactions = null;
 
-const STORE_SCHEMA = `
+export const STORE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS kanba_store (
     id smallint PRIMARY KEY,
     doc jsonb NOT NULL,
@@ -820,41 +836,50 @@ const STORE_SCHEMA = `
     data bytea NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   );
+  CREATE TABLE IF NOT EXISTS kanba_rate_limits (
+    key text PRIMARY KEY,
+    window_start timestamptz NOT NULL,
+    count integer NOT NULL
+  );
 `;
 
-async function writeSnapshot(snapshot) {
-  await pool.query(
-    `INSERT INTO kanba_store (id, doc, updated_at) VALUES (1, $1::jsonb, now())
-     ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = now()`,
-    [snapshot]
-  );
+function replaceStore(value) {
+  db = value;
+  db.settings = settingsWithoutSecrets(db.settings);
+  db.sessions ||= {};
+  db.userSessions ||= {};
+  db.users ||= [];
 }
 
-function scheduleFlush() {
-  if (flushPromise) return flushPromise;
-  flushPromise = (async () => {
-    let current = null;
-    try {
-      while (pendingSnapshot) {
-        current = pendingSnapshot;
-        pendingSnapshot = null;
-        await writeSnapshot(current);
-        current = null;
-      }
-    } catch (err) {
-      console.error('[store] error al guardar en Postgres:', err.message);
-      if (current && !pendingSnapshot) pendingSnapshot = current;
-      clearTimeout(retryTimer);
-      retryTimer = setTimeout(() => {
-        retryTimer = null;
-        scheduleFlush();
-      }, 2000);
-      retryTimer.unref?.();
-    } finally {
-      flushPromise = null;
-    }
-  })();
-  return flushPromise;
+function persistLocal(snapshot) {
+  const tmp = `${DB_FILE}.tmp`;
+  const descriptor = fs.openSync(tmp, 'w', 0o600);
+  try { fs.writeFileSync(descriptor, snapshot); fs.fsyncSync(descriptor); }
+  finally { fs.closeSync(descriptor); }
+  fs.renameSync(tmp, DB_FILE);
+}
+
+function configureTransactions() {
+  transactions = new StoreTransaction({ pool: usingPostgres ? pool : null,
+    read: () => db, replace: replaceStore, serialize: serializeStore, persistLocal });
+}
+
+export async function withStoreTransaction(work) {
+  if (!transactions) throw new Error('Store not initialized.');
+  return transactions.run(work);
+}
+
+export function createInitialStore() {
+  const initial = seedDatabase();
+  // Demo identities and paid reservations must never become real customer data.
+  initial.users = [];
+  initial.reservations = [];
+  initial.refunds = [];
+  initial.emails = [];
+  initial.closures = [];
+  initial.userSessions = {};
+  initial.counters = { reservation: 0, receipt: 0 };
+  return initial;
 }
 
 function normalizeSchema(value) {
@@ -878,43 +903,26 @@ export async function initStore() {
   if (!url) return loadDb();
 
   const { default: pg } = await import('pg');
-  const ssl = process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false };
+  const connectionOptions = postgresConnectionOptions(url);
   const schema = normalizeSchema(process.env.DB_SCHEMA);
   const poolConfig = {
-    connectionString: url,
-    ssl,
+    ...connectionOptions,
     max: 4,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000
   };
   if (schema !== 'public') {
     // search_path se aplica a cada conexión nueva del pool.
-    poolConfig.options = `-c search_path=${schema},public`;
+    poolConfig.options = `-c search_path="${schema}",pg_catalog`;
   }
   pool = new pg.Pool(poolConfig);
   usingPostgres = true;
 
-  if (schema !== 'public') {
-    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-    console.log(`[store] esquema PostgreSQL: ${schema}`);
-  }
-
-  await pool.query(STORE_SCHEMA);
-
+  // Schema creation and relational imports are explicit maintenance operations.
   const { rows } = await pool.query('SELECT doc FROM kanba_store WHERE id = 1');
-  if (rows.length) {
-    db = rows[0].doc;
-    db.sessions = db.sessions || {};
-    db.users = db.users || [];
-    db.userSessions = db.userSessions || {};
-    return db;
-  }
-
-  db = seedDatabase();
-  db.sessions = db.sessions || {};
-  db.users = db.users || [];
-  db.userSessions = db.userSessions || {};
-  await writeSnapshot(JSON.stringify(db));
+  if (!rows.length) throw new Error('Inicializa la base con el procedimiento de mantenimiento.');
+  replaceStore(rows[0].doc);
+  configureTransactions();
   return db;
 }
 
@@ -923,54 +931,36 @@ export function usesDatabase() {
 }
 
 export function loadDb() {
+  if (process.env.NODE_ENV === 'production') throw new Error('Producción requiere PostgreSQL.');
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.mkdirSync(OUTBOX_DIR, { recursive: true });
   if (fs.existsSync(DB_FILE)) {
-    try {
-      db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-      db.sessions = db.sessions || {};
-      db.users = db.users || [];
-      db.userSessions = db.userSessions || {};
-      return db;
-    } catch (err) {
-      console.error('[store] db.json corrupto, creando respaldo y reiniciando.', err.message);
-      fs.copyFileSync(DB_FILE, path.join(DATA_DIR, `db.corrupt-${Date.now()}.json`));
-    }
+    // Corruption must stop startup; never replace customer data with demo data.
+    replaceStore(JSON.parse(fs.readFileSync(DB_FILE, 'utf8')));
+  } else {
+    replaceStore(createInitialStore());
+    persistLocal(serializeStore(db));
   }
-  db = seedDatabase();
-  saveDb();
+  configureTransactions();
   return db;
 }
 
 export function getDb() {
-  if (!db) loadDb();
-  if (!db.users) db.users = [];
-  if (!db.userSessions) db.userSessions = {};
+  if (!db) throw new Error('Store not initialized.');
   return db;
 }
 
 export function saveDb() {
-  if (!db) return;
+  transactions.markDirty();
   db.meta.updatedAt = new Date().toISOString();
-
-  if (usingPostgres) {
-    // Guardado por lotes: varias mutaciones seguidas producen una sola escritura.
-    pendingSnapshot = JSON.stringify(db);
-    scheduleFlush();
-    return;
-  }
-
-  const tmp = `${DB_FILE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, DB_FILE);
 }
 
-/** Fuerza la escritura pendiente (se usa al apagar el servicio). */
 export async function flushDb() {
-  if (!usingPostgres) return;
-  // Espera cualquier escritura en curso y luego vacía la última instantánea.
-  if (flushPromise) await flushPromise.catch(() => {});
-  if (pendingSnapshot) await scheduleFlush();
+  await transactions?.drain();
+}
+
+export async function closeStore() {
+  await flushDb();
+  await pool?.end();
 }
 
 /* ------------------------------------------------------------------ */
@@ -980,8 +970,7 @@ export async function flushDb() {
 const USER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function publicUser(u) {
-  const { password, googleId, ...rest } = u;
-  return rest;
+  return { id: u.id, name: u.name, email: u.email, phone: u.phone, country: u.country, role: u.role, createdAt: u.createdAt };
 }
 
 export function findUserByEmail(email) {
@@ -1001,9 +990,9 @@ export function registerUser(input) {
   const phone = String(input.phone || '').trim();
   const country = String(input.country || '').trim();
 
-  if (name.length < 3) throw new AppError('El nombre es obligatorio (mínimo 3 caracteres).', 422, 'validation');
-  if (!USER_EMAIL_RE.test(email)) throw new AppError('Correo electrónico inválido.', 422, 'validation');
-  if (password.length < 6) throw new AppError('La contraseña debe tener al menos 6 caracteres.', 422, 'validation');
+  if (name.length < 3 || name.length > 120) throw new AppError('El nombre es obligatorio (mínimo 3 caracteres).', 422, 'validation');
+  if (email.length > 254 || !USER_EMAIL_RE.test(email)) throw new AppError('Correo electrónico inválido.', 422, 'validation');
+  if (password.length < 12 || password.length > 256) throw new AppError('La contraseña debe tener entre 12 y 256 caracteres.', 422, 'validation');
   if (findUserByEmail(email)) throw new AppError('Ya existe una cuenta con ese correo.', 409, 'email_taken');
 
   const user = {
@@ -1023,7 +1012,7 @@ export function registerUser(input) {
 
 export function loginUser(email, password) {
   const user = findUserByEmail(email);
-  if (!user || !verifyPassword(password, user.password)) {
+  if (String(password).length > 256 || !user || !verifyPassword(password, user.password)) {
     throw new AppError('Correo o contraseña incorrectos.', 401, 'invalid_credentials');
   }
   return createUserSession(user);
@@ -1031,8 +1020,9 @@ export function loginUser(email, password) {
 
 export function createUserSession(user) {
   const token = randomToken();
+  const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
-  getDb().userSessions[token] = { userId: user.id, createdAt: new Date().toISOString(), expiresAt };
+  getDb().userSessions[token] = { userId: user.id, createdAt, lastSeenAt: createdAt, expiresAt };
   saveDb();
   return { token, expiresAt, user: publicUser(user) };
 }
@@ -1088,11 +1078,26 @@ export function getUserSession(token) {
   if (!token) return null;
   const d = getDb();
   const session = d.userSessions?.[token];
-  if (!session) return null;
-  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+  if (!Object.hasOwn(d.userSessions, token) || !session) return null;
+  const now = Date.now();
+  if (!Number.isFinite(Date.parse(session.expiresAt)) || Date.parse(session.expiresAt) <= now) {
     delete d.userSessions[token];
     saveDb();
     return null;
+  }
+  const idleMs = Number(process.env.USER_SESSION_IDLE_MS) > 0
+    ? Number(process.env.USER_SESSION_IDLE_MS)
+    : 30 * 60 * 1000;
+  const lastSeen = Date.parse(session.lastSeenAt || session.createdAt);
+  if (!Number.isFinite(lastSeen) || now - lastSeen > idleMs) {
+    delete d.userSessions[token];
+    saveDb();
+    return null;
+  }
+  // Renovación de actividad (persistida con ahorro de escrituras).
+  if (now - lastSeen > 60 * 1000) {
+    session.lastSeenAt = new Date(now).toISOString();
+    saveDb();
   }
   const user = findUserById(session.userId);
   if (!user) return null;
@@ -1125,6 +1130,28 @@ export async function readUploadFromDb(name) {
   const { rows } = await pool.query('SELECT mime, data FROM kanba_media WHERE name = $1', [name]);
   if (!rows.length) return null;
   return { mime: rows[0].mime, data: rows[0].data };
+}
+
+/**
+ * Rate limiting compartido en PostgreSQL (válido con varias instancias).
+ * Devuelve el contador actual o null si no hay PostgreSQL disponible.
+ */
+export async function rateLimitShared(key, max, windowMs) {
+  if (!usingPostgres || !pool) return null;
+  const { rows } = await pool.query(
+    `INSERT INTO kanba_rate_limits (key, window_start, count)
+     VALUES ($1, now(), 1)
+     ON CONFLICT (key) DO UPDATE SET
+       window_start = CASE
+         WHEN kanba_rate_limits.window_start <= now() - ($2::int * interval '1 millisecond') THEN now()
+         ELSE kanba_rate_limits.window_start END,
+       count = CASE
+         WHEN kanba_rate_limits.window_start <= now() - ($2::int * interval '1 millisecond') THEN 1
+         ELSE kanba_rate_limits.count + 1 END
+     RETURNING count`,
+    [key, Math.max(1, Math.floor(windowMs))]
+  );
+  return rows[0]?.count ?? null;
 }
 
 
@@ -1202,9 +1229,10 @@ export function seatsTaken(tourId, date, time) {
 }
 
 export function departureStatus(tour, date, time, taken) {
+  const d = getDb();
   const left = Math.max(0, tour.capacity - taken);
   if (isClosed(date, tour.id)) return { left: 0, status: 'closed' };
-  if (dateToEpoch(date, time) <= Date.now()) return { left: 0, status: 'past' };
+  if (dateToEpoch(date, time) <= Date.now() + Number(d.settings.booking.cutoffHours || 0) * 3600000) return { left: 0, status: 'past' };
   if (left <= 0) return { left: 0, status: 'soldout' };
   if (left <= Math.max(1, Math.round(tour.capacity * 0.2))) return { left, status: 'last' };
   return { left, status: 'open' };
@@ -1263,7 +1291,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export function nextReservationCode() {
   const d = getDb();
   d.counters.reservation += 1;
-  return `KAN-${new Date().getFullYear()}-${String(d.counters.reservation).padStart(5, '0')}`;
+  return `KAN-${new Date().getFullYear()}-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
 }
 
 export function nextReceiptNumber() {
@@ -1282,8 +1310,8 @@ export function validateCustomer(input = {}) {
     notes: String(input.notes || '').trim().slice(0, 600)
   };
   const errors = {};
-  if (customer.name.length < 3) errors.name = 'Escribe tu nombre completo.';
-  if (!EMAIL_RE.test(customer.email)) errors.email = 'Correo electrónico inválido.';
+  if (customer.name.length < 3 || customer.name.length > 120) errors.name = 'Escribe tu nombre completo.';
+  if (customer.email.length > 254 || !EMAIL_RE.test(customer.email)) errors.email = 'Correo electrónico inválido.';
   if (customer.phone.replace(/\D/g, '').length < 7) errors.phone = 'Teléfono inválido.';
   if (customer.country.length < 2) errors.country = 'Indica tu país.';
   if (input.acceptPolicies !== true) errors.acceptPolicies = 'Debes aceptar las políticas de reserva.';
@@ -1305,25 +1333,44 @@ export function getReservation(code, token = null) {
   const r = d.reservations.find((x) => x.code === code);
   if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
   if (!token) throw new AppError('Enlace privado de reserva requerido.', 401, 'unauthorized');
-  if (r.token !== token) throw new AppError('Enlace de reserva inválido.', 403, 'forbidden');
+  if (r.tokenRevokedAt || !Number.isFinite(Date.parse(r.tokenExpiresAt || r.createdAt)) || Date.now() >= (r.tokenExpiresAt ? Date.parse(r.tokenExpiresAt) : Date.parse(r.createdAt) + 7 * 86400000)) throw new AppError('El enlace expiró. Inicia sesión para recuperarlo.', 403, 'token_expired');
+  if (!safeEqual(r.token, token)) throw new AppError('Enlace de reserva inválido.', 403, 'forbidden');
   return r;
+}
+
+export function rotateReservationToken(reservation) {
+  reservation.token = randomToken();
+  reservation.tokenExpiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
+  reservation.tokenRevokedAt = null;
+  saveDb();
+  return reservation.token;
 }
 
 export function createReservation(input, { user = null } = {}) {
   const d = getDb();
+  if (!user?.id) throw new AppError('Inicia sesión para reservar.', 401, 'login_required');
+  const requestId = String(input.requestId || '');
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new AppError('Identificador de solicitud inválido.', 422, 'request_id_required');
+  const requestDigest = crypto.createHash('sha256').update(JSON.stringify({ tourId: input.tourId, date: input.date, time: input.time, participants: Number(input.participants), customer: input.customer })).digest('hex');
+  const previous = d.reservations.find(r => r.userId === user.id && r.requestId === requestId);
+  if (previous) {
+    if (previous.requestDigest !== requestDigest) throw new AppError('La solicitud ya se usó con otros datos.', 409, 'idempotency_conflict');
+    return previous;
+  }
+  if (d.reservations.filter(r => r.userId === user.id && r.status === 'pending_payment' && Date.parse(r.holdExpiresAt) > Date.now()).length >= 3) throw new AppError('Ya tienes tres reservas pendientes de pago.', 429, 'pending_limit');
   const tour = findTour(input.tourId);
   const date = String(input.date || '');
   const time = String(input.time || '');
   const participants = Number(input.participants);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError('Fecha inválida.', 422, 'validation');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new AppError('Fecha inválida.', 422, 'validation');
   if (!tour.times.includes(time)) throw new AppError('Horario no válido para este tour.', 422, 'validation');
   if (!Number.isInteger(participants) || participants < tour.minParticipants || participants > tour.maxParticipants) {
     throw new AppError(`Este tour admite entre ${tour.minParticipants} y ${tour.maxParticipants} participantes.`, 422, 'validation');
   }
   if (!tour.days.includes(dayOfWeek(date))) throw new AppError('El tour no opera en esa fecha.', 422, 'unavailable');
   if (isClosed(date, tour.id)) throw new AppError('La cueva está cerrada en esa fecha por mantenimiento o clima.', 409, 'closed');
-  if (dateToEpoch(date, time) <= Date.now()) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
+  if (dateToEpoch(date, time) <= Date.now() + Number(d.settings.booking.cutoffHours || 0) * 3600000) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
 
   const maxAdvance = Number(d.settings.booking.advanceDays || 120);
   if (dateToEpoch(date, '23:59') > Date.now() + (maxAdvance + 1) * 86400000) {
@@ -1346,8 +1393,11 @@ export function createReservation(input, { user = null } = {}) {
 
   const reservation = {
     id: `res_${randomToken(6)}`,
+    requestId,
+    requestDigest,
     code,
     token,
+    tokenExpiresAt: new Date(now + 7 * 86400000).toISOString(),
     tourId: tour.id,
     tourName: tour.name,
     date,
