@@ -7,19 +7,25 @@
   <meta name="description" content="Panel administrativo de reservas, disponibilidad, contenido y configuración de K’anba Cuevas Vivas.">
   <meta name="theme-color" content="#0b1a16">
   <meta name="robots" content="noindex">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..600&family=Manrope:wght@300..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/css/admin.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/admin.css">
 </head>
 <body class="admin-body">
   <!-- Acceso -->
   <div class="login-screen" id="loginScreen">
     <div class="login-glow" aria-hidden="true"></div>
     <form class="login-card" id="loginForm" novalidate>
-      <a class="brand brand-light login-brand" href="/" aria-label="K’anba, inicio">
+      <div class="login-card-topbar">
+        <a class="btn-admin-back" href="index.html" aria-label="Regresar al inicio">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>Regresar al sitio</span>
+        </a>
+      </div>
+      <a class="brand brand-light login-brand" href="index.html" aria-label="K’anba, inicio">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 40 40"><path d="M5 35V20a15 15 0 0 1 30 0v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 31c-4.7-3.6-7-6.8-7-10.4a7 7 0 0 1 14 0c0 3.6-2.3 6.8-7 10.4Z" fill="currentColor"/><path d="M19 25.8c.1-2.9.8-4.7 1.8-6.3.6 2 1.9 3 2.4 5 .3 1.2-.4 2.5-2 2.8-1.6.3-2.3-.7-2.2-1.5Z" fill="#0e2420"/></svg>
         </span>
@@ -42,7 +48,7 @@
   <div class="admin-shell" id="adminShell" hidden>
     <aside class="admin-sidebar" id="adminSidebar" aria-label="Navegación administrativa">
       <div class="admin-brand">
-        <a class="brand brand-light" href="/" aria-label="K’anba, inicio">
+        <a class="brand brand-light" href="index.html" aria-label="K’anba, inicio">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 40 40"><path d="M5 35V20a15 15 0 0 1 30 0v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 31c-4.7-3.6-7-6.8-7-10.4a7 7 0 0 1 14 0c0 3.6-2.3 6.8-7 10.4Z" fill="currentColor"/><path d="M19 25.8c.1-2.9.8-4.7 1.8-6.3.6 2 1.9 3 2.4 5 .3 1.2-.4 2.5-2 2.8-1.6.3-2.3-.7-2.2-1.5Z" fill="#0e2420"/></svg>
           </span>
@@ -103,7 +109,7 @@
           <div><strong>Administración</strong><small id="sessionInfo">Sesión activa</small></div>
         </div>
         <div class="sidebar-links">
-          <a href="/" target="_blank" rel="noopener">Ver sitio ↗</a>
+          <a href="index.html" target="_blank" rel="noopener">Ver sitio ↗</a>
           <button type="button" id="logoutButton">Cerrar sesión</button>
         </div>
       </div>
@@ -121,6 +127,10 @@
           <h1 id="viewTitle">Resumen</h1>
         </div>
         <div class="topbar-actions">
+          <a class="btn-back-site" href="index.html" title="Regresar al sitio web">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <span>Ir al sitio</span>
+          </a>
           <span class="sync-pill" id="syncPill"><span></span> Datos en vivo</span>
           <button class="icon-button" type="button" id="refreshButton" title="Actualizar datos" aria-label="Actualizar datos">
             <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.3M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -317,7 +327,18 @@
               </div>
               <div class="admin-card">
                 <div class="card-head"><div><span class="card-kicker">Correo</span><h2>SMTP saliente</h2></div></div>
+                <div id="smtpBanner" style="margin-bottom:12px;font-size:12px;padding:10px 14px;border-radius:8px;line-height:1.5;" hidden></div>
                 <div class="form-grid" id="settingsSmtp"></div>
+                <div class="smtp-test-area" style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(22,33,29,.12);">
+                  <label class="field" style="margin-bottom:8px;">
+                    <span>Enviar correo de prueba a</span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <input type="email" id="testSmtpEmail" placeholder="admin@ejemplo.com" style="flex:1;">
+                      <button class="btn btn-outline btn-sm" type="button" id="btnTestSmtp">Probar conexión</button>
+                    </div>
+                  </label>
+                  <div class="form-error" id="smtpTestResult" role="alert" style="margin-top:6px;" hidden></div>
+                </div>
                 <p class="form-hint">Si dejas el host vacío, los correos se guardan en la bandeja de salida y en <code>data/outbox</code> sin enviarse.</p>
               </div>
             </div>
@@ -353,6 +374,7 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/js/admin.js" defer></script>
+  <script src="js/admin.js" defer></script>
+  <script src="js/file-notice.js"></script>
 </body>
 </html>

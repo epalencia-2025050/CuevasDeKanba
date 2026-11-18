@@ -7,6 +7,11 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+  // Eventos para Google Tag Manager / Analytics (ver js/analytics.js)
+  const track = (event, params) => {
+    try { window.kanbaTrack?.(event, params); } catch { /* analítica no disponible */ }
+  };
+
   const ICONS = {
     arrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
@@ -113,6 +118,92 @@
     button.disabled = Boolean(on);
   }
 
+  function loginUrl() {
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    return `/login.html?next=${next}`;
+  }
+
+  function requireLogin(message) {
+    const gate = $('#bookingAuthGate');
+    if (gate) {
+      gate.hidden = false;
+      const msg = $('#bookingAuthMessage');
+      if (msg) msg.textContent = message || 'Para continuar con tu reserva, inicia sesión o crea tu cuenta.';
+      gate.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    toast(message || 'Inicia sesión para reservar.');
+    window.setTimeout(() => { window.location.href = loginUrl(); }, 900);
+  }
+
+  async function loadAuth() {
+    try {
+      const data = await api('/api/auth/me');
+      state.user = data?.user || null;
+    } catch {
+      state.user = null;
+    } finally {
+      state.authChecked = true;
+
+      // Actualizar botón de sesión / perfil en la cabecera
+      const loginBtn = document.querySelector('.header-actions .btn-login, .header-actions .user-profile-btn');
+      if (loginBtn) {
+        if (state.user) {
+          const firstName = (state.user.name || state.user.email || 'Mi cuenta').split(' ')[0];
+          const initial = firstName.charAt(0).toUpperCase();
+          loginBtn.className = 'user-profile-btn';
+          loginBtn.removeAttribute('href');
+          loginBtn.title = 'Sesión activa: ' + (state.user.name || state.user.email);
+          loginBtn.innerHTML = `
+            <span class="user-avatar" aria-hidden="true">${initial}</span>
+            <span>${firstName}</span>
+            <span class="btn-logout-icon" title="Cerrar sesión" aria-label="Cerrar sesión">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </span>
+          `;
+          loginBtn.onclick = async (e) => {
+            if (e.target.closest('.btn-logout-icon') || confirm('¿Deseas cerrar tu sesión?')) {
+              e.preventDefault();
+              try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* noop */ }
+              window.location.reload();
+            }
+          };
+        } else {
+          loginBtn.className = 'link-subtle btn-login';
+          loginBtn.href = 'login.html';
+          loginBtn.textContent = 'Iniciar sesión';
+          loginBtn.onclick = null;
+        }
+      }
+      const badge = $('#authBadge');
+      if (badge) {
+        if (state.user) {
+          badge.textContent = state.user.name || state.user.email || 'Sesión activa';
+          badge.hidden = false;
+        } else {
+          badge.textContent = '';
+          badge.hidden = true;
+        }
+      }
+      const gate = $('#bookingAuthGate');
+      if (gate) {
+        gate.hidden = Boolean(state.user);
+        const msg = $('#bookingAuthMessage');
+        if (msg && !state.user) msg.textContent = 'Para continuar con tu reserva, inicia sesión o crea tu cuenta. Es rápido y necesario para guardar tus datos y cupos.';
+      }
+      $$('[data-requires-auth]').forEach((node) => {
+        node.disabled = !state.user;
+      });
+    }
+  }
+
+  function guardAuth() {
+    if (!state.user) {
+      requireLogin('Inicia sesión para continuar con tu reserva.');
+      return false;
+    }
+    return true;
+  }
+
   /* ------------------------------------------------------------------ */
   /* Estado del sitio                                                    */
   /* ------------------------------------------------------------------ */
@@ -131,7 +222,9 @@
     galleryIndex: 0,
     videos: [],
     map: null,
-    mapReady: false
+    mapReady: false,
+    user: null,
+    authChecked: false
   };
 
   const DEFAULT_WHATSAPP = '50240002026';
@@ -499,6 +592,12 @@
   async function selectTour(tourId, { scroll = false } = {}) {
     const tour = state.tours.find((item) => item.id === tourId);
     if (!tour) return;
+    track('select_tour', {
+      tour_id: tour.id,
+      tour_name: tour.name,
+      price: Number(tour.price) || 0,
+      currency: 'GTQ'
+    });
     state.tourId = tourId;
     state.date = null;
     state.time = null;
@@ -703,7 +802,7 @@
     const tour = currentTour();
     const left = selectedDepartureLeft();
     const valid = Boolean(tour && state.date && state.time && left !== null && left >= state.pax && state.pax >= (tour.minParticipants || 1));
-    button.disabled = !valid;
+    button.disabled = !valid || !state.user;
     if (tour && left !== null && left < state.pax) {
       showAvailabilityNote(`Solo quedan ${left} cupos en ese horario. Reduce los participantes o elige otro horario.`);
     }
@@ -747,6 +846,7 @@
   /* ------------------------------------------------------------------ */
 
   function goStep(step) {
+    if (step > 1 && !guardAuth()) return;
     state.step = step;
     $$('.wizard-panel').forEach((panel) => { panel.hidden = Number(panel.dataset.panel) !== step; });
     $$('[data-step-indicator]').forEach((indicator) => {
@@ -894,6 +994,7 @@
     const form = event.currentTarget;
     const errorBox = $('#bookingError');
     if (errorBox) errorBox.hidden = true;
+    if (!guardAuth()) return;
     if (!validateBookingForm(form)) return;
 
     const tour = currentTour();
@@ -916,17 +1017,38 @@
         acceptPolicies: form.elements.acceptPolicies.checked,
         acceptTerms: form.elements.acceptTerms.checked
       };
-      const data = await api('/api/reservations', {
-        method: 'POST',
-        body: JSON.stringify({
-          tourId: tour.id,
-          date: state.date,
-          time: state.time,
-          participants: state.pax,
-          customer
-        })
-      });
+      let data;
+      try {
+        data = await api('/api/reservations', {
+          method: 'POST',
+          body: JSON.stringify({
+            tourId: tour.id,
+            date: state.date,
+            time: state.time,
+            participants: state.pax,
+            customer
+          })
+        });
+      } catch (error) {
+        if (error.status === 401) {
+          requireLogin('Inicia sesión para poder reservar.');
+          return;
+        }
+        throw error;
+      }
       sessionStorage.setItem(`kanba:${data.code}`, JSON.stringify({ code: data.code, token: data.token }));
+      track('reservation_created', {
+        currency: 'GTQ',
+        value: Number(tour.price) * state.pax,
+        transaction_id: data.code,
+        items: [{
+          item_id: tour.id,
+          item_name: tour.name,
+          item_category: 'tour',
+          price: Number(tour.price) || 0,
+          quantity: state.pax
+        }]
+      });
       window.location.href = data.paymentUrl;
     } catch (error) {
       if (errorBox) {
@@ -1068,6 +1190,7 @@
     const modal = $('#videoModal');
     const embed = $('#videoEmbed');
     if (!modal || !embed) return;
+    track('video_play', { video_id: video.youtubeId, video_title: video.title, video_category: video.category });
     embed.replaceChildren();
     const iframe = el('iframe', {
       attrs: {
@@ -1161,21 +1284,35 @@
     const node = $('#map');
     const fallback = $('#mapFallback');
     if (!node) return;
-    const showFallback = () => {
+    const showFallback = (err) => {
+      if (err) console.warn('Leaflet map error, falling back:', err);
       if (fallback) fallback.hidden = false;
       if (node) node.style.display = 'none';
     };
+
+    // Si Leaflet aún no está disponible (ej. por orden de ejecución o script diferido), reintentar brevemente
     if (!window.L) {
-      showFallback();
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts++;
+        if (window.L) {
+          clearInterval(interval);
+          setupMap(mapIntro);
+        } else if (attempts >= 25) {
+          clearInterval(interval);
+          showFallback('Leaflet library not found on window.L');
+        }
+      }, 100);
       return;
     }
+
     try {
       if (state.map) {
         state.map.remove();
         state.map = null;
       }
-      const lat = Number(mapIntro.lat);
-      const lng = Number(mapIntro.lng);
+      const lat = Number(mapIntro?.lat ?? 15.537628);
+      const lng = Number(mapIntro?.lng ?? -89.955361);
       const map = window.L.map(node, { scrollWheelZoom: false, zoomControl: true }).setView([lat, lng], 13);
       state.map = map;
       window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1195,7 +1332,7 @@
 
       window.L.marker([lat, lng], { icon: kanbaIcon, title: 'K’anba' })
         .addTo(map)
-        .bindPopup(popup('K’anba · Cuevas Vivas', mapIntro.address || 'Lanquín, Alta Verapaz'))
+        .bindPopup(popup('K’anba · Cuevas Vivas', mapIntro?.address || 'Lanquín, Alta Verapaz'))
         .openPopup();
       window.L.marker([15.5333, -89.9667], { icon: semucIcon })
         .addTo(map)
@@ -1209,7 +1346,7 @@
       state.mapReady = true;
       setTimeout(() => map.invalidateSize(), 500);
     } catch (error) {
-      showFallback();
+      showFallback(error);
     }
   }
 
@@ -1259,6 +1396,162 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Cafetería · flipbook del menú                                        */
+  /* ------------------------------------------------------------------ */
+
+  const FB_NAMES = ['Desayunos', 'Almuerzos', 'Cenas', 'Postres', 'Café', 'Frías & cosas de la casa', 'Alcohólicas'];
+
+  function fbClamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function fbEndpaper() {
+    const back = document.createElement('div');
+    back.className = 'flip-back';
+    back.innerHTML = '<div class="flip-back-inner"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 35V20a15 15 0 0 1 30 0v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 31c-4.7-3.6-7-6.8-7-10.4a7 7 0 0 1 14 0c0 3.6-2.3 6.8-7 10.4Z" fill="currentColor"/></svg><strong>EL SENDERO</strong><span>café de la cueva · est. 2019</span></div>';
+    return back;
+  }
+
+  function setupFlipbook() {
+    const wrap = document.getElementById('flipbook');
+    if (!wrap) return;
+    const surface = document.getElementById('bookSurface');
+    const pages = Array.from(surface.querySelectorAll('.flip-page'));
+    if (!pages.length) return;
+    const prevBtn = document.getElementById('bookPrev');
+    const nextBtn = document.getElementById('bookNext');
+    const dots = Array.from(wrap.querySelectorAll('.book-dot'));
+    const nameEl = document.getElementById('bookName');
+    const nowEl = document.getElementById('bookNow');
+
+    /* Número de página grabado en cada hoja */
+    pages.forEach((page, i) => {
+      const num = document.createElement('span');
+      num.className = 'page-number';
+      num.textContent = `— ${i + 1} —`;
+      page.append(num);
+    });
+
+    let index = 0;
+    let animating = false;
+
+    function render() {
+      pages.forEach((page, i) => {
+        page.hidden = i !== index;
+        page.classList.toggle('is-current', i === index);
+      });
+      dots.forEach((dot, i) => {
+        dot.classList.toggle('is-active', i === index);
+        dot.setAttribute('aria-selected', String(i === index));
+      });
+      if (nameEl) nameEl.textContent = FB_NAMES[index] || '';
+      if (nowEl) nowEl.textContent = String(index + 1);
+      if (prevBtn) prevBtn.disabled = index === 0;
+      if (nextBtn) nextBtn.disabled = index === pages.length - 1;
+    }
+
+    function createLeaf() {
+      const leaf = document.createElement('div');
+      leaf.className = 'flip-leaf';
+      leaf.setAttribute('aria-hidden', 'true');
+      const front = pages[index].cloneNode(true);
+      front.hidden = false;
+      front.classList.add('flip-front');
+      front.classList.remove('is-current');
+      front.removeAttribute('data-page');
+      front.removeAttribute('id');
+      front.setAttribute('aria-hidden', 'true');
+      leaf.append(front, fbEndpaper());
+      surface.append(leaf);
+      return leaf;
+    }
+
+    function flipTo(target) {
+      target = fbClamp(target, 0, pages.length - 1);
+      if (animating || target === index) return;
+      animating = true;
+      const direction = target > index ? 'next' : 'prev';
+      const sign = direction === 'next' ? -1 : 1;
+      const leaf = createLeaf();
+      index = target;
+      render();
+      // Forzar flujo de estilos y aplicar el giro (con respaldo si rAF no corre)
+      const apply = () => {
+        leaf.classList.add('flipping');
+        leaf.style.transform = `rotateY(${sign * 180}deg)`;
+      };
+      requestAnimationFrame(apply);
+      window.setTimeout(apply, 60);
+      window.setTimeout(() => { leaf.remove(); animating = false; }, 720);
+    }
+
+    if (prevBtn) prevBtn.addEventListener('click', () => flipTo(index - 1));
+    if (nextBtn) nextBtn.addEventListener('click', () => flipTo(index + 1));
+    dots.forEach((dot) => dot.addEventListener('click', () => flipTo(Number(dot.dataset.goto))));
+
+    surface.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight') { event.preventDefault(); flipTo(index + 1); }
+      if (event.key === 'ArrowLeft') { event.preventDefault(); flipTo(index - 1); }
+    });
+
+    /* Arrastre con mouse o dedo */
+    const drag = { active: false, decided: false, direction: null, target: index, startX: 0, startY: 0, width: 1, leaf: null, progress: 0 };
+
+    surface.addEventListener('pointerdown', (event) => {
+      if (animating) return;
+      if (event.target.closest('button, a, input, select, textarea')) return;
+      drag.active = true;
+      drag.decided = false;
+      drag.direction = null;
+      drag.leaf = null;
+      drag.progress = 0;
+      drag.startX = event.clientX;
+      drag.startY = event.clientY;
+      try { surface.setPointerCapture(event.pointerId); } catch { /* no crítico */ }
+    });
+
+    surface.addEventListener('pointermove', (event) => {
+      if (!drag.active) return;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      if (!drag.decided) {
+        if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+        if (Math.abs(dy) >= Math.abs(dx)) { drag.active = false; return; }
+        drag.direction = dx < 0 ? 'next' : 'prev';
+        drag.target = drag.direction === 'next' ? index + 1 : index - 1;
+        if (drag.target < 0 || drag.target >= pages.length) { drag.active = false; return; }
+        drag.width = Math.max(160, surface.clientWidth);
+        drag.leaf = createLeaf();
+        drag.decided = true;
+      }
+      event.preventDefault();
+      const sign = drag.direction === 'next' ? -1 : 1;
+      drag.progress = fbClamp(Math.abs(dx) / drag.width, 0, 1);
+      drag.leaf.style.transition = 'none';
+      drag.leaf.style.transform = `rotateY(${sign * drag.progress * 180}deg)`;
+    });
+
+    const endDrag = () => {
+      if (!drag.active) return;
+      drag.active = false;
+      if (!drag.decided) return;
+      const { leaf, target, direction, progress } = drag;
+      const sign = direction === 'next' ? -1 : 1;
+      const complete = progress > 0.36;
+      animating = true;
+      leaf.style.transition = '';
+      leaf.classList.add('flipping');
+      leaf.style.transform = complete ? `rotateY(${sign * 180}deg)` : 'rotateY(0deg)';
+      if (complete) { index = target; render(); }
+      window.setTimeout(() => { leaf.remove(); animating = false; }, 620);
+    };
+    surface.addEventListener('pointerup', endDrag);
+    surface.addEventListener('pointercancel', endDrag);
+
+    render();
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Teclado global                                                     */
   /* ------------------------------------------------------------------ */
 
@@ -1285,11 +1578,16 @@
     setupHeader();
     setupWizard();
     setupScrollProgress();
+    setupFlipbook();
     setupLightbox();
     setupVideoModal();
     setupMapButtons();
+    if ($('#map')) {
+      setupMap({ lat: 15.537628, lng: -89.955361, address: "Cuevas de K'anba, Lanquín, Alta Verapaz, Guatemala" });
+    }
     setupKeyboard();
     setText('year', String(new Date().getFullYear()));
+    await loadAuth();
 
     try {
       const site = await api('/api/site');

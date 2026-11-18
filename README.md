@@ -11,6 +11,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - [Características](#características)
 - [Requisitos y arranque](#requisitos-y-arranque)
 - [Acceso al panel](#acceso-al-panel)
+- [Inicio de sesión con Google](#inicio-de-sesión-con-google)
 - [Flujo de reserva y pago](#flujo-de-reserva-y-pago)
 - [Datos de demostración](#datos-de-demostración)
 - [Variables de entorno](#variables-de-entorno)
@@ -19,7 +20,9 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - [Correos](#correos)
 - [Pagos](#pagos)
 - [Pruebas y QA](#pruebas-y-qa)
+- [Analítica](#analítica)
 - [Reiniciar los datos](#reiniciar-los-datos)
+- [Despliegue en Render (gratis)](#despliegue-en-render-gratis)
 - [Notas para producción](#notas-para-producción)
 
 ---
@@ -40,6 +43,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 - Bloqueo temporal de cupos durante el pago, con liberación automática al vencer el plazo.
 - Páginas de pago, confirmación, comprobante imprimible, consulta de reserva y verificación pública de comprobantes.
 - Consulta por código + correo o por enlace privado con token; cancelación desde la página de la reserva y aviso de reembolso según política.
+- Inicio de sesión con Google (OAuth 2.0) además de correo y contraseña.
 
 **Panel administrativo**
 
@@ -59,7 +63,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 ## Requisitos y arranque
 
 - **Node.js 20 o superior** (probado con Node 24).
-- **Sin dependencias externas**: no requiere `npm install`. El servidor usa solo módulos nativos de Node.
+- **Modo local sin dependencias**: con el archivo `data/db.json` no hace falta `npm install`. Para usar PostgreSQL (recomendado en la nube) ejecuta `npm install`; solo se instala `pg`.
 - Mapas y medios se sirven localmente; solo los videos incrustados y las fuentes usan recursos externos.
 
 ```bash
@@ -75,11 +79,23 @@ Abrir:
 - Verificación de comprobantes: <http://localhost:3000/verificar.html>
 - Consulta de reserva: <http://localhost:3000/mi-reserva.html>
 
+> **No abras `public/index.html` con doble clic.** Así el navegador usa `file://`, no hay servidor ni API y el contenido dinámico (tours, galería, reservas) no carga. Entra siempre por <http://localhost:3000> con `npm start` en ejecución. Si abres el archivo directamente, el sitio muestra un aviso con la dirección correcta.
+
 Para desarrollo con recarga automática del servidor:
 
 ```bash
 npm run dev
 ```
+
+Para cargar las credenciales de Google desde `.env` en local (copia `.env.example` como `.env` y complétalo):
+
+```bash
+npm run start:local
+# o con recarga automática
+npm run dev:local
+```
+
+`npm start` y `npm run dev` siguen funcionando sin `.env`; en ese caso el botón de Google muestra un aviso y el acceso por contraseña continúa disponible.
 
 La primera ejecución crea `data/db.json` con contenido, tours, ajustes y cinco reservas de ejemplo.
 
@@ -93,6 +109,38 @@ La primera ejecución crea `data/db.json` con contenido, tours, ajustes y cinco 
 | Contraseña | `kanba2026` |
 
 La contraseña se guarda con hash `scrypt` en `data/db.json`. Puedes cambiarla desde **Configuración → Actualizar contraseña**.
+
+---
+
+## Inicio de sesión con Google
+
+El acceso de visitantes acepta dos métodos: correo/contraseña y **Google OAuth 2.0**. La cuenta se crea automáticamente la primera vez y, si ya existe una cuenta con ese correo, se vincula a Google sin perder reservas.
+
+### Configurar Google Cloud
+
+1. En [console.cloud.google.com](https://console.cloud.google.com) selecciona el proyecto **K'anba**.
+2. **APIs y servicios → Pantalla de consentimiento OAuth**:
+   - Tipo: **Externo**.
+   - Nombre de la app: `K'anba Cuevas Vivas`, correo de asistencia y de contacto.
+   - Permisos: `email`, `profile`, `openid`.
+   - En *Usuarios de prueba*, agrega tu correo mientras la app esté en modo prueba; o publícala en producción.
+3. **APIs y servicios → Credenciales → Crear credenciales → ID de cliente de OAuth**:
+   - Tipo: **Aplicación web**.
+   - **Orígenes de JavaScript autorizados**:
+     - `https://cuevas-de-kanba.onrender.com`
+     - `http://localhost:3000` (desarrollo)
+   - **URI de redirección autorizados**:
+     - `https://cuevas-de-kanba.onrender.com/api/auth/google/callback`
+     - `http://localhost:3000/api/auth/google/callback`
+4. Copia el **Client ID** y el **Client Secret**.
+5. En Render → servicio `cuevas-de-kanba` → **Environment**, agrega `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y redespliega. En local puedes definirlos como variables de entorno antes de `npm start`.
+
+### Flujo técnico
+
+- `GET /api/auth/google?next=/reservar.html` genera un `state` de un solo uso (10 minutos) y redirige a Google.
+- `GET /api/auth/google/callback` intercambia el código por un token, valida el perfil con `userinfo` y crea o vincula la cuenta.
+- Se reutiliza la cookie de sesión `kanba_user` (`HttpOnly`, `SameSite=Strict`); no se guardan tokens de Google.
+- Si faltan las variables de entorno, el botón regresa al login con un aviso y el acceso por contraseña sigue funcionando.
 
 ---
 
@@ -138,7 +186,7 @@ El archivo `data/db.json` se crea al primer arranque e incluye:
 - Cinco reservas de ejemplo que cubren los estados `confirmed`, `pending_payment`, `cancelled` y `expired`, incluido un reembolso procesado.
 - Cinco correos de ejemplo en la bandeja de salida.
 
-Los correos se guardan como archivos `.eml` en `data/outbox/` y también se listan en **Panel → Correos**.
+Los correos se guardan como archivos `.eml` en `data/outbox/` y también se listan en **Panel → Correos**. En Render Free los `.eml` son efímeros; la copia que importa vive en la base de datos y se ve en el panel.
 
 ---
 
@@ -146,11 +194,20 @@ Los correos se guardan como archivos `.eml` en `data/outbox/` y también se list
 
 | Variable | Predeterminado | Descripción |
 | --- | --- | --- |
-| `PORT` | `3000` | Puerto HTTP. |
+| `PORT` | `3000` | Puerto HTTP. Render lo asigna automáticamente. |
 | `HOST` | `0.0.0.0` | Interfaz de escucha. |
 | `ADMIN_PASSWORD` | `kanba2026` | Contraseña usada solo al crear la base por primera vez. |
 | `FORCE_ADMIN_PASSWORD` | — | Con `1`, vuelve a aplicar `ADMIN_PASSWORD` al arrancar. |
 | `PUBLIC_URL` | `http://localhost:3000` | URL base usada en enlaces de correos. También se puede configurar en el panel (`business.siteUrl`). |
+| `RENDER_EXTERNAL_URL` | — | Render la define sola; se usa como `PUBLIC_URL` si esta no existe. |
+| `DATABASE_URL` | — | Cadena de conexión PostgreSQL. Si existe, la app guarda todo en Postgres; es lo que permite persistencia en Render Free. |
+| `DB_SCHEMA` | `public` | Esquema donde se crean `kanba_store` y `kanba_media`. En Render se usa `kanba` para compartir la base con otra app sin tocar sus tablas. |
+| `PGSSLMODE` | — | Con `disable` desactiva SSL (solo para PostgreSQL local sin TLS). |
+| `DATA_DIR` | `./data` | Modo archivo: carpeta de `db.json` y `outbox/`. También sirve para montar un disco de pago. |
+| `UPLOADS_DIR` | `./public/uploads` | Modo archivo: carpeta de imágenes subidas desde el panel. |
+| `GOOGLE_CLIENT_ID` | — | ID de cliente OAuth de Google para el botón "Continuar con Google". |
+| `GOOGLE_CLIENT_SECRET` | — | Secreto del cliente OAuth de Google. No se guarda en el repositorio. |
+| `GOOGLE_REDIRECT_URI` | — | Opcional. URI de redirección si se usa un dominio propio; por defecto se detecta desde la petición (`/api/auth/google/callback`). |
 
 Ejemplo en PowerShell:
 
@@ -168,7 +225,8 @@ node server/index.js
 .
 ├── package.json
 ├── README.md
-├── data/                     # creado en tiempo de ejecución
+├── render.yaml               # Blueprint de Render (Web Service Free + Postgres vía DATABASE_URL)
+├── data/                     # modo archivo local (se ignora si hay DATABASE_URL)
 │   ├── db.json               # contenido, tours, reservas, ajustes, sesiones
 │   └── outbox/               # correos generados en formato .eml
 ├── public/
@@ -229,6 +287,8 @@ node server/index.js
 | `GET` | `/api/receipt/:code?token=` | Comprobante digital. |
 | `GET` | `/api/verify/:code` | Verificación pública de un comprobante. |
 | `POST` | `/api/webhooks/payments` | Webhook firmado de la pasarela. |
+| `GET` | `/api/auth/google?next=` | Inicia el flujo OAuth con Google. |
+| `GET` | `/api/auth/google/callback` | Retorno de Google: crea o vincula la cuenta e inicia sesión. |
 
 ### Administrativas
 
@@ -340,6 +400,140 @@ Se volverán a crear el contenido, los tours y las cinco reservas de ejemplo. La
 
 ---
 
+## Analítica
+
+El sitio está conectado al contenedor **Google Tag Manager `GTM-N8ZD2LM3`**. El contenedor se carga en todas las páginas públicas (no en `admin.html`, para no mezclar el tráfico interno con las métricas) y envía eventos a `dataLayer` para medir el embudo de reservas.
+
+### Archivos
+
+| Archivo | Función |
+| --- | --- |
+| `public/js/analytics.js` | Define `window.kanbaTrack(event, params)` y `window.kanbaTrackBooking(event, reservation)`, más eventos automáticos. |
+| `scripts/install-analytics.cjs` | Reinstala/actualiza el contenedor en todas las páginas públicas. Es idempotente: `node scripts/install-analytics.cjs`. |
+| `server/index.js` | La política CSP permite `googletagmanager.com`, `google-analytics.com` y `*.analytics.google.com`. |
+
+### Eventos enviados
+
+| Evento | Cuándo se dispara |
+| --- | --- |
+| `select_tour` | El usuario elige una experiencia. |
+| `reservation_created` | Se crea la reserva y se redirige al pago. |
+| `begin_checkout` | Se abre la página de pago de una reserva pendiente (una vez por sesión). |
+| `add_payment_info` | El usuario envía el formulario de pago. |
+| `purchase` | Se muestra una reserva confirmada (una vez por código en el navegador). |
+| `scroll_depth` | Se alcanza 25 %, 50 %, 75 % y 90 % de la página. |
+| `video_play` | Se abre un video de la videoteca. |
+| `contact_whatsapp`, `contact_phone`, `contact_email` | Clic en WhatsApp, teléfono o correo. |
+| `get_directions` | Clic en Google Maps o Waze. |
+| `outbound_click` | Clic en un enlace externo. |
+
+`begin_checkout`, `add_payment_info` y `purchase` incluyen `currency: "GTQ"`, `value`, `transaction_id` e `items`, listos para el e-commerce de GA4.
+
+### Configurar Google Analytics 4
+
+El contenedor de GTM por sí solo no envía datos: dentro de [tagmanager.google.com](https://tagmanager.google.com) hay que crear una etiqueta **Google Analytics: Configuración de GA4** con el ID de medición (`G-XXXXXXXXXX`), activada en **All Pages** (o en el evento `Initialization`), y publicar el contenedor. Después, en GA4 se pueden marcar como conversiones `purchase`, `begin_checkout` y `reservation_created`.
+
+Si se prefiere cargar GA4 directamente (sin GTM), se puede añadir un `gtag.js` con el ID de medición; conviene no duplicar entonces la etiqueta de GA4 en GTM.
+
+---
+
+## Despliegue en Render (gratis)
+
+El `render.yaml` crea **un solo Web Service Free** (sitio público, panel y API). No crea base de datos: **Render solo permite una Render Postgres Free por workspace** y tu CRM ya ocupa la de este workspace. Para no pagar nada, K'anba reutiliza esa misma base con un **esquema propio** (`DB_SCHEMA=kanba`), de modo que sus tablas viven separadas de las del CRM (que usa `public`).
+
+Como el filesystem de un Web Service Free es efímero, el `db.json` y las imágenes no pueden vivir en disco: se guardan en Postgres.
+
+### Arquitectura
+
+```text
+Render (mismo workspace · región oregon)
+├── Web Service Free de K'anba (Node 22 · npm start · sin disco)
+│   └── public/              → sitio, panel y assets (desde el repo)
+├── Web Service + Static Site de tu CRM  (no se tocan)
+└── Render Postgres Free existente (la del CRM · 1 GB)
+    ├── public.*             → tablas de Prisma del CRM (intactas)
+    └── kanba.*              → esquema exclusivo de K'anba (DB_SCHEMA)
+        ├── kanba_store      → contenido, tours, reservas y sesiones
+        └── kanba_media      → imágenes subidas desde el panel
+```
+
+Sin `DATABASE_URL` la app sigue usando `data/db.json` (modo local); en Render eso perdería los datos en cada reinicio.
+
+### 1. Copiar la conexión de la base existente
+
+1. En Render abre tu base Postgres (la del CRM) → pestaña **Connect**.
+2. Copia la **Internal Database URL** (recomendado). Funciona si K'anba y la base están en el **mismo workspace y región** (`oregon`).
+3. Si están en regiones distintas o la base tiene la lista de IPs restringida, usa la **External Database URL**.
+4. No la subas a GitHub.
+
+### 2. Desplegar el Blueprint
+
+1. Sube los cambios a GitHub (rama `main`).
+2. En Render: **New + → Blueprint**.
+3. Elige el repositorio `bbautista-2025051/Cuevas-de-K-anba`.
+4. Nombre: `cuevas-de-kanba` · Branch: `main` · Blueprint Path: `render.yaml`.
+5. En la revisión verás **1 Web Service Free** y dos variables pendientes:
+   - **DATABASE_URL**: pega la cadena del paso 1.
+   - **ADMIN_PASSWORD**: contraseña del panel en producción.
+   `DB_SCHEMA=kanba` ya viene definido en el Blueprint.
+6. Pulsa **Deploy Blueprint**.
+7. El build ejecuta `npm install --omit=dev` (instala `pg`) y arranca con `npm start`. En el primer arranque se crea el esquema `kanba`, sus tablas y el contenido de demostración.
+
+> El usuario de Render Postgres es dueño de la base, así que puede crear el esquema sin pedir permisos. K'anba nunca lee ni modifica las tablas del CRM.
+
+### 3. Verificar
+
+- Salud: `https://<servicio>.onrender.com/api/health`
+- Sitio: `https://<servicio>.onrender.com`
+- Panel: `https://<servicio>.onrender.com/admin.html`
+- **Prueba de persistencia:** sube una imagen o edita un tour, luego **Manual Deploy → Restart service**; el cambio debe seguir ahí y el CRM debe seguir funcionando igual.
+
+### 4. Límites y caducidad del plan Free
+
+**Web Service Free**
+
+- 750 horas de instancia al mes. El servicio **se duerme a los 15 minutos sin tráfico** y tarda ~30–60 s en despertar; es normal.
+- Sin disco persistente: las imágenes subidas se guardan en la tabla `kanba_media`, no en el filesystem.
+- Usa **una sola instancia**: las sesiones y el documento se manejan en memoria; varias instancias se pisarían.
+- El dominio personalizado y el HTTPS también funcionan en el plan Free.
+
+**Render Postgres Free compartida con el CRM**
+
+- **1 GB compartido** entre el CRM y K'anba. Los datos de K'anba son pequeños (documento JSON + imágenes); para una demo sobra.
+- **La caducidad cuenta desde que se creó la base del CRM**, no desde el deploy de K'anba: expira **30 días después de su creación**, con **14 días de gracia** para pasarla a un plan pago antes de que Render la elimine con todo (CRM incluido). Revisa la fecha en el panel de Render.
+- Sin respaldos automáticos ni recuperación a un punto en el tiempo.
+- Render puede reiniciarla o hacer mantenimiento en cualquier momento (breve indisponibilidad).
+
+> Para una entrega dentro de esos días no cuesta nada. Si necesitas algo permanente y gratis, mueve **K'anba** (o el CRM) a una base gratuita sin caducidad como **Neon** o **Supabase**; es el único modo de seguir a costo cero sin depender de la fecha de expiración de Render.
+
+### 5. Actualizaciones y operación
+
+- Cada `git push` a `main` redepliega automáticamente.
+- **Ver la base:** en Render abre la Postgres → **Connect** y copia el comando `psql` o la *External Database URL*.
+- **Reiniciar solo los datos de K'anba:** con `psql` sobre la base ejecuta `DELETE FROM kanba.kanba_store; DELETE FROM kanba.kanba_media;` y reinicia el servicio. Las tablas del CRM (`public.*`) no se tocan.
+- **Respaldo de K'anba:** `pg_dump "<external database url>" --schema=kanba > kanba.sql`.
+- Para cambiar la contraseña sin borrar datos: **Panel → Configuración → Actualizar contraseña**, o define `FORCE_ADMIN_PASSWORD=1` + `ADMIN_PASSWORD`, reinicia una vez y luego quita `FORCE_ADMIN_PASSWORD`.
+
+### Probar el modo PostgreSQL en local
+
+```powershell
+$env:DATABASE_URL = "postgresql://usuario:clave@host:5432/kanba"
+$env:DB_SCHEMA = "kanba"       # opcional: aísla las tablas en su propio esquema
+$env:PGSSLMODE = "disable"     # solo si tu Postgres local no usa TLS
+$env:ADMIN_PASSWORD = "una-clave-segura"
+$env:PORT = "8080"
+npm install
+npm start
+```
+
+### Alternativas si no quieres compartir la base del CRM
+
+- **Otro workspace de Render (gratis):** Render permite una base Free por workspace. Crea un workspace nuevo, colócalo en `oregon`, crea ahí la Postgres Free y despliega K'anba en ese workspace con su **Internal Database URL**. Sigue siendo gratis, pero esa base también caduca a los 30 días.
+- **Neon / Supabase / Aiven (gratis y sin caducidad):** crea la base, copia su cadena de conexión y pégala en `DATABASE_URL`. Funciona con el mismo `render.yaml` (puedes dejar `DB_SCHEMA=kanba`).
+- **Disco persistente (plan pago):** plan Starter + disco de 1 GB montado en `/var/data`, con `DATA_DIR=/var/data` y `UPLOADS_DIR=/var/data/uploads`, y sin `DATABASE_URL`. Cuesta aparte del plan del servicio.
+
+---
+
 ## Notas para producción
 
 Esta implementación es una demo funcional, no un sistema listo para producción sin ajustes:
@@ -348,8 +542,9 @@ Esta implementación es una demo funcional, no un sistema listo para producción
 - Sirve el sitio detrás de HTTPS y un proxy inverso (Caddy, Nginx, IIS).
 - Sustituye la pasarela sandbox por una real y configura el webhook firmado.
 - Configura SMTP real y verifica SPF, DKIM y DMARC del dominio remitente.
-- Haz respaldos de `data/db.json`, `data/outbox/` y `public/uploads/`.
+- Haz respaldos de la base PostgreSQL (`pg_dump` de `DATABASE_URL`) y de `data/` si usas el modo archivo local. La base Free de Render no tiene respaldos y caduca a los 30 días.
 - Revisa las políticas, requisitos y precios con la operación real antes de publicar.
-- La persistencia es un archivo JSON con escritura atómica: suficiente para demo y bajo tráfico, pero para producción se recomienda una base de datos transaccional y almacenamiento de archivos externo.
+- Con `DATABASE_URL` la persistencia es PostgreSQL; sin ella es un archivo JSON con escritura atómica, suficiente para demo y bajo tráfico.
+- Las imágenes subidas en modo PostgreSQL viven en la tabla `kanba_media`; para mucho volumen conviene almacenamiento de objetos (S3, Cloudflare R2, etc.).
 - El limitador de intentos de login es en memoria; con varias instancias usa un almacén compartido.
 - Revisa la licencia y los créditos de cada fotografía antes de un uso comercial.

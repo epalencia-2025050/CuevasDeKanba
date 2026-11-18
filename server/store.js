@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { hashPassword, randomToken } from './security.js';
+import { hashPassword, verifyPassword, randomToken } from './security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
-export const DATA_DIR = path.join(ROOT, 'data');
+// En producción (por ejemplo Render) DATA_DIR apunta al disco persistente.
+export const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, 'data'));
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const OUTBOX_DIR = path.join(DATA_DIR, 'outbox');
 
@@ -59,7 +60,7 @@ export function formatDateShort(date) {
 /* ------------------------------------------------------------------ */
 
 const GALLERY = [
-  ['kanba-cave-01.jpg', 'Luz de candela sobre la roca caliza', 'cueva', 'Wikimedia Commons · CC BY-SA 3.0'],
+  ['kanba-cave-01.jpg', 'Luz frontal sobre la roca caliza', 'cueva', 'Wikimedia Commons · CC BY-SA 3.0'],
   ['kanba-cave-02.jpg', 'Galería húmeda del karst de Lanquín', 'cueva', 'Wikimedia Commons · CC BY 2.0'],
   ['kanba-cave-03.jpg', 'Formaciones y sombras del río subterráneo', 'cueva', 'Wikimedia Commons · CC BY 2.0'],
   ['kanba-cave-04.jpg', 'El techo de piedra y sus pliegues', 'cueva', 'Wikimedia Commons · CC BY-SA 4.0'],
@@ -97,7 +98,7 @@ const VIDEOS = [
     id: 'vid_02',
     youtubeId: 'vjk9xwiBmMs',
     title: 'La cueva de los Goonies',
-    description: 'Así se siente avanzar a oscuras, con candela en mano, entre roca y agua.',
+    description: 'Así se siente avanzar a oscuras, con luz frontal al cuello, entre roca y agua.',
     category: 'Aventura'
   },
   {
@@ -136,7 +137,7 @@ function defaultContent() {
       name: 'K’anba',
       sub: 'Cuevas Vivas',
       tagline: 'Donde el río se esconde',
-      claim: 'Una aventura de agua, piedra y candela en el corazón de Alta Verapaz.'
+      claim: 'Una aventura de agua, piedra y el río en el corazón de Alta Verapaz.'
     },
     hero: {
       kicker: 'Lanquín · Alta Verapaz · Guatemala',
@@ -144,7 +145,7 @@ function defaultContent() {
       subtitle: 'Donde el río se esconde.',
       text: 'Entra a una cueva viva de río subterráneo. Con una vela en la mano, el sonido del agua y un guía q’eqchi’, cruzarás pasadizos, cascadas y pozas de luz imposible. A minutos de Semuc Champey.',
       image: '/assets/img/kanba-cave-02.jpg',
-      imageAlt: 'Interior de una cueva de Lanquín iluminado por candelas',
+      imageAlt: 'Interior de una cueva de Lanquín iluminada con luz frontal',
       badge: 'Cupos limitados · 12 personas por grupo',
       openText: 'Abierto todos los días · 08:00 a 17:00',
       rating: '4.9',
@@ -155,7 +156,7 @@ function defaultContent() {
       title: 'Un río que corre bajo la montaña',
       lead: 'K’anba es una cueva de río, no un salón iluminado. Aquí el agua marca el camino: a veces a los tobillos, a veces al pecho. La piedra caliza se abre en galerías de cinco a diez metros de ancho y el Cahabón sigue su viaje secreto bajo la selva.',
       paragraphs: [
-        'El sistema explorado supera los 3.3 kilómetros, aunque la visita guiada recorre los primeros 400 metros: un tramo seguro, profundo y lleno de formas que la luz de la candela convierte en otra cosa. Al salir, el río te devuelve a la superficie y puedes flotar en cámara lenta por el Cahabón.',
+        'El sistema explorado supera los 3.3 kilómetros, aunque la visita guiada recorre los primeros 400 metros: un tramo seguro, profundo y lleno de formas que la luz frontal convierte en otra cosa. Al salir, el río te devuelve a la superficie y puedes flotar en cámara lenta por el Cahabón.',
         'Para el pueblo q’eqchi’, la cueva no es solo un atractivo: es un umbral. El agua, la oscuridad y las formaciones de piedra han sido parte de su cosmovisión durante generaciones. Nuestros guías son locales y comparten esa lectura del territorio en cada grupo.',
         'En 2004, espeleólogos guatemaltecos con apoyo de colegas estadounidenses exploraron y levantaron el sistema; el trabajo de topografía concluyó en marzo de 2005. Hoy la visita se hace en grupos pequeños, con equipo de seguridad y reglas claras para proteger el ecosistema.'
       ],
@@ -171,8 +172,8 @@ function defaultContent() {
     values: [
       {
         icon: 'flame',
-        title: 'La candela es la brújula',
-        text: 'Sin luz eléctrica dentro de la cueva. Una vela por persona, un guía al frente y una cuerda que une al grupo. La oscuridad no se atraviesa: se escucha.'
+        title: 'El silencio es el sendero',
+        text: 'Sin luz eléctrica dentro de la cueva. Una linterna frontal por persona, un guía al frente y una cuerda que une al grupo. La oscuridad no se atraviesa: se escucha.'
       },
       {
         icon: 'water',
@@ -188,13 +189,13 @@ function defaultContent() {
     timeline: [
       { year: '2004', title: 'Primera gran exploración', text: 'Espeleólogos guatemaltecos, con apoyo internacional, documentan las galerías y el río interior.' },
       { year: '2005', title: 'Levantamiento topográfico', text: 'En marzo concluye la topografía del sistema, que supera los 3.3 km de desarrollo conocido.' },
-      { year: '2010', title: 'Turismo de aventura', text: 'La cueva se integra a las rutas de Semuc Champey. Nacen los recorridos con candela y el tubing.' },
+      { year: '2010', title: 'Turismo de aventura', text: 'La cueva se integra a las rutas de Semuc Champey. Nacen los recorridos de aventura y el tubing.' },
       { year: 'Hoy', title: 'Turismo comunitario', text: 'Grupos pequeños, guías locales y reglas de conservación para que la cueva siga viva.' }
     ],
     toursIntro: {
       kicker: 'Experiencias',
       title: 'Elige cómo entrar a la cueva',
-      text: 'Cinco formas de vivir K’anba. Todas incluyen guía local certificado, candela, casco, chaleco salvavidas y entrada. Los cupos se confirman al pagar.'
+      text: 'Cinco formas de vivir K’anba. Todas incluyen guía local certificado, casco, chaleco salvavidas y entrada. Los cupos se confirman al pagar.'
     },
     bookingIntro: {
       kicker: 'Reserva en línea',
@@ -209,7 +210,7 @@ function defaultContent() {
     videosIntro: {
       kicker: 'En movimiento',
       title: 'Antes de entrar, mírala',
-      text: 'Seis ventanas a la experiencia: la candela, el agua, la cascada y el paisaje que rodea la cueva.'
+      text: 'Seis ventanas a la experiencia: el río, la selva y la cascada y el paisaje que rodea la cueva.'
     },
     mapIntro: {
       kicker: 'Cómo llegar',
@@ -399,10 +400,10 @@ function defaultTours() {
   return [
     {
       id: 'candela',
-      name: 'Ritual de las Candelas',
+      name: 'Ritual de la Cueva',
       badge: 'El clásico',
       description: 'La experiencia original: entras con una vela, caminas por el río subterráneo, subes la cascada con cuerda y sales flotando por el Cahabón. Adrenalina pura en grupos pequeños.',
-      longDescription: 'Un recorrido de dos horas por los primeros 400 metros de la cueva. El guía abre camino con una candela; el grupo avanza por agua a la cintura, pasa junto a formaciones de calcita y sube una cascada con cuerda anudada. Incluye un salto opcional a una poza profunda y flotada corta en el río al salir.',
+      longDescription: 'Un recorrido de dos horas por los primeros 400 metros de la cueva. El guía abre camino con la luz frontal; el grupo avanza por agua a la cintura, pasa junto a formaciones de calcita y sube una cascada con cuerda anudada. Incluye un salto opcional a una poza profunda y flotada corta en el río al salir.',
       duration: '2 horas',
       durationMinutes: 120,
       price: 120,
@@ -414,7 +415,7 @@ function defaultTours() {
       difficulty: 'Aventura moderada',
       minAge: 8,
       meetingPoint: 'Recepción K’anba · desvío antes del puente',
-      includes: ['Guía local bilingüe', 'Candela y soporte', 'Casco y chaleco salvavidas', 'Entrada a la cueva', 'Té caliente al salir'],
+      includes: ['Guía local bilingüe', 'Casco y linterna frontal', 'Casco y chaleco salvavidas', 'Entrada a la cueva', 'Té caliente al salir'],
       notIncludes: ['Transporte desde Lanquín', 'Fotos profesionales', 'Propinas'],
       image: '/assets/img/kanba-cave-01.jpg',
       active: true,
@@ -425,7 +426,7 @@ function defaultTours() {
       name: 'K’anba Esencial + Tubing',
       badge: 'Más vendido',
       description: 'Cueva + cascada + columpio + flotada de 30 minutos por el Cahabón. La combinación perfecta para un día completo de aventura.',
-      longDescription: 'Recorrido guiado por la cueva con candela y saltos opcionales. Después, caminata breve hasta la cascada, salto desde el columpio gigante y flotada en inner tube por el río Cahabón. Ideal para quienes quieren la experiencia completa sin el traslado largo.',
+      longDescription: 'Recorrido guiado por la cueva con luz frontal y saltos opcionales. Después, caminata breve hasta la cascada, salto desde el columpio gigante y flotada en inner tube por el río Cahabón. Ideal para quienes quieren la experiencia completa sin el traslado largo.',
       duration: '3 horas',
       durationMinutes: 180,
       price: 185,
@@ -437,7 +438,7 @@ function defaultTours() {
       difficulty: 'Aventura moderada',
       minAge: 10,
       meetingPoint: 'Recepción K’anba · desvío antes del puente',
-      includes: ['Guía local bilingüe', 'Candela, casco y chaleco', 'Entrada a la cueva', 'Tubing y columpio', 'Duchas rústicas y vestidores'],
+      includes: ['Guía local bilingüe', 'Linterna frontal, casco y chaleco', 'Entrada a la cueva', 'Tubing y columpio', 'Duchas rústicas y vestidores'],
       notIncludes: ['Transporte', 'Almuerzo', 'Fotos', 'Propinas'],
       image: '/assets/img/kanba-river-01.jpg',
       active: true,
@@ -448,7 +449,7 @@ function defaultTours() {
       name: 'K’anba + Semuc Champey',
       badge: 'Día completo',
       description: 'Cueva, cascada, tubing y las pozas turquesa de Semuc Champey con mirador. Transporte desde Lanquín y almuerzo incluidos.',
-      longDescription: 'Salida desde Lanquín en pickup 4x4. Primero K’anba: cueva con candela, cascada y tubing. Luego Semuc Champey: caminata al mirador, tiempo libre en las pozas y almuerzo típico. Regreso al atardecer. Un solo día para los dos imperdibles de Alta Verapaz.',
+      longDescription: 'Salida desde Lanquín en pickup 4x4. Primero K’anba: cueva con luz frontal, cascada y tubing. Luego Semuc Champey: caminata al mirador, tiempo libre en las pozas y almuerzo típico. Regreso al atardecer. Un solo día para los dos imperdibles de Alta Verapaz.',
       duration: '7 horas',
       durationMinutes: 420,
       price: 350,
@@ -470,8 +471,8 @@ function defaultTours() {
       id: 'nocturna',
       name: 'K’anba Nocturna · Murciélagos',
       badge: 'Solo viernes y sábado',
-      description: 'La cueva al caer la noche, cuando las colonias de murciélagos despiertan. Leyendas q’eqchi’, candela y sonido de río.',
-      longDescription: 'Un recorrido especial de fin de semana al atardecer. Entramos con candela cuando la luz exterior desaparece y escuchamos el despertar de los murciélagos. El guía comparte relatos q’eqchi’ sobre el inframundo y el río. No incluye nado profundo; sí vadeo y pasadizos.',
+      description: 'La cueva al caer la noche, cuando las colonias de murciélagos despiertan. Leyendas q’eqchi’ y murmullo del río.',
+      longDescription: 'Un recorrido especial de fin de semana al atardecer. Entramos con luz frontal cuando la luz exterior desaparece y escuchamos el despertar de los murciélagos. El guía comparte relatos q’eqchi’ sobre el inframundo y el río. No incluye nado profundo; sí vadeo y pasadizos.',
       duration: '2.5 horas',
       durationMinutes: 150,
       price: 160,
@@ -483,7 +484,7 @@ function defaultTours() {
       difficulty: 'Aventura suave',
       minAge: 10,
       meetingPoint: 'Recepción K’anba · desvío antes del puente',
-      includes: ['Guía local q’eqchi’', 'Candela y casco', 'Entrada nocturna', 'Chocolate caliente', 'Préstamo de linterna frontal'],
+      includes: ['Guía local q’eqchi’', 'Linterna frontal y casco', 'Entrada nocturna', 'Chocolate caliente', 'Préstamo de linterna frontal'],
       notIncludes: ['Transporte', 'Cena', 'Fotografía con flash', 'Propinas'],
       image: '/assets/img/kanba-cave-03.jpg',
       active: true,
@@ -581,7 +582,7 @@ function seedDatabase() {
   const content = defaultContent();
   const tours = defaultTours();
   const settings = defaultSettings();
-  const admin = hashPassword('kanba2026');
+  const admin = hashPassword(process.env.ADMIN_PASSWORD || 'kanba2026');
 
   const makeCode = (n) => `KAN-${new Date().getFullYear()}-${String(n).padStart(5, '0')}`;
   const r1 = {
@@ -589,7 +590,7 @@ function seedDatabase() {
     code: makeCode(1031),
     token: randomToken(),
     tourId: 'candela',
-    tourName: 'Ritual de las Candelas',
+    tourName: 'Ritual de la Cueva',
     date: isoAddDays(2),
     time: '10:30',
     participants: 2,
@@ -661,7 +662,7 @@ function seedDatabase() {
     code: makeCode(1034),
     token: randomToken(),
     tourId: 'candela',
-    tourName: 'Ritual de las Candelas',
+    tourName: 'Ritual de la Cueva',
     date: isoAddDays(-2),
     time: '08:30',
     participants: 2,
@@ -746,6 +747,18 @@ function seedDatabase() {
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     admin: { password: admin, updatedAt: now },
+    users: [
+      {
+        id: 'usr_demo',
+        name: 'Usuario Demo',
+        email: 'usuario@kanba.gt',
+        password: hashPassword('user2026'),
+        phone: '+502 5555 0000',
+        country: 'Guatemala',
+        role: 'user',
+        createdAt: now
+      }
+    ],
     counters: { reservation: 1036, receipt: 483 },
     content,
     tours,
@@ -787,6 +800,127 @@ function seedDatabase() {
 /* ------------------------------------------------------------------ */
 
 let db = null;
+let pool = null;
+let usingPostgres = false;
+let pendingSnapshot = null;
+let flushPromise = null;
+let retryTimer = null;
+
+const STORE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS kanba_store (
+    id smallint PRIMARY KEY,
+    doc jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT kanba_store_single_row CHECK (id = 1)
+  );
+  CREATE TABLE IF NOT EXISTS kanba_media (
+    name text PRIMARY KEY,
+    mime text NOT NULL,
+    size integer NOT NULL,
+    data bytea NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+`;
+
+async function writeSnapshot(snapshot) {
+  await pool.query(
+    `INSERT INTO kanba_store (id, doc, updated_at) VALUES (1, $1::jsonb, now())
+     ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, updated_at = now()`,
+    [snapshot]
+  );
+}
+
+function scheduleFlush() {
+  if (flushPromise) return flushPromise;
+  flushPromise = (async () => {
+    let current = null;
+    try {
+      while (pendingSnapshot) {
+        current = pendingSnapshot;
+        pendingSnapshot = null;
+        await writeSnapshot(current);
+        current = null;
+      }
+    } catch (err) {
+      console.error('[store] error al guardar en Postgres:', err.message);
+      if (current && !pendingSnapshot) pendingSnapshot = current;
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        scheduleFlush();
+      }, 2000);
+      retryTimer.unref?.();
+    } finally {
+      flushPromise = null;
+    }
+  })();
+  return flushPromise;
+}
+
+function normalizeSchema(value) {
+  const schema = String(value || '').trim();
+  if (!schema) return 'public';
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(schema)) {
+    throw new Error('DB_SCHEMA inválido: usa solo letras, números y guion bajo (máximo 63 caracteres).');
+  }
+  return schema;
+}
+
+/**
+ * Inicializa el almacenamiento. Con DATABASE_URL usa PostgreSQL (Render Postgres,
+ * Neon, Supabase, etc.); sin ella usa data/db.json como hasta ahora.
+ *
+ * DB_SCHEMA permite compartir una misma base con otra aplicación sin chocar:
+ * las tablas se crean en ese esquema en vez de `public`.
+ */
+export async function initStore() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return loadDb();
+
+  const { default: pg } = await import('pg');
+  const ssl = process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false };
+  const schema = normalizeSchema(process.env.DB_SCHEMA);
+  const poolConfig = {
+    connectionString: url,
+    ssl,
+    max: 4,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 15000
+  };
+  if (schema !== 'public') {
+    // search_path se aplica a cada conexión nueva del pool.
+    poolConfig.options = `-c search_path=${schema},public`;
+  }
+  pool = new pg.Pool(poolConfig);
+  usingPostgres = true;
+
+  if (schema !== 'public') {
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+    console.log(`[store] esquema PostgreSQL: ${schema}`);
+  }
+
+  await pool.query(STORE_SCHEMA);
+
+  const { rows } = await pool.query('SELECT doc FROM kanba_store WHERE id = 1');
+  if (rows.length) {
+    db = rows[0].doc;
+    db.sessions = db.sessions || {};
+    db.users = db.users || [];
+    db.userSessions = db.userSessions || {};
+    return db;
+  }
+
+  db = seedDatabase();
+  db.sessions = db.sessions || {};
+  db.users = db.users || [];
+  db.userSessions = db.userSessions || {};
+  await writeSnapshot(JSON.stringify(db));
+  return db;
+}
+
+export function usesDatabase() {
+  return usingPostgres;
+}
 
 export function loadDb() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -795,6 +929,8 @@ export function loadDb() {
     try {
       db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
       db.sessions = db.sessions || {};
+      db.users = db.users || [];
+      db.userSessions = db.userSessions || {};
       return db;
     } catch (err) {
       console.error('[store] db.json corrupto, creando respaldo y reiniciando.', err.message);
@@ -808,16 +944,189 @@ export function loadDb() {
 
 export function getDb() {
   if (!db) loadDb();
+  if (!db.users) db.users = [];
+  if (!db.userSessions) db.userSessions = {};
   return db;
 }
 
 export function saveDb() {
   if (!db) return;
   db.meta.updatedAt = new Date().toISOString();
+
+  if (usingPostgres) {
+    // Guardado por lotes: varias mutaciones seguidas producen una sola escritura.
+    pendingSnapshot = JSON.stringify(db);
+    scheduleFlush();
+    return;
+  }
+
   const tmp = `${DB_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DB_FILE);
 }
+
+/** Fuerza la escritura pendiente (se usa al apagar el servicio). */
+export async function flushDb() {
+  if (!usingPostgres) return;
+  // Espera cualquier escritura en curso y luego vacía la última instantánea.
+  if (flushPromise) await flushPromise.catch(() => {});
+  if (pendingSnapshot) await scheduleFlush();
+}
+
+/* ------------------------------------------------------------------ */
+/* Usuarios (rol "user") y sesiones de usuario                          */
+/* ------------------------------------------------------------------ */
+
+const USER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function publicUser(u) {
+  const { password, googleId, ...rest } = u;
+  return rest;
+}
+
+export function findUserByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  return getDb().users.find((u) => u.email.toLowerCase() === normalized) || null;
+}
+
+export function findUserById(id) {
+  return getDb().users.find((u) => u.id === id) || null;
+}
+
+export function registerUser(input) {
+  const d = getDb();
+  const name = String(input.name || '').trim();
+  const email = String(input.email || '').trim().toLowerCase();
+  const password = String(input.password || '');
+  const phone = String(input.phone || '').trim();
+  const country = String(input.country || '').trim();
+
+  if (name.length < 3) throw new AppError('El nombre es obligatorio (mínimo 3 caracteres).', 422, 'validation');
+  if (!USER_EMAIL_RE.test(email)) throw new AppError('Correo electrónico inválido.', 422, 'validation');
+  if (password.length < 6) throw new AppError('La contraseña debe tener al menos 6 caracteres.', 422, 'validation');
+  if (findUserByEmail(email)) throw new AppError('Ya existe una cuenta con ese correo.', 409, 'email_taken');
+
+  const user = {
+    id: `usr_${randomToken(6)}`,
+    name,
+    email,
+    password: hashPassword(password),
+    phone,
+    country,
+    role: 'user',
+    createdAt: new Date().toISOString()
+  };
+  d.users.push(user);
+  saveDb();
+  return publicUser(user);
+}
+
+export function loginUser(email, password) {
+  const user = findUserByEmail(email);
+  if (!user || !verifyPassword(password, user.password)) {
+    throw new AppError('Correo o contraseña incorrectos.', 401, 'invalid_credentials');
+  }
+  return createUserSession(user);
+}
+
+export function createUserSession(user) {
+  const token = randomToken();
+  const expiresAt = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
+  getDb().userSessions[token] = { userId: user.id, createdAt: new Date().toISOString(), expiresAt };
+  saveDb();
+  return { token, expiresAt, user: publicUser(user) };
+}
+
+/**
+ * Crea una cuenta a partir del perfil verificado de Google (sin contraseña).
+ * El usuario podrá definir una contraseña más adelante si lo necesita.
+ */
+export function registerGoogleUser({ name, email, googleId, avatar }) {
+  const d = getDb();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!USER_EMAIL_RE.test(normalizedEmail)) {
+    throw new AppError('Google no devolvió un correo válido.', 422, 'validation');
+  }
+  if (findUserByEmail(normalizedEmail)) {
+    throw new AppError('Ya existe una cuenta con ese correo.', 409, 'email_taken');
+  }
+  const cleanName = String(name || '').trim() || normalizedEmail.split('@')[0];
+  const user = {
+    id: `usr_${randomToken(6)}`,
+    name: cleanName,
+    email: normalizedEmail,
+    phone: '',
+    country: '',
+    role: 'user',
+    provider: 'google',
+    googleId: String(googleId || ''),
+    avatar: String(avatar || ''),
+    createdAt: new Date().toISOString()
+  };
+  d.users.push(user);
+  saveDb();
+  return publicUser(user);
+}
+
+/** Vincula una cuenta existente (creada con correo y contraseña) a Google. */
+export function linkGoogleAccount(user, { googleId, avatar }) {
+  if (!user) return null;
+  let changed = false;
+  if (googleId && user.googleId !== googleId) {
+    user.googleId = String(googleId);
+    changed = true;
+  }
+  if (avatar && user.avatar !== avatar) {
+    user.avatar = String(avatar);
+    changed = true;
+  }
+  if (changed) saveDb();
+  return publicUser(user);
+}
+
+export function getUserSession(token) {
+  if (!token) return null;
+  const d = getDb();
+  const session = d.userSessions?.[token];
+  if (!session) return null;
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    delete d.userSessions[token];
+    saveDb();
+    return null;
+  }
+  const user = findUserById(session.userId);
+  if (!user) return null;
+  return { token, ...session, user: publicUser(user) };
+}
+
+export function logoutUser(token) {
+  if (!token) return;
+  const d = getDb();
+  if (d.userSessions?.[token]) {
+    delete d.userSessions[token];
+    saveDb();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Uploaded media                                                     */
+/* ------------------------------------------------------------------ */
+
+export async function saveUploadToDb(name, mime, buffer) {
+  await pool.query(
+    `INSERT INTO kanba_media (name, mime, size, data) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (name) DO UPDATE SET mime = EXCLUDED.mime, size = EXCLUDED.size, data = EXCLUDED.data`,
+    [name, mime, buffer.length, buffer]
+  );
+}
+
+export async function readUploadFromDb(name) {
+  if (!pool) return null;
+  const { rows } = await pool.query('SELECT mime, data FROM kanba_media WHERE name = $1', [name]);
+  if (!rows.length) return null;
+  return { mime: rows[0].mime, data: rows[0].data };
+}
+
 
 export function ensureOutbox() {
   fs.mkdirSync(OUTBOX_DIR, { recursive: true });
@@ -1000,7 +1309,7 @@ export function getReservation(code, token = null) {
   return r;
 }
 
-export function createReservation(input) {
+export function createReservation(input, { user = null } = {}) {
   const d = getDb();
   const tour = findTour(input.tourId);
   const date = String(input.date || '');
@@ -1049,6 +1358,8 @@ export function createReservation(input) {
     currency: d.settings.booking.currency || 'GTQ',
     customer,
     status: 'pending_payment',
+    userId: user ? user.id : null,
+    createdByRole: user ? user.role : null,
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
     holdExpiresAt: new Date(now + holdMinutes * 60000).toISOString(),

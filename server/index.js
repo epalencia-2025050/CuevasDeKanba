@@ -5,30 +5,40 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import {
-  loadDb, getDb, saveDb, publicSite, publicTour, buildAvailability, occupancyFor,
+  initStore, flushDb, usesDatabase, saveUploadToDb, readUploadFromDb,
+  getDb, saveDb, publicSite, publicTour, buildAvailability, occupancyFor,
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
-  AppError, nextReceiptNumber, TZ
+  AppError, nextReceiptNumber, TZ,
+  registerUser, loginUser, getUserSession, logoutUser, findUserByEmail,
+  createUserSession, registerGoogleUser, linkGoogleAccount
 } from './store.js';
 import { hashPassword, verifyPassword, randomToken, signPayload, verifySignature } from './security.js';
 import { charge } from './gateway.js';
 import {
-  notifyPending, notifyConfirmed, notifyExpired, notifyCancellation, notifyRefund, resendMail
+  notifyPending, notifyConfirmed, notifyExpired, notifyCancellation, notifyRefund, resendMail,
+  testSmtpConnection, getPublicSmtpStatus, processEmailRetryQueue
 } from './mailer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
-const UPLOADS = path.join(PUBLIC, 'uploads');
+// Las imágenes subidas desde el panel pueden vivir fuera del repo (disco persistente).
+const UPLOADS = path.resolve(process.env.UPLOADS_DIR || path.join(PUBLIC, 'uploads'));
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'kanba2026';
 const SESSION_COOKIE = 'kanba_session';
+const USER_COOKIE = 'kanba_user';
 const SESSION_MS = 8 * 3600 * 1000;
+// Inicio de sesión con Google (OAuth 2.0). Configurar en Render o en .env.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || '';
 const MAX_BODY = 12 * 1024 * 1024;
 
 fs.mkdirSync(UPLOADS, { recursive: true });
-const db = loadDb();
+const db = await initStore();
 
 // Permite definir la contraseña inicial por variable de entorno en el primer arranque.
 if (process.env.ADMIN_PASSWORD && process.env.FORCE_ADMIN_PASSWORD === '1') {
@@ -65,12 +75,13 @@ function securityHeaders(res) {
   res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self'",
+    // Google Tag Manager / Google Analytics 4 (contenedor GTM-N8ZD2LM3)
+    "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://googleads.g.doubleclick.net",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
-    "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
-    "connect-src 'self'",
+    "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com https://www.google.co.uk",
+    "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://www.googletagmanager.com https://td.doubleclick.net",
+    "connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://stats.g.doubleclick.net https://*.g.doubleclick.net https://region1.google-analytics.com",
     "media-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
@@ -154,6 +165,38 @@ function rateLimit(key, max, windowMs) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Inicio de sesión con Google                                        */
+/* ------------------------------------------------------------------ */
+
+const GOOGLE_STATE_MS = 10 * 60 * 1000;
+const googleStates = new Map();
+
+function googleConfigured() {
+  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+}
+
+function requestOrigin(req) {
+  const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
+function googleCallbackUri(req) {
+  return GOOGLE_REDIRECT_URI || `${requestOrigin(req)}/api/auth/google/callback`;
+}
+
+// Solo permite rutas internas como destino posterior al login.
+function safeNextPath(value) {
+  const next = String(value || '').trim();
+  if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return '/';
+  return next;
+}
+
+function googleLoginError(code) {
+  return `/login.html?error=${encodeURIComponent(code)}`;
+}
+
+/* ------------------------------------------------------------------ */
 /* Sessions                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -174,6 +217,25 @@ function requireAdmin(req) {
   const session = getSession(req);
   if (!session) throw new AppError('Inicia sesión para continuar.', 401, 'unauthorized');
   return session;
+}
+
+function getSessionUser(req) {
+  const token = parseCookies(req)[USER_COOKIE];
+  if (!token) return null;
+  const session = getUserSession(token);
+  if (!session) return null;
+  return session;
+}
+
+function requireUser(req) {
+  const session = getSessionUser(req);
+  if (!session) throw new AppError('Debes iniciar sesión para reservar.', 401, 'login_required');
+  return session;
+}
+
+function setUserCookie(res, token, expiresAt) {
+  const maxAge = Math.max(1, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+  res.setHeader('Set-Cookie', `${USER_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`);
 }
 
 function cleanupSessions() {
@@ -519,6 +581,129 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, publicSite());
   }
 
+  /* ---------- Auth de usuarios (rol user) ---------- */
+  if (method === 'GET' && p === '/api/auth/me') {
+    const session = getSessionUser(req);
+    return sendJson(res, 200, {
+      ok: true,
+      authenticated: Boolean(session),
+      user: session ? session.user : null
+    });
+  }
+
+  /* ---------- Inicio de sesión con Google (OAuth 2.0) ---------- */
+  if (method === 'GET' && p === '/api/auth/google') {
+    rateLimit(`google-start:${clientIp(req)}`, 20, 10 * 60000);
+    if (!googleConfigured()) return sendRedirect(res, googleLoginError('google_unconfigured'));
+
+    const now = Date.now();
+    for (const [key, entry] of googleStates) {
+      if (entry.expiresAt <= now) googleStates.delete(key);
+    }
+
+    const state = randomToken(18);
+    googleStates.set(state, {
+      next: safeNextPath(url.searchParams.get('next')),
+      expiresAt: now + GOOGLE_STATE_MS
+    });
+
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: googleCallbackUri(req),
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      prompt: 'select_account',
+      access_type: 'online'
+    });
+    return sendRedirect(res, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  }
+
+  if (method === 'GET' && p === '/api/auth/google/callback') {
+    const state = url.searchParams.get('state') || '';
+    const entry = googleStates.get(state);
+    googleStates.delete(state);
+
+    if (!entry || entry.expiresAt <= Date.now()) {
+      return sendRedirect(res, googleLoginError('google_state'));
+    }
+    if (!googleConfigured()) return sendRedirect(res, googleLoginError('google_unconfigured'));
+    if (url.searchParams.get('error')) {
+      // El usuario canceló o rechazó el acceso en la pantalla de Google.
+      return sendRedirect(res, googleLoginError('google_cancelled'));
+    }
+
+    const code = url.searchParams.get('code') || '';
+    if (!code) return sendRedirect(res, googleLoginError('google_failed'));
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          redirect_uri: googleCallbackUri(req),
+          grant_type: 'authorization_code'
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      const tokens = await tokenRes.json();
+      if (!tokenRes.ok || !tokens.access_token) {
+        throw new Error(tokens.error_description || tokens.error || 'token_exchange_failed');
+      }
+
+      const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+      const profile = await infoRes.json();
+      if (!infoRes.ok || !profile.email) throw new Error(profile.error_description || 'userinfo_failed');
+      if (profile.email_verified === false) {
+        return sendRedirect(res, googleLoginError('google_email_unverified'));
+      }
+
+      const email = String(profile.email).trim().toLowerCase();
+      const googleProfile = { googleId: String(profile.sub || ''), avatar: String(profile.picture || '') };
+      const existing = findUserByEmail(email);
+      const user = existing
+        ? linkGoogleAccount(existing, googleProfile)
+        : registerGoogleUser({ ...googleProfile, email, name: profile.name });
+
+      const session = createUserSession(user);
+      setUserCookie(res, session.token, session.expiresAt);
+      return sendRedirect(res, entry.next);
+    } catch (err) {
+      console.error('[auth/google] no se pudo completar el inicio de sesión:', err.message);
+      return sendRedirect(res, googleLoginError('google_failed'));
+    }
+  }
+
+  if (method === 'POST' && p === '/api/auth/register') {
+    rateLimit(`register:${clientIp(req)}`, 10, 10 * 60000);
+    const body = await readJson(req);
+    const user = registerUser(body);
+    const login = loginUser(user.email, body.password);
+    setUserCookie(res, login.token, login.expiresAt);
+    return sendJson(res, 201, { ok: true, user: login.user });
+  }
+
+  if (method === 'POST' && p === '/api/auth/login') {
+    rateLimit(`userlogin:${clientIp(req)}`, 10, 10 * 60000);
+    const body = await readJson(req);
+    const login = loginUser(String(body.email || ''), String(body.password || ''));
+    setUserCookie(res, login.token, login.expiresAt);
+    return sendJson(res, 200, { ok: true, user: login.user });
+  }
+
+  if (method === 'POST' && p === '/api/auth/logout') {
+    const token = parseCookies(req)[USER_COOKIE] || '';
+    logoutUser(token);
+    res.setHeader('Set-Cookie', `${USER_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (method === 'GET' && p === '/api/availability') {
     const tourId = url.searchParams.get('tour') || null;
     const from = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('from') || '') ? url.searchParams.get('from') : todayISO();
@@ -527,8 +712,9 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'POST' && p === '/api/reservations') {
+    const session = requireUser(req);
     const body = await readJson(req);
-    const reservation = createReservation(body);
+    const reservation = createReservation(body, { user: session.user });
     try {
       await notifyPending(reservation);
     } catch (err) {
@@ -706,12 +892,23 @@ async function handleApi(req, res, url) {
     rateLimit(`login:${clientIp(req)}`, 8, 10 * 60000);
     const body = await readJson(req);
     const password = String(body.password || '');
-    if (!verifyPassword(password, getDb().admin.password)) {
-      throw new AppError('Contraseña incorrecta.', 401, 'invalid_credentials');
+    const email = String(body.email || '').trim().toLowerCase();
+    const adminUser = email ? findUserByEmail(email) : null;
+    const ok = adminUser
+      ? adminUser.role === 'admin' && verifyPassword(password, adminUser.password)
+      : verifyPassword(password, getDb().admin.password);
+    if (!ok) {
+      throw new AppError('Credenciales de administración incorrectas.', 401, 'invalid_credentials');
     }
     const token = randomToken();
     const expiresAt = new Date(Date.now() + SESSION_MS).toISOString();
-    getDb().sessions[token] = { createdAt: new Date().toISOString(), expiresAt, ip: clientIp(req) };
+    getDb().sessions[token] = {
+      createdAt: new Date().toISOString(),
+      expiresAt,
+      ip: clientIp(req),
+      role: 'admin',
+      userId: adminUser ? adminUser.id : null
+    };
     saveDb();
     res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_MS / 1000)}`);
     return sendJson(res, 200, { ok: true, expiresAt });
@@ -928,7 +1125,19 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'GET' && p === '/api/admin/settings') {
-    return sendJson(res, 200, { ok: true, settings: getDb().settings });
+    return sendJson(res, 200, {
+      ok: true,
+      settings: getDb().settings,
+      smtpStatus: getPublicSmtpStatus()
+    });
+  }
+  if (method === 'POST' && p === '/api/admin/settings/test-smtp') {
+    rateLimit(`test-smtp:${clientIp(req)}`, 5, 5 * 60000); // Máximo 5 pruebas cada 5 minutos
+    const body = await readJson(req);
+    const to = String(body.to || '').trim();
+    if (!to) throw new AppError('Ingresa un correo destinatario para la prueba.', 422, 'validation');
+    const result = await testSmtpConnection(to);
+    return sendJson(res, 200, { ok: true, result });
   }
   if (method === 'PUT' && p === '/api/admin/settings') {
     const body = await readJson(req);
@@ -972,7 +1181,12 @@ async function handleApi(req, res, url) {
     if (buffer.length > 8 * 1024 * 1024) throw new AppError('La imagen supera los 8 MB.', 413, 'too_large');
     if (buffer.length < 100) throw new AppError('La imagen está vacía.', 422, 'validation');
     const filename = `${Date.now().toString(36)}-${randomToken(5).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}.${ext}`;
-    fs.writeFileSync(path.join(UPLOADS, filename), buffer);
+    if (usesDatabase()) {
+      const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+      await saveUploadToDb(filename, mime, buffer);
+    } else {
+      fs.writeFileSync(path.join(UPLOADS, filename), buffer);
+    }
     return sendJson(res, 201, { ok: true, url: `/uploads/${filename}`, size: buffer.length });
   }
 
@@ -983,7 +1197,19 @@ async function handleApi(req, res, url) {
 /* Static                                                             */
 /* ------------------------------------------------------------------ */
 
-function serveStatic(req, res, url) {
+function resolveStaticPath(pathname) {
+  // /uploads/* se sirve desde UPLOADS_DIR; el resto desde public/.
+  const isUpload = pathname === '/uploads' || pathname.startsWith('/uploads/');
+  const baseDir = isUpload ? UPLOADS : PUBLIC;
+  const relPath = isUpload ? pathname.slice('/uploads'.length) || '/' : pathname;
+  const filePath = path.resolve(baseDir, '.' + relPath);
+  if (!filePath.startsWith(baseDir + path.sep) && filePath !== baseDir) {
+    return null;
+  }
+  return filePath;
+}
+
+async function serveStatic(req, res, url) {
   let pathname;
   try {
     pathname = decodeURIComponent(url.pathname);
@@ -998,6 +1224,7 @@ function serveStatic(req, res, url) {
   if (pathname === '/ubicacion') pathname = '/ubicacion.html';
   if (pathname === '/informacion') pathname = '/informacion.html';
   if (pathname === '/politicas') pathname = '/politicas.html';
+  if (pathname === '/cafeteria') pathname = '/cafeteria.html';
   if (pathname === '/admin') pathname = '/admin.html';
   if (pathname === '/pago') pathname = '/pago.html';
   if (pathname === '/confirmacion') pathname = '/confirmacion.html';
@@ -1005,8 +1232,29 @@ function serveStatic(req, res, url) {
   if (pathname === '/mi-reserva') pathname = '/mi-reserva.html';
   if (pathname === '/favicon.ico') pathname = '/assets/favicon.svg';
 
-  const filePath = path.resolve(PUBLIC, '.' + pathname);
-  if (!filePath.startsWith(PUBLIC + path.sep) && filePath !== PUBLIC) {
+  // Imágenes subidas: en modo PostgreSQL viven en la tabla kanba_media.
+  if (usesDatabase() && pathname.startsWith('/uploads/')) {
+    const name = pathname.slice('/uploads/'.length);
+    if (!name || name !== path.basename(name)) {
+      return sendError(res, 404, 'No encontrado.');
+    }
+    const file = await readUploadFromDb(name);
+    if (!file) {
+      securityHeaders(res);
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('No encontrado');
+    }
+    securityHeaders(res);
+    res.writeHead(200, {
+      'Content-Type': file.mime || MIME[path.extname(name).toLowerCase()] || 'application/octet-stream',
+      'Content-Length': file.data.length,
+      'Cache-Control': 'public, max-age=604800'
+    });
+    return res.end(file.data);
+  }
+
+  const filePath = resolveStaticPath(pathname);
+  if (!filePath) {
     return sendError(res, 403, 'Acceso denegado.');
   }
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
@@ -1049,7 +1297,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       return sendError(res, 405, 'Método no permitido.');
     }
-    serveStatic(req, res, url);
+    await serveStatic(req, res, url);
   } catch (err) {
     if (res.headersSent) {
       try { res.end(); } catch { /* noop */ }
@@ -1063,7 +1311,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Worker: libera cupos cuando vence el plazo de pago.
+// Worker: libera cupos cuando vence el plazo de pago y reintenta correos pendientes.
 const expiryTimer = setInterval(() => {
   try {
     const expired = closeExpiredHolds();
@@ -1071,17 +1319,41 @@ const expiryTimer = setInterval(() => {
       notifyExpired(r).catch((err) => console.error('[expiración] correo:', err.message));
     }
     cleanupSessions();
+    processEmailRetryQueue().catch((err) => console.error('[worker-retry]', err.message));
   } catch (err) {
     console.error('[worker]', err);
   }
 }, 15000);
 expiryTimer.unref?.();
 
+// Render envía SIGTERM al reiniciar/redeployar: guarda lo pendiente antes de salir.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[server] ${signal}: cerrando y guardando datos…`);
+  clearInterval(expiryTimer);
+  server.close();
+  try {
+    await flushDb();
+  } catch (err) {
+    console.error('[server] no se pudo guardar antes de salir:', err.message);
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 server.listen(PORT, HOST, () => {
   console.log(`\n  K’anba · Cuevas Vivas`);
   console.log(`  http://localhost:${PORT}`);
   console.log(`  Panel: http://localhost:${PORT}/admin.html`);
-  console.log(`  Contraseña demo: ${ADMIN_PASSWORD}\n`);
+  console.log(`  Almacenamiento: ${usesDatabase() ? 'PostgreSQL' : 'archivo local data/db.json'}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.log('');
+  } else {
+    console.log(`  Contraseña demo: ${ADMIN_PASSWORD}\n`);
+  }
 });
 
 export { server };

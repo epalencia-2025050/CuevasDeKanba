@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <!-- Google Tag Manager -->
+  <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-N8ZD2LM3"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+  </script>
+  <!-- End Google Tag Manager -->
+  <script src="js/analytics.js"></script>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iniciar sesión · K’anba Cuevas Vivas</title>
+  <meta name="description" content="Acceso para visitantes y administración de K’anba Cuevas Vivas.">
+  <meta name="theme-color" content="#081310">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..600&family=Manrope:wght@300..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body class="login-page">
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N8ZD2LM3" height="0" width="0" style="display:none;visibility:hidden" title="Google Tag Manager"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+
+  <!-- Fondo de las Cuevas de K'anba idéntico al estilo Hero del sitio -->
+  <div class="login-cave-backdrop" aria-hidden="true">
+    <div class="cave-bg-image"></div>
+    <div class="cave-veil"></div>
+    <div class="cave-glow"></div>
+    <div class="cave-fireflies"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <main class="login-screen" id="loginScreen">
+    <div class="login-wrapper">
+      <!-- Navegación superior con estética K'anba -->
+      <div class="login-topbar">
+        <button type="button" class="btn-topbar" id="backButton" aria-label="Regresar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Regresar</span>
+        </button>
+        <a class="btn-topbar" href="index.html">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 22V12h6v10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Inicio</span>
+        </a>
+      </div>
+
+      <!-- Tarjeta de Login integrada con el diseño del sitio K'anba -->
+      <div class="login-card-container">
+        <div class="login-card" id="loginCard">
+          <form id="loginForm" novalidate>
+            <!-- Logo oficial K'anba Cuevas Vivas -->
+            <div class="login-brand-wrap">
+              <a class="brand" href="index.html" aria-label="K’anba, inicio">
+                <span class="brand-mark" aria-hidden="true">
+                  <svg viewBox="0 0 40 40"><path d="M5 35V20a15 15 0 0 1 30 0v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 31c-4.7-3.6-7-6.8-7-10.4a7 7 0 0 1 14 0c0 3.6-2.3 6.8-7 10.4Z" fill="currentColor"/><path d="M19 25.8c.1-2.9.8-4.7 1.8-6.3.6 2 1.9 3 2.4 5 .3 1.2-.4 2.5-2 2.8-1.6.3-2.3-.7-2.2-1.5Z" fill="#0e2420"/></svg>
+                </span>
+                <span class="brand-type"><strong>K’anba</strong><small>Cuevas Vivas</small></span>
+              </a>
+            </div>
+
+            <!-- Selector de tipo de cuenta: Usuario / Administrador -->
+            <div class="login-tabs" role="tablist" aria-label="Tipo de acceso">
+              <button type="button" class="login-tab is-active" data-role="user" role="tab" aria-selected="true">
+                Usuario
+              </button>
+              <button type="button" class="login-tab" data-role="admin" role="tab" aria-selected="false">
+                Administrador
+              </button>
+            </div>
+
+            <div class="login-panels">
+              <!-- Panel: Iniciar Sesión Usuario -->
+              <section class="login-panel is-active" id="panel-user">
+                <header class="panel-head">
+                  <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Acceso a reservas</p>
+                  <h1 class="panel-title">Iniciar sesión</h1>
+                  <p class="panel-subtitle">Ingresa con tu cuenta para asegurar tus cupos y gestionar tus reservas.</p>
+                </header>
+
+                <div class="field">
+                  <label for="userEmail">Correo electrónico</label>
+                  <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                    </span>
+                    <input type="email" id="userEmail" autocomplete="email" placeholder="tucorreo@ejemplo.com" required>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="userPassword">Contraseña</label>
+                  <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <input type="password" id="userPassword" autocomplete="current-password" placeholder="Tu contraseña" required>
+                    <button type="button" class="pw-toggle" aria-label="Mostrar contraseña" data-target="userPassword">
+                      <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="form-error" id="userError" role="alert" hidden></div>
+                <div class="form-success" id="userSuccess" role="status" hidden></div>
+
+                <button class="btn btn-primary btn-submit" type="submit" id="userSubmit">
+                  <span>Entrar</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+
+                <div class="login-divider" aria-hidden="true"><span>o continúa con</span></div>
+                <a class="btn-google" id="googleSignIn" href="/api/auth/google" rel="nofollow">
+                  <svg viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  </svg>
+                  <span>Continuar con Google</span>
+                </a>
+
+                <p class="panel-foot-note">
+                  ¿No tienes una cuenta aún?
+                  <button type="button" class="link-switch" id="goRegister">Crear cuenta</button>
+                </p>
+              </section>
+
+              <!-- Panel: Registro Usuario -->
+              <section class="login-panel" id="panel-register">
+                <header class="panel-head">
+                  <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Nueva cuenta</p>
+                  <h1 class="panel-title">Crear cuenta</h1>
+                  <p class="panel-subtitle">Regístrate para guardar tus datos, reservar tours y acceder a tus comprobantes.</p>
+                </header>
+
+                <div class="field">
+                  <label for="regName">Nombre completo</label>
+                  <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                    </span>
+                    <input type="text" id="regName" autocomplete="name" placeholder="Tu nombre y apellido" required>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="regEmail">Correo electrónico</label>
+                  <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                    </span>
+                    <input type="email" id="regEmail" autocomplete="email" placeholder="tucorreo@ejemplo.com" required>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="regPassword">Contraseña</label>
+                  <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <input type="password" id="regPassword" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required>
+                    <button type="button" class="pw-toggle" aria-label="Mostrar contraseña" data-target="regPassword">
+                      <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="form-error" id="regError" role="alert" hidden></div>
+                <div class="form-success" id="regSuccess" role="status" hidden></div>
+
+                <button class="btn btn-primary btn-submit" type="submit" id="regSubmit">
+                  <span>Crear cuenta y entrar</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+
+                <p class="panel-foot-note">
+                  ¿Ya tienes una cuenta?
+                  <button type="button" class="link-switch" id="goLogin">Iniciar sesión</button>
+                </p>
+              </section>
+
+              <!-- Panel: Administrador -->
+              <section class="login-panel" id="panel-admin">
+                <header class="panel-head">
+                  <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Personal K'anba</p>
+                  <h1 class="panel-title">Administración</h1>
+                  <p class="panel-subtitle">Panel de control de salidas, cupos y reservas del tour.</p>
+                </header>
+
+                <div class="field">
+                  <label for="adminPassword">Contraseña de administrador</label>
+                  <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <input type="password" id="adminPassword" autocomplete="current-password" placeholder="Contraseña de administrador" required>
+                    <button type="button" class="pw-toggle" aria-label="Mostrar contraseña" data-target="adminPassword">
+                      <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="form-error" id="adminError" role="alert" hidden></div>
+
+                <button class="btn btn-dark btn-submit" type="submit" id="adminSubmit">
+                  <span>Entrar al panel</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </section>
+            </div>
+
+            <input type="hidden" id="nextUrl" value="">
+          </form>
+        </div>
+      </div>
+
+      <div class="login-footer-info">
+        <span>K’anba Cuevas Vivas · Lanquín, Alta Verapaz · Guatemala</span>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="js/login.js" defer></script>
+  <script src="js/file-notice.js"></script>
+</body>
+</html>
