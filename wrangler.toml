@@ -14,8 +14,8 @@ not_found_handling = "none"
 # Variables de entorno para producción
 [vars]
 NODE_ENV = "production"
-PUBLIC_URL = "https://cuevasdekanba.com"
-DB_SCHEMA = "kanba"
+PUBLIC_URL = "https://cuevasdekanba.paserne13.workers.dev"
+DB_SCHEMA = "kanba_rel"
 
 # Mantenimiento periódico programado
 [triggers]
