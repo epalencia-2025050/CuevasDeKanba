@@ -75,6 +75,64 @@ test('Google state survives app instances, is browser-bound and consumed once', 
   assert.equal((await me.json()).authenticated, false);
 });
 
+test('OAuth reports safe failure stages, consumes state once and rejects recursive next destinations', async () => {
+  for (const [scenario, expected] of [
+    ['invalid_client', 'google_client_rejected'], ['invalid_grant', 'google_code_rejected'],
+    ['network', 'google_token_exchange_failed'], ['bad_json', 'google_token_exchange_failed'],
+    ['profile', 'google_profile_failed'], ['unverified', 'google_email_unverified'],
+    ['missing', 'google_code_missing'], ['success', null]
+  ]) {
+    const { app, services, database } = setup({ GOOGLE_CLIENT_ID: 'synthetic', GOOGLE_CLIENT_SECRET: 'synthetic' });
+    let calls = 0;
+    services.fetch = async url => {
+      calls++;
+      if (String(url).includes('/token')) {
+        if (scenario === 'network') throw new Error('SENSITIVE_SYNTHETIC');
+        if (scenario === 'bad_json') return new Response('not JSON');
+        if (scenario.startsWith('invalid_')) return Response.json({ error: scenario, error_description: 'SENSITIVE_SYNTHETIC' }, { status: 400 });
+        return Response.json({ access_token: 'synthetic-access' });
+      }
+      if (scenario === 'profile') return Response.json({ error: 'SENSITIVE_SYNTHETIC' }, { status: 500 });
+      return Response.json({ sub: 'synthetic-sub', email: 'synthetic@example.invalid', email_verified: scenario !== 'unverified', name: 'Synthetic' });
+    };
+    const start = await app.request('https://kanba.test/api/auth/google?next=/api/auth/google');
+    const issued = start.headers.get('set-cookie');
+    assert.match(issued, /SameSite=Lax; Path=\/api\/auth\/google; Max-Age=600; Secure/);
+    const state = new URL(start.headers.get('location')).searchParams.get('state');
+    const cookie = issued.split(';')[0];
+    const callback = `https://kanba.test/api/auth/google/callback?state=${state}${scenario === 'missing' ? '' : '&code=synthetic'}`;
+    const result = await app.request(callback, { headers: { Cookie: cookie } });
+    assert.equal(result.status, 302);
+    assert.equal(result.headers.get('location'), expected ? `/login.html?error=${expected}` : '/');
+    assert(result.headers.getSetCookie().some(c => /^kanba_oauth=;.*Path=\/api\/auth\/google; Max-Age=0; Secure/.test(c)));
+    assert(!result.headers.get('location').includes('SENSITIVE'));
+    if (expected) {
+      assert.equal(database.snapshot().users.length, 0);
+      assert.deepEqual(database.snapshot().userSessions, {});
+      assert(!result.headers.getSetCookie().some(c => c.startsWith('kanba_user=')));
+    }
+    const beforeReplay = calls;
+    const replay = await app.request(callback, { headers: { Cookie: cookie } });
+    assert.match(replay.headers.get('location'), /google_state/);
+    assert.equal(calls, beforeReplay);
+  }
+});
+
+test('OAuth persistence failure rolls back user creation and publishes no session cookie', async () => {
+  const { app, services, database } = setup({ GOOGLE_CLIENT_ID: 'synthetic', GOOGLE_CLIENT_SECRET: 'synthetic' });
+  services.fetch = async url => Response.json(String(url).includes('/token') ? { access_token: 'synthetic' }
+    : { sub: 'synthetic', email: 'synthetic@example.invalid', email_verified: true });
+  const start = await app.request('https://kanba.test/api/auth/google');
+  const state = new URL(start.headers.get('location')).searchParams.get('state');
+  const cookie = start.headers.get('set-cookie').split(';')[0];
+  database.failCommit = true;
+  const result = await app.request(`https://kanba.test/api/auth/google/callback?state=${state}&code=synthetic`, { headers: { Cookie: cookie } });
+  assert.equal(result.status, 500);
+  assert.equal(result.headers.get('set-cookie'), null);
+  assert.equal(database.snapshot().users.length, 0);
+  assert.deepEqual(database.snapshot().userSessions, {});
+});
+
 test('production payment routes retain fail-closed behavior through Hono', async () => {
   const { app } = setup({ NODE_ENV: 'production' });
   for (const path of ['/api/payments/pi_synthetic/pay', '/api/webhooks/payments']) {

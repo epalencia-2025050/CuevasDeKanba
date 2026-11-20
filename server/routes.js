@@ -150,7 +150,11 @@ function googleCallbackUri(req) {
 function safeNextPath(value) {
   const next = String(value || '').trim();
   if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return '/';
-  return next;
+  try {
+    const target = new URL(next, config.PUBLIC_URL);
+    if (target.origin !== config.PUBLIC_URL || /^\/api(?:\/|$)/i.test(decodeURIComponent(target.pathname))) return '/';
+    return target.pathname + target.search + target.hash;
+  } catch { return '/'; }
 }
 
 function googleLoginError(code) {
@@ -664,8 +668,10 @@ async function handleApi(req, res, url) {
     }
 
     const code = url.searchParams.get('code') || '';
-    if (!code) return sendRedirect(res, googleLoginError('google_failed'));
+    if (!code) return sendRedirect(res, googleLoginError('google_code_missing'));
 
+    let failureCode = 'google_token_exchange_failed';
+    let persisting = false;
     try {
       const tokenRes = await getRuntime().fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -680,22 +686,28 @@ async function handleApi(req, res, url) {
         signal: AbortSignal.timeout(10000)
       });
       const tokens = await tokenRes.json();
-      if (!tokenRes.ok || !tokens.access_token) {
-        throw new Error(tokens.error_description || tokens.error || 'token_exchange_failed');
+      if (!tokenRes.ok || typeof tokens?.access_token !== 'string' || !tokens.access_token) {
+        if (tokens?.error === 'invalid_client') failureCode = 'google_client_rejected';
+        else if (tokens?.error === 'invalid_grant') failureCode = 'google_code_rejected';
+        throw new Error('OAuth token exchange failed.');
       }
 
+      failureCode = 'google_profile_failed';
       const infoRes = await getRuntime().fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(10000)
       });
       const profile = await infoRes.json();
-      if (!infoRes.ok || !profile.email) throw new Error(profile.error_description || 'userinfo_failed');
-      if (!profile.sub || profile.email_verified !== true) {
+      if (!infoRes.ok || typeof profile?.email !== 'string' || !profile.email ||
+          typeof profile?.sub !== 'string' || !profile.sub) throw new Error('OAuth profile invalid.');
+      if (profile.email_verified !== true) {
         return sendRedirect(res, googleLoginError('google_email_unverified'));
       }
 
       const email = String(profile.email).trim().toLowerCase();
       const googleProfile = { googleId: String(profile.sub || ''), avatar: String(profile.picture || '') };
+      // Persistence failures must escape so the outer transaction rolls back.
+      persisting = true;
       const existing = findUserByEmail(email);
       const user = existing
         ? linkGoogleAccount(existing, googleProfile)
@@ -703,10 +715,11 @@ async function handleApi(req, res, url) {
 
       const session = createUserSession(user);
       setUserCookie(res, req, session.token, session.expiresAt);
-      return sendRedirect(res, entry.next);
+      return sendRedirect(res, safeNextPath(entry.next));
     } catch (err) {
+      if (persisting) throw err;
       console.error('[auth/google] no se pudo completar el inicio de sesión:', safeErrorMessage(err));
-      return sendRedirect(res, googleLoginError('google_failed'));
+      return sendRedirect(res, googleLoginError(failureCode));
     }
   }
 

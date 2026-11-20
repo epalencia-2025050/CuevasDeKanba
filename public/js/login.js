@@ -230,6 +230,11 @@
 
   // Mensajes cuando el flujo de Google regresa con error.
   const GOOGLE_ERRORS = {
+    google_code_missing: 'Google no devolvió el código de autorización. Inicia de nuevo desde el botón de Google.',
+    google_client_rejected: 'Google rechazó la configuración de acceso de la aplicación. Contacta al administrador.',
+    google_code_rejected: 'El código de Google expiró, ya fue utilizado o no corresponde a esta solicitud. Inicia un nuevo intento.',
+    google_token_exchange_failed: 'No pudimos completar el intercambio con Google. Inicia un nuevo intento.',
+    google_profile_failed: 'No pudimos obtener un perfil válido de Google. Inicia un nuevo intento.',
     google_unconfigured: 'El inicio de sesión con Google aún no está disponible. Usa tu correo y contraseña.',
     google_cancelled: 'Cancelaste el inicio de sesión con Google.',
     google_state: 'La sesión de Google expiró. Inténtalo de nuevo.',
@@ -244,6 +249,7 @@
 
   // Si el usuario ya tiene sesión iniciada y entra a login.html, redirigir
   (async () => {
+    if (googleError) return; // Keep the OAuth error visible; do not hide it with an existing session.
     try {
       const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
       if (res.ok) {
