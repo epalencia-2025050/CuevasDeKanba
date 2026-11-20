@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import { serializeStore } from './runtime-secrets.js';
+import { validateStore } from './data-errors.js';
 
 // The only runtime SQL module. No Cloudflare imports or environment globals.
 export function createDatabase(config, { connectionString = config.DATABASE_URL, managedTransport = false } = {}) {
@@ -46,10 +47,13 @@ export function createRepository(sql, schema = 'public', controlSql = sql) {
       return sql.begin(async tx => {
         await tx`SET LOCAL lock_timeout = '10s'`;
         const [row] = await tx`SELECT doc FROM ${table('kanba_store')} WHERE id=1 FOR UPDATE`;
-        if (!row) throw new Error('Database not initialized.');
+        validateStore(row?.doc);
         const unit = { document: row.doc, dirty: false, ...media(tx) };
         const result = await work(unit);
-        if (unit.dirty) await tx`UPDATE ${table('kanba_store')} SET doc=${serializeStore(unit.document)}::jsonb,updated_at=now() WHERE id=1`;
+        if (unit.dirty) {
+          validateStore(unit.document);
+          await tx`UPDATE ${table('kanba_store')} SET doc=${serializeStore(unit.document)}::jsonb,updated_at=now() WHERE id=1`;
+        }
         return result;
       });
     },
@@ -75,6 +79,7 @@ export function createRepository(sql, schema = 'public', controlSql = sql) {
     },
     async health() { await sql`SELECT 1`; },
     async initialize(document) {
+      if (document !== undefined) validateStore(document);
       await sql.begin(async tx => {
         await tx`CREATE SCHEMA IF NOT EXISTS ${sql(schema)}`;
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_store')} (id smallint PRIMARY KEY CHECK(id=1),doc jsonb NOT NULL,updated_at timestamptz NOT NULL DEFAULT now())`;

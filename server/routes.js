@@ -121,12 +121,7 @@ function memoryLimit(key, max, windowMs) {
 }
 
 async function rateLimit(key, max, windowMs) {
-  let count = null;
-  try {
-    count = await rateLimitShared(key, max, windowMs);
-  } catch (err) {
-    throw new AppError('Servicio temporalmente no disponible.', 503, 'rate_limit_unavailable');
-  }
+  let count = await rateLimitShared(key, max, windowMs);
   if (count === null) {
     if (NODE_ENV === 'production') throw new AppError('Servicio temporalmente no disponible.', 503, 'rate_limit_unavailable');
     count = memoryLimit(key, max, windowMs);

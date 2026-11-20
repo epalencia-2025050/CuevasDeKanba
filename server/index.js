@@ -7,6 +7,7 @@ import { PaymentPolicyError } from './payment-policy.js';
 import { RequestSecurityError } from './request-security.js';
 import { notifyExpired, processEmailRetryQueue } from './mailer.js';
 import { safeErrorMessage } from './safe-errors.js';
+import { StoreInvalidError, isDatabaseUnavailable } from './data-errors.js';
 
 export function createApp(services) {
   const app = new Hono();
@@ -20,7 +21,11 @@ export function createApp(services) {
     await next();
   }));
   app.onError((error, c) => {
-    const known = error instanceof AppError || error instanceof PaymentPolicyError || error instanceof RequestSecurityError;
+    if (isDatabaseUnavailable(error)) {
+      c.header('Cache-Control', 'no-store');
+      return c.json({ error: { code: 'database_unavailable', message: 'Base de datos temporalmente no disponible.' } }, 503);
+    }
+    const known = error instanceof StoreInvalidError || error instanceof AppError || error instanceof PaymentPolicyError || error instanceof RequestSecurityError;
     if (!known) console.error('[app]', safeErrorMessage(error));
     c.header('Cache-Control', 'no-store');
     return c.json({ error: { code: known ? error.code : 'server_error',

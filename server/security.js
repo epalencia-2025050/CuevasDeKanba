@@ -6,8 +6,10 @@ export function hashPassword(password, salt = crypto.randomBytes(16).toString('h
 }
 
 export function verifyPassword(password, stored) {
-  if (String(password).length > 256 || !stored?.salt || !stored?.hash) return false;
-  const candidate = crypto.scryptSync(String(password), stored.salt, 64);
+  if (typeof password !== 'string' || password.length > 256 ||
+      typeof stored?.salt !== 'string' || !/^[a-f0-9]{32}$/i.test(stored.salt) ||
+      typeof stored?.hash !== 'string' || !/^[a-f0-9]{128}$/i.test(stored.hash)) return false;
+  const candidate = crypto.scryptSync(password, stored.salt, 64);
   const expected = Buffer.from(stored.hash, 'hex');
   if (candidate.length !== expected.length) return false;
   return crypto.timingSafeEqual(candidate, expected);

@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { getConfig, getRuntime } from './runtime.js';
 import { hashPassword, verifyPassword, randomToken, safeEqual } from './security.js';
 import { settingsWithoutSecrets } from './runtime-secrets.js';
+import { validateStore } from './data-errors.js';
 
 export const TZ = 'America/Guatemala';
 
@@ -810,10 +811,8 @@ const transactionContext = new AsyncLocalStorage();
 export async function withStoreTransaction(work) {
   if (transactionContext.getStore()) return work();
   return getRuntime().database.transaction(unit => transactionContext.run(unit, async () => {
+    validateStore(unit.document);
     unit.document.settings = settingsWithoutSecrets(unit.document.settings);
-    unit.document.sessions ||= {};
-    unit.document.userSessions ||= {};
-    unit.document.users ||= [];
     return work();
   }));
 }
@@ -825,6 +824,7 @@ export function getDb() {
 export function saveDb() {
   const unit = transactionContext.getStore();
   if (!unit) throw new Error('Store mutation requires a transaction.');
+  validateStore(unit.document);
   unit.dirty = true;
   unit.document.meta.updatedAt = new Date().toISOString();
 }
