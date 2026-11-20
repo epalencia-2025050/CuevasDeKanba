@@ -46,6 +46,12 @@ test('repository binds values, locks authoritative state, commits after save and
     const query = parts.join('?'); events.push({ query, values });
     return Promise.resolve(query.startsWith('SELECT doc') ? [{ doc: structuredClone(initial) }] : []);
   };
+  sql.json = value => {
+    assert.equal(typeof value, 'object');
+    assert.notEqual(value, null);
+    assert(!Array.isArray(value));
+    return JSON.stringify(value);
+  };
   sql.begin = async work => {
     events.push('BEGIN');
     try {
@@ -63,5 +69,15 @@ test('repository binds values, locks authoritative state, commits after save and
   commitFailure = true;
   await assert.rejects(repository.transaction(unit => { unit.dirty = true; return 'not published'; }));
   assert.equal(events.at(-1), 'ROLLBACK');
+  commitFailure = false;
+  await repository.initialize({ ...initial, settings: {
+    payments: { secretKey: 'synthetic-only', webhookSecret: 'synthetic-only' },
+    smtp: { pass: 'synthetic-only' }
+  } });
+  const inserted = JSON.parse(events.find(e => e.query?.startsWith('INSERT INTO')).values[1]);
+  assert.deepEqual(inserted.users, []);
+  assert.equal(inserted.settings.payments.secretKey, '');
+  assert.equal(inserted.settings.payments.webhookSecret, '');
+  assert.equal(inserted.settings.smtp.pass, '');
   assert.throws(() => createRepository(sql, 'public; DROP SCHEMA public'));
 });

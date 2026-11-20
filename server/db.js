@@ -73,7 +73,7 @@ export function createRepository(sql, schema = 'public', controlSql = sql, conne
         const result = await work(unit);
         if (unit.dirty) {
           validateStore(unit.document);
-          await tx`UPDATE ${table('kanba_store')} SET doc=${serializeStore(unit.document)}::jsonb,updated_at=now() WHERE id=1`;
+          await tx`UPDATE ${table('kanba_store')} SET doc=${tx.json(JSON.parse(serializeStore(unit.document)))}::jsonb,updated_at=now() WHERE id=1`;
         }
         return result;
       });
@@ -107,7 +107,7 @@ export function createRepository(sql, schema = 'public', controlSql = sql, conne
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_media')} (name text PRIMARY KEY,mime text NOT NULL,size integer NOT NULL,data bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now())`;
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_rate_limits')} (key text PRIMARY KEY,window_start timestamptz NOT NULL,count integer NOT NULL)`;
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_oauth_states')} (state text PRIMARY KEY,next text NOT NULL,expires_at timestamptz NOT NULL,browser_hash text NOT NULL)`;
-        if (document) await tx`INSERT INTO ${table('kanba_store')} (id,doc) VALUES (1,${serializeStore(document)}::jsonb)`;
+        if (document) await tx`INSERT INTO ${table('kanba_store')} (id,doc) VALUES (1,${tx.json(JSON.parse(serializeStore(document)))}::jsonb)`;
       });
     },
     async close() { await Promise.all([sql.end({ timeout: 5 }), ...(controlSql !== sql ? [controlSql.end({ timeout: 5 })] : [])]); }
