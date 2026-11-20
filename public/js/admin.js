@@ -214,10 +214,17 @@
   }
 
   async function logout() {
+    const button = $('#logoutButton');
+    if (button?.disabled) return;
+    busy(button, true);
     try {
-      await api('/api/admin/logout', { method: 'POST' });
-    } catch { /* noop */ }
-    showLogin();
+      await api('/api/admin/logout', { method: 'POST', body: JSON.stringify({}) });
+      showLogin();
+    } catch (err) {
+      toast(err.message || 'No se pudo cerrar la sesión. Intenta de nuevo.');
+    } finally {
+      busy(button, false);
+    }
   }
 
   /* ====================================================================

@@ -163,8 +163,17 @@
           loginBtn.onclick = async (e) => {
             if (e.target.closest('.btn-logout-icon') || confirm('¿Deseas cerrar tu sesión?')) {
               e.preventDefault();
-              try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* noop */ }
-              window.location.reload();
+              if (loginBtn.dataset.loggingOut === 'true') return;
+              loginBtn.dataset.loggingOut = 'true';
+              try {
+                await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+                state.user = null;
+                window.location.reload();
+              } catch (err) {
+                toast(err.message || 'No se pudo cerrar la sesión. Intenta de nuevo.');
+              } finally {
+                delete loginBtn.dataset.loggingOut;
+              }
             }
           };
         } else {

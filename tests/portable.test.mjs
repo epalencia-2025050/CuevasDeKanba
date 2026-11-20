@@ -64,6 +64,15 @@ test('Google state survives app instances, is browser-bound and consumed once', 
   const replay = await first.app.request(callback, { headers: { Cookie: cookie } });
   assert.match(replay.headers.get('location'), /google_state/);
   assert.equal(exchanges, 2);
+  const userCookie = success.headers.getSetCookie().find(c => c.startsWith('kanba_user=')).split(';')[0];
+  const logout = await second.app.request('https://kanba.test/api/auth/logout', {
+    method: 'POST', headers: { Origin: 'https://kanba.test', 'Content-Type': 'application/json', Cookie: userCookie }, body: '{}'
+  });
+  assert.equal(logout.status, 200);
+  assert.match(logout.headers.get('set-cookie'), /^kanba_user=;.*Max-Age=0/);
+  assert.deepEqual(second.database.snapshot().userSessions, {});
+  const me = await first.app.request('https://kanba.test/api/auth/me', { headers: { Cookie: userCookie } });
+  assert.equal((await me.json()).authenticated, false);
 });
 
 test('production payment routes retain fail-closed behavior through Hono', async () => {
