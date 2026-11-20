@@ -3,7 +3,7 @@ import { serializeStore } from './runtime-secrets.js';
 import { validateStore } from './data-errors.js';
 
 // The only runtime SQL module. No Cloudflare imports or environment globals.
-export function createDatabase(config, { connectionString = config.DATABASE_URL, managedTransport = false } = {}) {
+export function createDatabase(config, { connectionString = config.DATABASE_URL, managedTransport = false, connectionSource = 'database_url' } = {}) {
   const url = new URL(connectionString);
   if (!['postgres:', 'postgresql:'].includes(url.protocol)) throw new Error('PostgreSQL URL required.');
   for (const [key, value] of url.searchParams) {
@@ -25,10 +25,10 @@ export function createDatabase(config, { connectionString = config.DATABASE_URL,
   // Independent counters/OAuth must commit even when the business transaction rolls back.
   // A separate pool prevents starvation when transactions hold all business connections.
   const controlSql = postgres(url.toString(), { ...options, max: 1 });
-  return createRepository(sql, config.DB_SCHEMA, controlSql);
+  return createRepository(sql, config.DB_SCHEMA, controlSql, connectionSource);
 }
 
-export function createRepository(sql, schema = 'public', controlSql = sql) {
+export function createRepository(sql, schema = 'public', controlSql = sql, connectionSource = 'database_url') {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(schema)) throw new Error('Invalid DB_SCHEMA.');
   const table = name => sql(`${schema}.${name}`);
   const media = client => ({
@@ -43,6 +43,27 @@ export function createRepository(sql, schema = 'public', controlSql = sql) {
   });
   return {
     ...media(sql),
+    // TEMPORARY: protected route only; no writes, locks or document logging.
+    async diagnoseStore() {
+      const [row] = await sql`SELECT doc, jsonb_typeof(doc) = 'object' AS sql_doc_is_object
+        FROM ${table('kanba_store')} WHERE id=1`;
+      const doc = row?.doc;
+      const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+      return {
+        connectionSource,
+        schemaMatchesExpected: schema === 'kanba_rel',
+        rowFound: Boolean(row),
+        sqlDocIsObject: row?.sql_doc_is_object === true,
+        jsDocType: doc === null ? 'null' : Array.isArray(doc) ? 'array' : typeof doc,
+        usersIsArray: Array.isArray(doc?.users),
+        metaIsObject: object(doc?.meta),
+        sessionsIsObject: object(doc?.sessions),
+        userSessionsIsObject: object(doc?.userSessions),
+        invalidUserCount: Array.isArray(doc?.users)
+          ? doc.users.filter(user => !object(user) || typeof user.email !== 'string').length : 0,
+        validationStage: 'read'
+      };
+    },
     async transaction(work) {
       return sql.begin(async tx => {
         await tx`SET LOCAL lock_timeout = '10s'`;

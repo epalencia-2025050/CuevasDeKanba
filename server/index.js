@@ -8,6 +8,7 @@ import { RequestSecurityError } from './request-security.js';
 import { notifyExpired, processEmailRetryQueue } from './mailer.js';
 import { safeErrorMessage } from './safe-errors.js';
 import { StoreInvalidError, isDatabaseUnavailable } from './data-errors.js';
+import { mountStoreDiagnostics } from './store-diagnostics.js';
 
 export function createApp(services) {
   const app = new Hono();
@@ -31,6 +32,7 @@ export function createApp(services) {
     return c.json({ error: { code: known ? error.code : 'server_error',
       message: known ? error.message : 'Ocurrió un error inesperado. Intenta de nuevo.' } }, known ? error.status : 500);
   });
+  mountStoreDiagnostics(app, services);
   app.get('/api/health', c => { c.header('Cache-Control', 'no-store'); return c.json({ ok: true, service: 'kanba' }); });
   app.all('/api/*', async c => {
     const req = webRequest(c.req.raw, services.network(c));
