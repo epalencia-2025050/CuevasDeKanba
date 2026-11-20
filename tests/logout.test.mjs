@@ -53,7 +53,7 @@ test('frontend logout waits for success, sends JSON and does not pretend success
     const end = source.indexOf(kind === 'site' ? '\n          };' : '\n  }', start) + (kind === 'site' ? 13 : 4);
     for (const success of [true, false]) {
       let finish, completed = 0, messages = 0;
-      const button = { dataset: {}, disabled: false };
+      const button = { dataset: {}, disabled: false, removeAttribute() {} };
       const context = vm.createContext({
         loginBtn: button, state: { user: { name: 'Synthetic' } },
         $: () => button, busy: (b, on) => { b.disabled = on; },

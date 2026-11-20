@@ -137,8 +137,8 @@
 
   async function loadAuth() {
     try {
-      const data = await api('/api/auth/me');
-      state.user = data?.user || null;
+      const data = await api('/api/auth/me', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+      state.user = data?.authenticated === true ? data.user || null : null;
     } catch {
       state.user = null;
     } finally {
@@ -147,6 +147,7 @@
       // Actualizar botón de sesión / perfil en la cabecera
       const loginBtn = document.querySelector('.header-actions .btn-login, .header-actions .user-profile-btn');
       if (loginBtn) {
+        loginBtn.removeAttribute('aria-busy');
         if (state.user) {
           const firstName = (state.user.name || state.user.email || 'Mi cuenta').split(' ')[0];
           const initial = firstName.charAt(0).toUpperCase();
@@ -168,6 +169,13 @@
               try {
                 await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
                 state.user = null;
+                loginBtn.className = 'link-subtle btn-login';
+                loginBtn.href = 'login.html';
+                loginBtn.textContent = 'Iniciar sesión';
+                loginBtn.removeAttribute('title');
+                loginBtn.onclick = null;
+                const badge = $('#authBadge');
+                if (badge) { badge.textContent = ''; badge.hidden = true; }
                 window.location.reload();
               } catch (err) {
                 toast(err.message || 'No se pudo cerrar la sesión. Intenta de nuevo.');
@@ -180,6 +188,7 @@
           loginBtn.className = 'link-subtle btn-login';
           loginBtn.href = 'login.html';
           loginBtn.textContent = 'Iniciar sesión';
+          loginBtn.removeAttribute('title');
           loginBtn.onclick = null;
         }
       }

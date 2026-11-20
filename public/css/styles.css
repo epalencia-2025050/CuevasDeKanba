@@ -218,6 +218,7 @@ svg { display: block; }
 .link-subtle:hover { color: var(--cream); }
 
 /* Botón de inicio de sesión interactivo (header) */
+.header-actions .auth-pending { min-inline-size: 100px; }
 .header-actions .btn-login {
   display: inline-flex;
   align-items: center;
