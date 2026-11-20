@@ -11,7 +11,6 @@ export function workerServices(env) {
   }
   const database = createDatabase(config, {
     connectionString: env.HYPERDRIVE?.connectionString || config.DATABASE_URL,
-    connectionSource: env.HYPERDRIVE?.connectionString ? 'hyperdrive' : 'database_url',
     managedTransport: Boolean(env.HYPERDRIVE)
   });
   return { config, database, fetch,

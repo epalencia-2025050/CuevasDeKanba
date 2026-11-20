@@ -16,7 +16,7 @@ export function createConfig(input = {}) {
     'GOOGLE_REDIRECT_URI', 'PAYMENTS_SECRET_KEY', 'PAYMENTS_WEBHOOK_SECRET', 'SMTP_HOST',
     'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'SMTP_FROM_NAME',
     'MAIL_API_URL', 'MAIL_API_TOKEN', 'PG_TLS_CA', 'PG_TLS_SERVERNAME', 'TRUSTED_PROXY_CIDRS',
-    'SMTP_TLS_CA', 'SMTP_TLS_CA_FILE', 'SMTP_TLS_SERVERNAME', 'STORE_DIAGNOSTICS_TOKEN'];
+    'SMTP_TLS_CA', 'SMTP_TLS_CA_FILE', 'SMTP_TLS_SERVERNAME'];
   const config = Object.fromEntries(keys.map(key => [key, input[key] === undefined ? '' : String(input[key])]));
   config.NODE_ENV ||= 'production';
   config.DB_SCHEMA ||= 'public';
