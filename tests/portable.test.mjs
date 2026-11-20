@@ -78,7 +78,7 @@ test('Google state survives app instances, is browser-bound and consumed once', 
 test('OAuth reports safe failure stages, consumes state once and rejects recursive next destinations', async () => {
   for (const [scenario, expected] of [
     ['invalid_client', 'google_client_rejected'], ['invalid_grant', 'google_code_rejected'],
-    ['network', 'google_token_exchange_failed'], ['bad_json', 'google_token_exchange_failed'],
+    ['network', 'google_token_network_failed'], ['bad_json', 'google_token_invalid_response'],
     ['profile', 'google_profile_failed'], ['unverified', 'google_email_unverified'],
     ['missing', 'google_code_missing'], ['success', null]
   ]) {

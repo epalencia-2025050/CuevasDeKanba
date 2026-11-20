@@ -230,6 +230,11 @@
 
   // Mensajes cuando el flujo de Google regresa con error.
   const GOOGLE_ERRORS = {
+    google_token_timeout: 'Google no respondió a tiempo. Inicia un nuevo intento.',
+    google_token_network_failed: 'No pudimos conectar con Google. Inicia un nuevo intento.',
+    google_token_unavailable: 'Google no está disponible temporalmente. Espera e inicia un nuevo intento.',
+    google_token_invalid_response: 'Recibimos una respuesta no válida de Google. Inicia un nuevo intento.',
+    google_token_request_rejected: 'Google rechazó la solicitud de acceso. Contacta al administrador.',
     google_code_missing: 'Google no devolvió el código de autorización. Inicia de nuevo desde el botón de Google.',
     google_client_rejected: 'Google rechazó la configuración de acceso de la aplicación. Contacta al administrador.',
     google_code_rejected: 'El código de Google expiró, ya fue utilizado o no corresponde a esta solicitud. Inicia un nuevo intento.',

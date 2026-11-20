@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { exchangeGoogleCode, GoogleTokenError } from './google-token.js';
 import { parseJsonObject } from './request-security.js';
 import { getRuntime } from './runtime.js';
 import { safeErrorMessage } from './safe-errors.js';
@@ -673,28 +674,18 @@ async function handleApi(req, res, url) {
     let failureCode = 'google_token_exchange_failed';
     let persisting = false;
     try {
-      const tokenRes = await getRuntime().fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-        body: new URLSearchParams({
+      const fetcher = getRuntime().fetch;
+      const accessToken = await exchangeGoogleCode(fetcher, {
           code,
           client_id: GOOGLE_CLIENT_ID,
           client_secret: GOOGLE_CLIENT_SECRET,
           redirect_uri: googleCallbackUri(req),
           grant_type: 'authorization_code'
-        }),
-        signal: AbortSignal.timeout(10000)
       });
-      const tokens = await tokenRes.json();
-      if (!tokenRes.ok || typeof tokens?.access_token !== 'string' || !tokens.access_token) {
-        if (tokens?.error === 'invalid_client') failureCode = 'google_client_rejected';
-        else if (tokens?.error === 'invalid_grant') failureCode = 'google_code_rejected';
-        throw new Error('OAuth token exchange failed.');
-      }
 
       failureCode = 'google_profile_failed';
-      const infoRes = await getRuntime().fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      const infoRes = await fetcher('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(10000)
       });
       const profile = await infoRes.json();
@@ -718,6 +709,7 @@ async function handleApi(req, res, url) {
       return sendRedirect(res, safeNextPath(entry.next));
     } catch (err) {
       if (persisting) throw err;
+      if (err instanceof GoogleTokenError) failureCode = err.code;
       console.error('[auth/google] no se pudo completar el inicio de sesión:', safeErrorMessage(err));
       return sendRedirect(res, googleLoginError(failureCode));
     }
