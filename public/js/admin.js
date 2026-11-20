@@ -128,7 +128,7 @@
   }
 
   function handleError(error) {
-    if (error?.status === 401) {
+    if (error?.status === 401 || error?.status === 403) {
       showLogin();
       return;
     }
@@ -140,20 +140,13 @@
      Sesión
      ==================================================================== */
 
-  function showLogin() {
-    closeModal();
-    const login = $('#loginScreen');
-    const shell = $('#adminShell');
-    if (login) login.hidden = false;
-    if (shell) shell.hidden = true;
-    closeSidebar();
-  }
+  function showLogin() { window.location.replace('/login.html'); }
 
   function showShell() {
-    const login = $('#loginScreen');
     const shell = $('#adminShell');
-    if (login) login.hidden = true;
     if (shell) shell.hidden = false;
+    const status = $('#adminLoadStatus');
+    if (status) status.hidden = true;
   }
 
   async function boot() {
@@ -170,46 +163,13 @@
         showLogin();
       }
     } catch (error) {
-      showLogin();
-      const box = $('#loginError');
+      if (error.status === 401) { showLogin(); return; }
+      if (error.status === 403) { window.location.replace('/cuenta.html'); return; }
+      const box = $('#adminLoadStatus');
       if (box) {
         box.hidden = false;
         box.textContent = 'No pudimos conectar con el servidor. Verifica que el servicio esté activo.';
       }
-    }
-  }
-
-  async function login(event) {
-    event.preventDefault();
-    const input = $('#loginPassword');
-    const button = $('#loginButton');
-    const error = $('#loginError');
-    if (error) {
-      error.hidden = true;
-      error.textContent = '';
-    }
-    const password = input?.value || '';
-    if (!password) {
-      if (error) {
-        error.hidden = false;
-        error.textContent = 'Ingresa la contraseña de administración.';
-      }
-      return;
-    }
-    busy(button, true);
-    try {
-      await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password }) });
-      if (input) input.value = '';
-      showShell();
-      navigate('overview');
-      toast('Bienvenido al panel de K’anba.');
-    } catch (err) {
-      if (error) {
-        error.hidden = false;
-        error.textContent = err.status === 401 ? 'Contraseña incorrecta. Inténtalo de nuevo.' : err.message;
-      }
-    } finally {
-      busy(button, false);
     }
   }
 
@@ -218,7 +178,7 @@
     if (button?.disabled) return;
     busy(button, true);
     try {
-      await api('/api/admin/logout', { method: 'POST', body: JSON.stringify({}) });
+      await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
       showLogin();
     } catch (err) {
       toast(err.message || 'No se pudo cerrar la sesión. Intenta de nuevo.');
@@ -2227,7 +2187,6 @@
      ==================================================================== */
 
   function bind() {
-    $('#loginForm')?.addEventListener('submit', login);
     $('#logoutButton')?.addEventListener('click', logout);
 
     $$('.nav-item').forEach((item) => {

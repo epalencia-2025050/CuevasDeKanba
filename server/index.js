@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { withRuntime } from './runtime.js';
 import { createHandlers } from './routes.js';
 import { webRequest, webReply, readWebBody, validateRequest } from './web-http.js';
-import { withStoreTransaction, getDb, AppError, closeExpiredHolds } from './store.js';
+import { withStoreTransaction, AppError, closeExpiredHolds } from './store.js';
 import { PaymentPolicyError } from './payment-policy.js';
 import { RequestSecurityError } from './request-security.js';
 import { notifyExpired, processEmailRetryQueue } from './mailer.js';
@@ -41,9 +41,6 @@ export function createApp(services) {
     }
     const reply = webReply();
     await withStoreTransaction(async () => {
-      if (services.config.NODE_ENV === 'production' && getDb().admin?.passwordPolicyVersion !== 2) {
-        throw new AppError('La credencial administrativa requiere rotación.', 503, 'configuration_required');
-      }
       await handlers.handleApi(req, reply, new URL(c.req.url));
     });
     c.header('Cache-Control', 'no-store');
@@ -62,6 +59,21 @@ export function createApp(services) {
     if (url.pathname === '/favicon.ico') url.pathname = '/assets/favicon.svg';
     else if (url.pathname === '/') url.pathname = '/index.html';
     else if (/^\/[a-z-]+$/.test(url.pathname)) url.pathname += '.html';
+    // Canonicalize before authorization and asset lookup, including encoded aliases.
+    let decoded;
+    try { decoded = decodeURIComponent(url.pathname); } catch { return c.text('Ruta invalida.', 400); }
+    if (decoded.includes('\\') || decoded.includes('%') || decoded.split('/').some(part => /[. ]$/.test(part))) return c.notFound();
+    const canonical = new URL(decoded, url.origin);
+    const view = canonical.pathname.toLowerCase().replace(/\/+$/, '');
+    if (['/admin', '/admin.html', '/cuenta', '/cuenta.html'].includes(view)) {
+      c.header('Cache-Control', 'no-store');
+      const req = webRequest(c.req.raw, services.network(c));
+      const session = await withStoreTransaction(() => handlers.getSessionUser(req));
+      if (!session) return c.redirect('/login.html', 302);
+      if (view.startsWith('/admin') && session.user.role !== 'admin') return c.text('Acceso restringido.', 403);
+      if (view.startsWith('/cuenta') && session.user.role === 'admin') return c.redirect(handlers.dashboardFor(session.user), 302);
+      url.pathname = view.startsWith('/admin') ? '/admin.html' : '/cuenta.html';
+    }
     const response = await services.assets(new Request(url, c.req.raw));
     const headers = new Headers(response.headers);
     headers.set('Cache-Control', url.pathname.endsWith('.html') ? 'no-store' : /\.(js|css)$/.test(url.pathname) ? 'no-cache' : 'public, max-age=604800');

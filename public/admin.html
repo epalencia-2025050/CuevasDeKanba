@@ -15,35 +15,7 @@
   <link rel="stylesheet" href="css/admin.css">
 </head>
 <body class="admin-body">
-  <!-- Acceso -->
-  <div class="login-screen" id="loginScreen">
-    <div class="login-glow" aria-hidden="true"></div>
-    <form class="login-card" id="loginForm" novalidate>
-      <div class="login-card-topbar">
-        <a class="btn-admin-back" href="index.html" aria-label="Regresar al inicio">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-          <span>Regresar al sitio</span>
-        </a>
-      </div>
-      <a class="brand brand-light login-brand" href="index.html" aria-label="K’anba, inicio">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 40 40"><path d="M5 35V20a15 15 0 0 1 30 0v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M20 31c-4.7-3.6-7-6.8-7-10.4a7 7 0 0 1 14 0c0 3.6-2.3 6.8-7 10.4Z" fill="currentColor"/><path d="M19 25.8c.1-2.9.8-4.7 1.8-6.3.6 2 1.9 3 2.4 5 .3 1.2-.4 2.5-2 2.8-1.6.3-2.3-.7-2.2-1.5Z" fill="#0e2420"/></svg>
-        </span>
-        <span class="brand-type"><strong>K’anba</strong><small>Cuevas Vivas</small></span>
-      </a>
-      <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Acceso restringido</p>
-      <h1>Administración</h1>
-      <p class="login-lead">Gestiona reservas, cupos, contenido, correos y reembolsos del sitio de K’anba.</p>
-      <label class="field field-dark">
-        <span>Contraseña</span>
-        <input type="password" id="loginPassword" name="password" autocomplete="current-password" placeholder="••••••••" required>
-      </label>
-      <div class="form-error" id="loginError" role="alert" hidden></div>
-      <button class="btn btn-primary login-submit" type="submit" id="loginButton">Entrar al panel</button>
-      <p class="login-note">Acceso restringido. La sesión se guarda en una cookie HttpOnly y puedes cambiar la contraseña desde Configuración.</p>
-    </form>
-  </div>
-
+  <p id="adminLoadStatus" role="status">Verificando acceso…</p>
   <!-- Panel -->
   <div class="admin-shell" id="adminShell" hidden>
     <aside class="admin-sidebar" id="adminSidebar" aria-label="Navegación administrativa">

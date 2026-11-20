@@ -17,10 +17,10 @@ test('user and admin logout revoke persisted token, expire matching cookie and c
   });
   for (const [kind, loginPath, credentials, storeKey, cookieName] of [
     ['auth', 'register', { name: 'Synthetic User', email: 'synthetic@example.invalid', password: 'synthetic-user-password' }, 'userSessions', 'kanba_user'],
-    ['admin', 'login', { password: config.ADMIN_PASSWORD }, 'sessions', 'kanba_session']
+    ['auth', 'login', { email: 'synthetic@example.invalid', password: 'synthetic-user-password' }, 'userSessions', 'kanba_user']
   ]) {
     const loggedIn = await post(`/api/${kind}/${loginPath}`, credentials);
-    assert.equal(loggedIn.status, kind === 'auth' ? 201 : 200);
+    assert.equal(loggedIn.status, loginPath === 'register' ? 201 : 200);
     const issued = loggedIn.headers.get('set-cookie');
     const cookie = issued.split(';')[0];
     assert(cookie.startsWith(cookieName + '='));
@@ -31,7 +31,7 @@ test('user and admin logout revoke persisted token, expire matching cookie and c
     assert(database.snapshot()[storeKey][token]);
     const loggedOut = await post(`/api/${kind}/logout`, {}, cookie);
     assert.equal(loggedOut.status, 200);
-    const expired = loggedOut.headers.get('set-cookie');
+    const expired = loggedOut.headers.getSetCookie().find(c => c.startsWith(cookieName + '='));
     assert(expired.startsWith(cookieName + '=;'));
     assert(expired.includes('Max-Age=0'));
     for (const attribute of ['Path=/', 'HttpOnly', 'SameSite=Strict', 'Secure']) {

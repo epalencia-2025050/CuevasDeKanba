@@ -50,14 +50,12 @@
 
   const panels = {
     user: $('#panel-user'),
-    register: $('#panel-register'),
-    admin: $('#panel-admin')
+    register: $('#panel-register')
   };
 
   const errors = {
     user: $('#userError'),
-    register: $('#regError'),
-    admin: $('#adminError')
+    register: $('#regError')
   };
 
   const successes = {
@@ -92,7 +90,6 @@
 
   function activePanel() {
     if (panels.register?.classList.contains('is-active')) return 'register';
-    if (panels.admin?.classList.contains('is-active')) return 'admin';
     return 'user';
   }
 
@@ -100,28 +97,16 @@
     Object.entries(panels).forEach(([key, panel]) => {
       if (panel) panel.classList.toggle('is-active', key === name);
     });
-    document.querySelectorAll('.login-tab').forEach((tab) => {
-      const active =
-        (name === 'admin' && tab.dataset.role === 'admin') ||
-        ((name === 'user' || name === 'register') && tab.dataset.role === 'user');
-      tab.classList.toggle('is-active', active);
-      tab.setAttribute('aria-selected', String(active));
-    });
     setBusy(false);
     clearErrors();
   }
 
-  function setRole(nextRole) {
-    setActivePanel(nextRole === 'admin' ? 'admin' : 'user');
-  }
-
-  function redirectAfterLogin() {
-    const target = nextInput?.value;
-    if (target && target.startsWith('/') && !target.startsWith('//') && !target.includes('\\') && new URL(target, window.location.origin).origin === window.location.origin) {
-      window.location.href = target;
-      return;
+  function redirectAfterLogin(data) {
+    const target = data?.redirectTo;
+    if (typeof target === 'string' && target.startsWith('/') && !target.startsWith('//') &&
+        !target.includes('\\') && new URL(target, window.location.origin).origin === window.location.origin) {
+      window.location.replace(target);
     }
-    window.location.href = '/';
   }
 
   function setBusy(on) {
@@ -157,8 +142,7 @@
       setBusy(false);
       return;
     }
-    await api('/api/auth/login', { email, password });
-    redirectAfterLogin();
+    redirectAfterLogin(await api('/api/auth/login', { email, password }));
   }
 
   async function submitRegister() {
@@ -170,31 +154,7 @@
       setBusy(false);
       return;
     }
-    await api('/api/auth/register', { name, email, password });
-
-    // Redirigir al panel de iniciar sesión con correo prellenado y mensaje
-    setActivePanel('user');
-    setBusy(false);
-    const userEmailInput = $('#userEmail');
-    if (userEmailInput) {
-      userEmailInput.value = email;
-    }
-    const userPwInput = $('#userPassword');
-    if (userPwInput) {
-      userPwInput.value = '';
-      userPwInput.focus();
-    }
-    showSuccess(successes.user, '¡Cuenta creada con éxito! Ingresa tu contraseña para iniciar sesión.');
-  }
-
-  async function submitAdmin() {
-    const password = $('#adminPassword')?.value || '';
-    if (!password) {
-      showError(errors.admin, 'Ingresa la contraseña de administración.');
-      return;
-    }
-    await api('/api/admin/login', { password });
-    window.location.href = '/admin.html';
+    redirectAfterLogin(await api('/api/auth/register', { name, email, password }));
   }
 
   form.addEventListener('submit', async (event) => {
@@ -204,18 +164,12 @@
     setBusy(true);
     try {
       if (panel === 'register') await submitRegister();
-      else if (panel === 'admin') await submitAdmin();
       else await submitUser();
     } catch (err) {
       if (panel === 'register') showError(errors.register, err.message);
-      else if (panel === 'admin') showError(errors.admin, err.message);
       else showError(errors.user, err.message);
       setBusy(false);
     }
-  });
-
-  document.querySelectorAll('.login-tab').forEach((tab) => {
-    tab.addEventListener('click', () => setRole(tab.dataset.role));
   });
 
   $('#goRegister')?.addEventListener('click', () => setActivePanel('register'));
@@ -226,7 +180,6 @@
     else window.location.href = '/';
   });
 
-  if (params.get('role') === 'admin') setRole('admin');
 
   // Mensajes cuando el flujo de Google regresa con error.
   const GOOGLE_ERRORS = {
@@ -260,7 +213,7 @@
       if (res.ok) {
         const data = await res.json();
         if (data && data.authenticated && data.user) {
-          redirectAfterLogin();
+          redirectAfterLogin(data);
         }
       }
     } catch { /* noop */ }

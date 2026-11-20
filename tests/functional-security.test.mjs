@@ -35,17 +35,6 @@ test('request security rejects cross-origin mutations, insecure production and p
   assert.deepEqual(parseJsonObject('{"safe":true}'), { safe: true });
 });
 
-test('admin session lookup rejects prototype properties and expired legacy sessions', () => {
-  const fixture = { sessions: {}, users: [] };
-  const context = vm.createContext({ getDb: () => fixture, saveDb: () => {}, Date, ADMIN_IDLE_MS: 1800000, SESSION_COOKIE: 'kanba_session' });
-  const s = source('server/routes.js');
-  vm.runInContext(extract(s, 'parseCookies') + '\n' + extract(s, 'getSession'), context);
-  for (const token of ['__proto__', 'constructor', 'toString', '%E0%A4%A']) assert.equal(context.getSession({ headers: { cookie: 'kanba_session=' + token } }), null);
-  fixture.sessions.legacy = { role: 'admin', createdAt: new Date(Date.now() - 3600000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString() };
-  assert.equal(context.getSession({ headers: { cookie: 'kanba_session=legacy' } }), null);
-  assert(!Object.hasOwn(fixture.sessions, 'legacy'));
-});
-
 function sharedPool(initial) {
   let document = structuredClone(initial), lock = Promise.resolve(), commitFailure = false;
   const queries = [];
@@ -185,7 +174,7 @@ test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sa
     assert.equal((await call('POST', `/api/reservations/${code}/cancel`, { token, email: 'owner@example.invalid', reason: 'synthetic reason' }, other.cookie)).status, 403);
     assert.equal((await call('POST', `/api/reservations/${code}/cancel`, { token, email: 'owner@example.invalid', reason: 'synthetic reason' }, owner.cookie)).status, 200);
     assert.equal((await call('GET', `/api/reservations/${code}?token=${token}`)).status, 403);
-    const admin = await call('POST', '/api/admin/login', { password: env.ADMIN_PASSWORD });
+    const admin = await call('POST', '/api/auth/login', { email: 'admin@example.invalid', password: env.ADMIN_PASSWORD });
     assert.equal(admin.status, 200);
     const mail = await call('GET', '/api/admin/emails', undefined, admin.cookie);
     assert(mail.body.emails.every(record => record.status === 'queued'));

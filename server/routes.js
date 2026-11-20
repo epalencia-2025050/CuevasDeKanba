@@ -27,14 +27,10 @@ export function createHandlers(config) {
 const NODE_ENV = config.NODE_ENV;
 const SESSION_COOKIE = 'kanba_session';
 const USER_COOKIE = 'kanba_user';
-const SESSION_MS = 8 * 3600 * 1000;
 // Inicio de sesión con Google (OAuth 2.0). Configurar en Render o en .env.
 const GOOGLE_CLIENT_ID = config.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = config.GOOGLE_CLIENT_SECRET || '';
 const GOOGLE_REDIRECT_URI = config.GOOGLE_REDIRECT_URI || '';
-const ADMIN_IDLE_MS = Number(config.ADMIN_SESSION_IDLE_MS) > 0
-  ? Number(config.ADMIN_SESSION_IDLE_MS)
-  : 30 * 60 * 1000;
 const MAX_BODY = 64 * 1024;
 
 function isSecureRequest(req) { return req.secure; }
@@ -167,36 +163,17 @@ function googleLoginError(code) {
 /* ------------------------------------------------------------------ */
 
 function getSession(req) {
-  const token = parseCookies(req)[SESSION_COOKIE];
-  if (!token) return null;
-  const d = getDb();
-  const session = d.sessions[token];
-  if (!Object.hasOwn(d.sessions, token) || !session || session.role !== 'admin') return null;
-  if (session.userId && !d.users.some(user => user.id === session.userId && user.role === 'admin')) return null;
-  const now = Date.now();
-  if (!Number.isFinite(Date.parse(session.expiresAt)) || Date.parse(session.expiresAt) <= now) {
-    delete d.sessions[token];
-    saveDb();
-    return null;
-  }
-  const lastSeen = Date.parse(session.lastSeenAt || session.createdAt);
-  if (!Number.isFinite(lastSeen) || now - lastSeen > ADMIN_IDLE_MS) {
-    delete d.sessions[token];
-    saveDb();
-    return null;
-  }
-  if (now - lastSeen > 60 * 1000) {
-    session.lastSeenAt = new Date(now).toISOString();
-    saveDb();
-  }
-  return { token, ...session };
+  const session = getSessionUser(req);
+  return session?.user.role === 'admin' ? session : null;
 }
 
 function requireAdmin(req) {
-  const session = getSession(req);
-  if (!session) throw new AppError('Inicia sesión para continuar.', 401, 'unauthorized');
+  const session = requireUser(req);
+  if (session.user.role !== 'admin') throw new AppError('Acceso restringido.', 403, 'forbidden');
   return session;
 }
+
+function dashboardFor(user) { return user.role === 'admin' ? '/admin.html' : '/cuenta.html'; }
 
 function getSessionUser(req) {
   const token = parseCookies(req)[USER_COOKIE];
@@ -625,8 +602,15 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, {
       ok: true,
       authenticated: Boolean(session),
-      user: session ? session.user : null
+      user: session ? session.user : null, redirectTo: session ? dashboardFor(session.user) : null
     });
+  }
+
+  if (method === 'GET' && p === '/api/auth/dashboard') {
+    const session = requireUser(req);
+    return sendJson(res, 200, { user: session.user, redirectTo: dashboardFor(session.user),
+      reservations: getDb().reservations.filter(r => r.userId === session.user.id)
+        .map(r => ({ code: r.code, tourName: r.tourName, date: r.date, time: r.time, status: r.status })) });
   }
 
   /* ---------- Inicio de sesión con Google (OAuth 2.0) ---------- */
@@ -706,7 +690,7 @@ async function handleApi(req, res, url) {
 
       const session = createUserSession(user);
       setUserCookie(res, req, session.token, session.expiresAt);
-      return sendRedirect(res, safeNextPath(entry.next));
+      return sendRedirect(res, dashboardFor(session.user));
     } catch (err) {
       if (persisting) throw err;
       if (err instanceof GoogleTokenError) failureCode = err.code;
@@ -721,7 +705,7 @@ async function handleApi(req, res, url) {
     const user = registerUser(body);
     const login = loginUser(user.email, body.password);
     setUserCookie(res, req, login.token, login.expiresAt);
-    return sendJson(res, 201, { ok: true, user: login.user });
+    return sendJson(res, 201, { ok: true, user: login.user, redirectTo: dashboardFor(login.user) });
   }
 
   if (method === 'POST' && p === '/api/auth/login') {
@@ -731,12 +715,15 @@ async function handleApi(req, res, url) {
     logoutUser(parseCookies(req)[USER_COOKIE] || '');
     const login = loginUser(String(body.email || ''), String(body.password || ''));
     setUserCookie(res, req, login.token, login.expiresAt);
-    return sendJson(res, 200, { ok: true, user: login.user });
+    return sendJson(res, 200, { ok: true, user: login.user, redirectTo: dashboardFor(login.user) });
   }
 
   if (method === 'POST' && p === '/api/auth/logout') {
     const token = parseCookies(req)[USER_COOKIE] || '';
     logoutUser(token);
+    const legacy = parseCookies(req)[SESSION_COOKIE];
+    if (legacy && Object.hasOwn(getDb().sessions, legacy)) { delete getDb().sessions[legacy]; saveDb(); }
+    res.setHeader('Set-Cookie', cookieBase(req, SESSION_COOKIE, '', 0));
     res.setHeader('Set-Cookie', cookieBase(req, USER_COOKIE, '', 0));
     return sendJson(res, 200, { ok: true });
   }
@@ -954,55 +941,12 @@ async function handleApi(req, res, url) {
   }
 
   /* ---------- Admin auth ---------- */
-  if (method === 'POST' && p === '/api/admin/login') {
-    await rateLimit(`login:${clientIp(req)}`, 8, 10 * 60000);
-    const body = await readJson(req);
-    const password = String(body.password || '');
-    if (password.length > 256) throw new AppError('Credenciales incorrectas.', 401, 'invalid_credentials');
-    await rateLimit('admin-account-login', 30, 10 * 60000);
-    const email = String(body.email || '').trim().toLowerCase();
-    const adminUser = email ? findUserByEmail(email) : null;
-    const ok = adminUser
-      ? adminUser.role === 'admin' && verifyPassword(password, adminUser.password)
-      : verifyPassword(password, getDb().admin.password);
-    if (!ok) {
-      throw new AppError('Credenciales de administración incorrectas.', 401, 'invalid_credentials');
-    }
-    const previousToken = parseCookies(req)[SESSION_COOKIE];
-    if (previousToken && Object.hasOwn(getDb().sessions, previousToken)) delete getDb().sessions[previousToken];
-    const token = randomToken();
-    const createdAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + SESSION_MS).toISOString();
-    getDb().sessions[token] = {
-      createdAt,
-      lastSeenAt: createdAt,
-      expiresAt,
-      ip: clientIp(req),
-      role: 'admin',
-      userId: adminUser ? adminUser.id : null
-    };
-    saveDb();
-    res.setHeader('Set-Cookie', cookieBase(req, SESSION_COOKIE, token, Math.floor(SESSION_MS / 1000)));
-    return sendJson(res, 200, { ok: true, expiresAt });
-  }
-
-  if (method === 'POST' && p === '/api/admin/logout') {
-    const session = getSession(req);
-    if (session) {
-      delete getDb().sessions[session.token];
-      saveDb();
-    }
-    res.setHeader('Set-Cookie', cookieBase(req, SESSION_COOKIE, '', 0));
-    return sendJson(res, 200, { ok: true });
-  }
-
-  if (method === 'GET' && p === '/api/admin/me') {
-    const session = getSession(req);
-    return sendJson(res, 200, { ok: true, authenticated: Boolean(session), admin: session ? { name: 'Administración K’anba', expiresAt: session.expiresAt } : null });
-  }
-
-  /* ---------- Admin (protected) ---------- */
+  if (p === '/api/admin/login') throw new AppError('Usa el acceso unificado.', 410, 'login_retired');
   if (p.startsWith('/api/admin/')) requireAdmin(req);
+  if (method === 'GET' && p === '/api/admin/me') {
+    const session = requireAdmin(req);
+    return sendJson(res, 200, { ok: true, authenticated: true, admin: { name: session.user.name, expiresAt: session.expiresAt } });
+  }
 
   if (method === 'GET' && p === '/api/admin/overview') {
     return sendJson(res, 200, adminOverview());
@@ -1228,7 +1172,7 @@ async function handleApi(req, res, url) {
   if (method === 'POST' && p === '/api/admin/password') {
     const body = await readJson(req);
     const currentSession = getSession(req);
-    const passwordOwner = currentSession?.userId ? getDb().users.find(user => user.id === currentSession.userId) : getDb().admin;
+    const passwordOwner = currentSession?.userId ? getDb().users.find(user => user.id === currentSession.userId) : null;
     if (!passwordOwner || !verifyPassword(String(body.current || ''), passwordOwner.password)) {
       throw new AppError('La contraseña actual no es correcta.', 401, 'invalid_credentials');
     }
@@ -1238,8 +1182,8 @@ async function handleApi(req, res, url) {
     passwordOwner.passwordPolicyVersion = 2;
     passwordOwner.updatedAt = new Date().toISOString();
     if (currentSession?.userId) for (const [token, session] of Object.entries(getDb().userSessions)) if (session.userId === currentSession.userId) delete getDb().userSessions[token];
-    getDb().sessions = {};
-    res.setHeader('Set-Cookie', cookieBase(req, SESSION_COOKIE, '', 0));
+    // Legacy admin sessions are no longer accepted.
+    res.setHeader('Set-Cookie', cookieBase(req, USER_COOKIE, '', 0));
     saveDb();
     return sendJson(res, 200, { ok: true, sessionsRevoked: true });
   }
@@ -1268,5 +1212,5 @@ async function handleApi(req, res, url) {
 }
 
 
-return { handleApi, securityHeaders, cleanupSessions };
+return { handleApi, securityHeaders, cleanupSessions, getSessionUser, requireAdmin, dashboardFor };
 }

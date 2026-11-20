@@ -965,14 +965,17 @@ export function getUserSession(token) {
   const d = getDb();
   const session = d.userSessions?.[token];
   if (!Object.hasOwn(d.userSessions, token) || !session) return null;
+  const user = findUserById(session.userId);
+  if (!user || !['user', 'admin'].includes(user.role)) return null;
   const now = Date.now();
   if (!Number.isFinite(Date.parse(session.expiresAt)) || Date.parse(session.expiresAt) <= now) {
     delete d.userSessions[token];
     saveDb();
     return null;
   }
-  const idleMs = Number(getConfig().USER_SESSION_IDLE_MS) > 0
-    ? Number(getConfig().USER_SESSION_IDLE_MS)
+  const configuredIdle = user.role === 'admin' ? getConfig().ADMIN_SESSION_IDLE_MS : getConfig().USER_SESSION_IDLE_MS;
+  const idleMs = Number(configuredIdle) > 0
+    ? Number(configuredIdle)
     : 30 * 60 * 1000;
   const lastSeen = Date.parse(session.lastSeenAt || session.createdAt);
   if (!Number.isFinite(lastSeen) || now - lastSeen > idleMs) {
@@ -985,8 +988,6 @@ export function getUserSession(token) {
     session.lastSeenAt = new Date(now).toISOString();
     saveDb();
   }
-  const user = findUserById(session.userId);
-  if (!user) return null;
   return { token, ...session, user: publicUser(user) };
 }
 
