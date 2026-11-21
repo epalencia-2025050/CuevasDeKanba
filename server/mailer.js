@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { getDb, saveDb, withStoreTransaction, formatDateLong, dateToEpoch } from './store.js';
 const sendSmtpMail = message => getRuntime().sendMail(message);
 
-const money = (n, currency = 'GTQ') =>
+const money = (n, currency = getDb().settings.booking.currency) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(n || 0));
 
 function baseUrl() {
@@ -187,7 +187,7 @@ function receiptEmailCard(r) {
       </table>
 
       <div style="margin-top:16px;padding-top:12px;border-top:1px dashed #d6cebe;font-family:Arial,Helvetica,sans-serif;font-size:8.5px;line-height:1.6;color:#85968d;">
-        <strong>Notas:</strong> Los precios se expresan en quetzales guatemaltecos (GTQ) e incluyen impuestos. Este documento es un comprobante de pago demostrativo. Para cualquier gestión o consulta escribe a reservas@kanba.gt con el número de reserva.
+        <strong>Notas:</strong> Los precios se expresan en ${esc(r.currency)} e incluyen impuestos. Este documento es un comprobante de pago demostrativo. Para cualquier gestión o consulta escribe a reservas@kanba.gt con el número de reserva.
       </div>
     </div>
   `;

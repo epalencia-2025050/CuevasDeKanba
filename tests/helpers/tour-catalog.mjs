@@ -151,6 +151,7 @@ export function defaultSettings() {
       email: 'reservas@kanba.gt'
     },
     booking: {
+      pendingLimit: 3, lastSeatsPercent: 20,
       holdMinutes: 20,
       advanceDays: 120,
       cutoffHours: 2,

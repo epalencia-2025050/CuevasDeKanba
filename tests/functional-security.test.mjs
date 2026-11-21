@@ -196,6 +196,8 @@ test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sa
     assert.equal((await call('PUT', '/api/admin/tours/synthetic-tour', { ...tour.body.tour, endDate: '2029-01-01' }, admin.cookie)).status, 422);
     assert.equal((await call('PUT', '/api/admin/tours/synthetic-tour', { ...tour.body.tour, price: 15 }, admin.cookie)).status, 200);
     assert.equal((await call('DELETE', '/api/admin/tours/synthetic-tour', {}, admin.cookie)).status, 200);
+    assert.equal((await call('PUT', '/api/admin/settings', { booking: { lastSeatsPercent: 101 } }, admin.cookie)).status, 422);
+    assert.equal((await call('PUT', '/api/admin/settings', { booking: { pendingLimit: 5, lastSeatsPercent: 30 } }, admin.cookie)).status, 200);
     const closure = await call('POST', '/api/admin/closures', { date: slot.date, tourId: 'all', reason: 'Synthetic closure' }, admin.cookie);
     assert.equal(closure.status, 201);
     assert.equal((await call('DELETE', '/api/admin/closures/' + closure.body.closure.id, {}, admin.cookie)).status, 200);
@@ -208,8 +210,12 @@ test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sa
     const selected = site.body.tours.find(t => t.id === slot.tourId);
     const participants = Math.min(selected.capacity, selected.maxParticipants);
     const attempts = Math.floor(selected.capacity / participants) + 1;
+    const participantNames = Array.from({ length: participants }, (_, index) => 'Viajero ' + (index + 1));
+    assert.equal((await call('POST', '/api/reservations', {
+      ...booking, requestId: crypto.randomUUID(), participants, participantNames: []
+    }, owner.cookie)).status, 422);
     const simultaneous = await Promise.all(Array.from({ length: attempts }, (_, index) => call('POST', '/api/reservations', {
-      ...booking, requestId: crypto.randomUUID(), participants
+      ...booking, requestId: crypto.randomUUID(), participants, participantNames
     }, index % 2 ? owner.cookie : other.cookie)));
     assert.equal(simultaneous.filter(result => result.status === 201).length, Math.floor(selected.capacity / participants));
     assert(simultaneous.some(result => result.status === 409));

@@ -70,7 +70,7 @@
     return data;
   }
 
-  const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
+  const money = value => state.site?.settings?.booking?.currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency: state.site.settings.booking.currency }).format(value) : String(value);
 
   function dateObj(date) {
     return new Date(`${date}T12:00:00`);
@@ -232,7 +232,7 @@
     availability: [],
     date: null,
     time: null,
-    pax: 2,
+    pax: 0,
     step: 1,
     gallery: [],
     galleryFilter: 'all',
@@ -612,12 +612,12 @@
       tour_id: tour.id,
       tour_name: tour.name,
       price: Number(tour.price) || 0,
-      currency: 'GTQ'
+      currency: state.site?.settings?.booking?.currency
     });
     state.tourId = tourId;
     state.date = null;
     state.time = null;
-    state.pax = Math.min(Math.max(tour.minParticipants || 1, 2), tour.maxParticipants || 12);
+    state.pax = Number(tour.minParticipants);
     renderTourOptions();
     updatePaxControls();
     renderSummary();
@@ -628,16 +628,30 @@
     }
 
     try {
-      const data = await api(`/api/availability?tour=${encodeURIComponent(tourId)}&days=30`);
-      state.availability = data.daysList || [];
+      const availableDays = [];
+      let from = state.site.today;
+      const horizon = state.site.settings.booking.advanceDays + 1;
+      while (availableDays.length < horizon) {
+        const days = Math.min(45, horizon - availableDays.length);
+        const data = await api(`/api/availability?tour=${encodeURIComponent(tourId)}&days=${days}&from=${from}`);
+        if (state.tourId !== tourId) return;
+        const page = data.daysList || [];
+        availableDays.push(...page);
+        if (page.length < days) break;
+        const next = new Date(page[page.length - 1].date + 'T00:00:00Z');
+        next.setUTCDate(next.getUTCDate() + 1);
+        from = next.toISOString().slice(0, 10);
+      }
+      state.availability = availableDays;
       renderDates();
       const first = state.availability.find(dayHasSeats);
       if (first) selectDate(first.date);
       else {
         renderTimes();
-        showAvailabilityNote('No hay cupos disponibles para este tour en los próximos 30 días. Escríbenos y buscamos una alternativa.');
+        showAvailabilityNote('No hay cupos disponibles para este tour en el periodo de venta. Escríbenos y buscamos una alternativa.');
       }
     } catch (error) {
+      if (state.tourId !== tourId) return;
       state.availability = [];
       renderDates();
       renderTimes();
@@ -647,7 +661,7 @@
 
   function dayHasSeats(day) {
     const entry = (day.tours || []).find((item) => item.tourId === state.tourId);
-    return Boolean(entry && entry.departures.some((departure) => departure.left > 0 && !['past', 'closed', 'soldout'].includes(departure.status)));
+    return Boolean(entry && entry.departures.some((departure) => departure.left >= currentTour().minParticipants && !['past', 'closed', 'soldout'].includes(departure.status)));
   }
 
   function tourEntryFor(date) {
@@ -728,7 +742,7 @@
       return;
     }
     entry.departures.forEach((departure) => {
-      const disabled = departure.left <= 0 || ['past', 'closed', 'soldout'].includes(departure.status);
+      const disabled = departure.left < currentTour().minParticipants || ['past', 'closed', 'soldout'].includes(departure.status);
       let label = `${departure.left} cupos`;
       if (departure.status === 'past') label = 'Ya pasó';
       else if (departure.status === 'closed') label = 'Cerrado';
@@ -755,7 +769,7 @@
     const departure = entry?.departures.find((item) => item.time === time);
     const tour = currentTour();
     if (departure && tour) {
-      const max = Math.max(1, Math.min(tour.maxParticipants || 12, departure.left));
+      const max = Math.max(1, Math.min(tour.maxParticipants, departure.left));
       if (state.pax > max) state.pax = max;
     }
     renderTimes();
@@ -799,12 +813,12 @@
     const help = $('#participantHelp');
     if (!tour || !output) return;
     const left = selectedDepartureLeft();
-    const max = Math.max(1, Math.min(tour.maxParticipants || 12, left === null ? tour.maxParticipants || 12 : left));
+    const max = Math.max(1, Math.min(tour.maxParticipants, left === null ? tour.maxParticipants : left));
     const min = Math.max(1, Math.min(tour.minParticipants || 1, max));
     state.pax = Math.min(Math.max(state.pax, min), max);
     output.textContent = String(state.pax);
-    if (minus) minus.disabled = state.pax <= min;
-    if (plus) plus.disabled = state.pax >= max;
+    if (minus) minus.disabled = left === null || state.pax <= min;
+    if (plus) plus.disabled = left === null || state.pax >= max;
     if (help) {
       help.textContent = left !== null
         ? `Este horario tiene ${left} cupos libres. Este tour admite de ${tour.minParticipants} a ${tour.maxParticipants} personas.`
@@ -851,10 +865,21 @@
     setText('summaryTourMeta', `${tour.duration} · ${tour.difficulty}`);
     setText('summaryDate', state.date ? formatShort(state.date) : 'Por elegir');
     setText('summaryTime', state.time || 'Por elegir');
+    updatePaxControls();
+    const names = $('#participantNames');
+    if (names) {
+      while (names.children.length > state.pax - 1 && names.lastElementChild) names.lastElementChild.remove();
+      while (names.children.length < state.pax - 1) {
+        const number = names.children.length + 2;
+        names.append(el('label', { className: 'field' }, [
+          el('span', { text: 'Nombre del participante ' + number }),
+          el('input', { attrs: { name: 'guestName', required: true, maxlength: 120 } })
+        ]));
+      }
+    }
     setText('summaryPax', String(state.pax));
     setText('summaryUnit', `${money(tour.price)} × ${state.pax}`);
     setText('summaryTotal', money(tour.price * state.pax));
-    updatePaxControls();
   }
 
   /* ------------------------------------------------------------------ */
@@ -917,7 +942,7 @@
       const tour = currentTour();
       if (!tour) return;
       const left = selectedDepartureLeft();
-      const max = Math.max(1, Math.min(tour.maxParticipants || 12, left === null ? tour.maxParticipants || 12 : left));
+      const max = Math.max(1, Math.min(tour.maxParticipants, left === null ? tour.maxParticipants : left));
       state.pax = Math.min(max, state.pax + 1);
       renderSummary();
       updateToStep3();
@@ -1033,7 +1058,9 @@
         acceptPolicies: form.elements.acceptPolicies.checked,
         acceptTerms: form.elements.acceptTerms.checked
       };
-      const requestFingerprint = JSON.stringify({ tourId: tour.id, date: state.date, time: state.time, participants: state.pax, customer });
+      const participantNames = [customer.name, ...Array.from(form.querySelectorAll('[name="guestName"]'), input => input.value.trim())];
+      if (participantNames.some(name => !name)) { toast('Completa el nombre de cada participante.'); return; }
+      const requestFingerprint = JSON.stringify({ tourId: tour.id, date: state.date, time: state.time, participants: state.pax, customer, participantNames });
       if (state.bookingFingerprint !== requestFingerprint) {
         state.bookingFingerprint = requestFingerprint;
         state.bookingRequestId = crypto.randomUUID();
@@ -1047,7 +1074,7 @@
             tourId: tour.id,
             date: state.date,
             time: state.time,
-            participants: state.pax,
+            participants: state.pax, participantNames,
             customer
           })
         });
@@ -1060,7 +1087,7 @@
       }
       sessionStorage.setItem(`kanba:${data.code}`, JSON.stringify({ code: data.code, token: data.token }));
       track('reservation_created', {
-        currency: 'GTQ',
+        currency: state.site?.settings?.booking?.currency,
         value: Number(tour.price) * state.pax,
         transaction_id: data.code,
         items: [{

@@ -15,7 +15,7 @@
     paying: false
   };
 
-  const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
+  const money = (value, currency) => currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(value) : Number(value).toFixed(2);
 
   const trackBooking = (event, reservation) => {
     try { window.kanbaTrackBooking?.(event, reservation); } catch { /* analítica no disponible */ }
@@ -137,7 +137,7 @@
       ['Fecha', reservation.dateLong],
       ['Horario', reservation.time],
       ['Participantes', String(reservation.participants)],
-      ['Precio unitario', money(reservation.unitPrice)],
+      ['Precio unitario', money(reservation.unitPrice, reservation.currency)],
       ['Titular', reservation.customer?.name || '—'],
       ['Correo', reservation.customer?.email || '—']
     ];
@@ -157,7 +157,7 @@
     const label = document.createElement('span');
     label.textContent = 'Total';
     const amount = document.createElement('strong');
-    amount.textContent = money(reservation.total);
+    amount.textContent = money(reservation.total, reservation.currency);
     total.append(label, amount);
     content.append(total);
 
@@ -358,7 +358,7 @@
       }
     } catch { /* almacenamiento no disponible */ }
     const amount = $('#payAmount');
-    if (amount) amount.textContent = `Pagar ${money(reservation.total)}`;
+    if (amount) amount.textContent = `Pagar ${money(reservation.total, reservation.currency)}`;
     startCountdown(reservation.secondsLeft || 0);
     if ((reservation.secondsLeft || 0) <= 0) {
       expirePayment();

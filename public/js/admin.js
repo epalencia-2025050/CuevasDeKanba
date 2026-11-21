@@ -62,7 +62,7 @@
   ];
 
   const clone = (value) => JSON.parse(JSON.stringify(value));
-  const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
+  const money = (value, currency = state.settings?.booking?.currency || state.overview?.currency) => currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(value) : Number(value).toFixed(2);
   const getPath = (obj, path) => path.split('.').reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
   const setPath = (obj, path, value) => {
     const parts = path.split('.');
@@ -939,7 +939,11 @@
       grid.append(el('div', 'empty-state', 'No hay tours. Crea el primero con “Nuevo tour”.'));
       return;
     }
-    state.tours.forEach((tour) => {
+    const filter = $('[data-tour-filter][aria-pressed="true"]')?.dataset.tourFilter;
+    const tours = state.tours.filter(tour => filter === 'active' ? tour.active !== false
+      : filter === 'archived' ? tour.active === false : filter === 'featured' ? tour.featured : true);
+    if (!tours.length) grid.append(el('div', 'empty-state', 'No hay tours con este filtro.'));
+    tours.forEach((tour) => {
       const card = el('article', 'tour-admin-card');
       const media = el('div', 'tour-admin-media');
       if (tour.image) {
@@ -1036,7 +1040,6 @@
       formField('Fecha de finalización', 'endDate', tour?.endDate, { type: 'date' }),
       formField('Hora de inicio', 'startTime', tour?.startTime, { type: 'time' }),
       formField('Hora de finalización', 'endTime', tour?.endTime, { type: 'time' }),
-      formField('No incluye (uno por línea)', 'notIncludes', (tour?.notIncludes || []).join('\n'), { textarea: true, full: true, rows: 3 })
     );
 
     const extras = el('fieldset', 'tour-editor-section full');
@@ -1089,7 +1092,12 @@
       } catch (error) { handleError(error); }
       finally { picker.disabled = save.disabled = false; }
     };
-    media.append(picker, preview);
+    picker.className = 'tour-file-input';
+    const upload = el('label', 'tour-upload');
+    const fileName = el('span', 'tour-file-name', image ? 'Cambiar imagen' : 'Seleccionar imagen');
+    upload.append(picker, fileName);
+    picker.addEventListener('change', () => { fileName.textContent = picker.files[0]?.name || 'Seleccionar imagen'; });
+    media.append(upload, preview);
     grid.append(extras, media);
     const daysWrap = el('div', 'field full');
     daysWrap.append(el('span', '', 'Días de operación'));
@@ -1162,7 +1170,6 @@
         description: form.elements.namedItem('description')?.value.trim(),
         includes: $$('input[name="includeItem"]', form).map(input => input.value.trim()).filter(Boolean),
         ...Object.fromEntries(['startDate', 'endDate', 'startTime', 'endTime'].map(key => [key, form.elements.namedItem(key).value])),
-        notIncludes: (form.elements.namedItem('notIncludes')?.value || '').split('\n').map((t) => t.trim()).filter(Boolean),
         days: $$('input[name="days"]:checked', form).map((input) => Number(input.value)),
         active: form.elements.namedItem('active')?.checked !== false,
         featured: Boolean(form.elements.namedItem('featured')?.checked)
@@ -1182,6 +1189,18 @@
       if (!Number.isFinite(data.price) || data.price <= 0) {
         toast('El precio debe ser mayor a cero.');
         return;
+      }
+      const fieldError = (key, message) => {
+        const field = form.elements.namedItem(key);
+        field.setCustomValidity(message);
+        field.reportValidity();
+        field.setCustomValidity('');
+      };
+      if (data.endDate && data.startDate && data.endDate < data.startDate) return fieldError('endDate', 'Elige una fecha igual o posterior al inicio.');
+      if (data.endTime && data.startTime && data.endTime < data.startTime) return fieldError('endTime', 'La hora final debe ser igual o posterior al inicio.');
+      for (const time of data.times) {
+        if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return fieldError('times', 'Usa el formato HH:MM para cada salida.');
+        if ((data.startTime && time < data.startTime) || (data.endTime && time > data.endTime)) return fieldError('times', 'La salida ' + time + ' queda fuera del horario de operación.');
       }
       busy(save, true);
       try {
@@ -2113,6 +2132,8 @@
       settingsField(booking, 'booking.advanceDays', 'Venta anticipada (días)', { type: 'number', min: 7, max: 365 });
       settingsField(booking, 'booking.cutoffHours', 'Corte previo (horas)', { type: 'number', min: 0 });
       settingsField(booking, 'booking.exchangeRate', 'Tipo de cambio GTQ/USD', { type: 'number', min: 1, step: '0.01' });
+      settingsField(booking, 'booking.pendingLimit', 'Reservas pendientes por cuenta', { type: 'number', min: 1 });
+      settingsField(booking, 'booking.lastSeatsPercent', 'Avisar últimos cupos al alcanzar (%)', { type: 'number', min: 0, max: 100, step: 'any' });
       settingsField(booking, 'booking.currency', 'Moneda');
       settingsField(booking, 'booking.maxSeatsPerOrder', 'Máximo de asientos por orden', { type: 'number', min: 1, max: 60 });
     }
@@ -2255,6 +2276,11 @@
     });
 
     $('#menuToggle')?.addEventListener('click', openSidebar);
+    const filters = $$('[data-tour-filter]');
+    filters.forEach(button => button.addEventListener('click', () => {
+      filters.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      renderTours();
+    }));
     $('#sidebarClose')?.addEventListener('click', closeSidebar);
     $('#sidebarScrim')?.addEventListener('click', closeSidebar);
 

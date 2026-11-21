@@ -17,7 +17,7 @@
     loaded: false
   };
 
-  const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
+  const money = (value, currency) => currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(value) : Number(value).toFixed(2);
 
   const STATUS_LABEL = {
     pending_payment: 'Pago pendiente',
@@ -197,8 +197,8 @@
         detail('Fecha', reservation.dateLong || reservation.date),
         detail('Horario', reservation.time),
         detail('Participantes', `${reservation.participants}`),
-        detail('Precio unitario', money(reservation.unitPrice)),
-        detail('Total', money(reservation.total)),
+        detail('Precio unitario', money(reservation.unitPrice, reservation.currency)),
+        detail('Total', money(reservation.total, reservation.currency)),
         detail('Punto de encuentro', reservation.tour?.meetingPoint || 'Recepción K’anba'),
         detail('Titular', reservation.customer?.name),
         detail('Correo', reservation.customer?.email),
@@ -213,7 +213,7 @@
         );
       }
       if (reservation.refund) {
-        grid.append(detail('Reembolso', `${money(reservation.refund.amount)} · ${refundLabel(reservation.refund.status)}`));
+        grid.append(detail('Reembolso', `${money(reservation.refund.amount, reservation.currency)} · ${refundLabel(reservation.refund.status)}`));
       }
     }
 
@@ -228,7 +228,7 @@
     if (p.status === 'refund_pending') return 'Reembolso pendiente';
     if (p.status === 'refunded') return 'Reembolsado';
     if (p.status === 'paid' || reservation.paidAt) {
-      return `${p.brand || 'Tarjeta'} •••• ${p.last4 || '—'} · ${money(p.amount ?? reservation.total)}`;
+      return `${p.brand || 'Tarjeta'} •••• ${p.last4 || '—'} · ${money(p.amount ?? reservation.total, reservation.currency)}`;
     }
     if (p.status === 'expired') return 'Pago no completado';
     if (p.attempts) return `Pago pendiente · ${p.attempts} ${p.attempts === 1 ? 'intento' : 'intentos'}`;
@@ -317,9 +317,9 @@
         if (hours === null) {
           text.textContent = 'El reembolso se calcula según la anticipación con la que canceles.';
         } else if (hours >= 72) {
-          text.textContent = `Faltan más de 72 horas: corresponde un reembolso del 100% (${money(reservation.total)}). La solicitud queda registrada y el reembolso se procesa al medio de pago original.`;
+          text.textContent = `Faltan más de 72 horas: corresponde un reembolso del 100% (${money(reservation.total, reservation.currency)}). La solicitud queda registrada y el reembolso se procesa al medio de pago original.`;
         } else if (hours >= 24) {
-          text.textContent = `Faltan entre 72 y 24 horas: corresponde un reembolso del 50% (${money(reservation.total * 0.5)}). La solicitud queda registrada y el reembolso se procesa al medio de pago original.`;
+          text.textContent = `Faltan entre 72 y 24 horas: corresponde un reembolso del 50% (${money(reservation.total * 0.5, reservation.currency)}). La solicitud queda registrada y el reembolso se procesa al medio de pago original.`;
         } else {
           text.textContent = 'Faltan menos de 24 horas: según la política no aplica reembolso. La solicitud de cancelación quedará registrada.';
         }
@@ -541,7 +541,7 @@
       render(data.reservation);
       const amount = Number(data.refund?.amount || 0);
       toast(amount > 0
-        ? `Cancelación registrada. Reembolso de ${money(amount)} en proceso.`
+        ? `Cancelación registrada. Reembolso de ${money(amount, state.reservation.currency)} en proceso.`
         : 'Cancelación registrada. No aplica reembolso según la política.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {

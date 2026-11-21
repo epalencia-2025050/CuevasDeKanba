@@ -7,7 +7,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   let context = { code: '', token: '' };
 
-  const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
+  const money = (value, currency) => currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(value) : Number(value).toFixed(2);
 
   function text(id, value) {
     const node = document.getElementById(id);
@@ -100,16 +100,16 @@
       const qty = document.createElement('td');
       qty.textContent = String(reservation.participants || 1);
       const unit = document.createElement('td');
-      unit.textContent = money(reservation.unitPrice);
+      unit.textContent = money(reservation.unitPrice, reservation.currency);
       const amount = document.createElement('td');
-      amount.textContent = money(reservation.total);
+      amount.textContent = money(reservation.total, reservation.currency);
       row.append(desc, qty, unit, amount);
       lines.append(row);
     }
 
-    text('subtotal', money(breakdown.subtotal));
-    text('tax', money(breakdown.tax));
-    text('total', money(breakdown.total));
+    text('subtotal', money(breakdown.subtotal, reservation.currency));
+    text('tax', money(breakdown.tax, reservation.currency));
+    text('total', money(breakdown.total, reservation.currency));
     text('paymentMethod', payment.brand ? `${payment.brand} ****${payment.last4 || ''}` : 'Tarjeta');
     text('paymentReference', payment.reference || '—');
     text('paymentProvider', payment.provider || 'KanbaPay Sandbox');

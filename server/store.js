@@ -326,13 +326,24 @@ export function seatsTaken(tourId, date, time) {
     .reduce((sum, r) => sum + Number(r.participants || 0), 0);
 }
 
+export function validateBookingPolicy(policy, status = 503) {
+  const valid = policy && /^[A-Z]{3}$/.test(policy.currency)
+    && Number.isInteger(policy.pendingLimit) && policy.pendingLimit > 0
+    && Number.isFinite(policy.lastSeatsPercent) && policy.lastSeatsPercent >= 0 && policy.lastSeatsPercent <= 100
+    && Number.isFinite(policy.cutoffHours) && policy.cutoffHours >= 0
+    && Number.isInteger(policy.advanceDays) && policy.advanceDays >= 0
+    && Number.isFinite(policy.holdMinutes) && policy.holdMinutes > 0;
+  if (!valid) throw new AppError('Revisa la moneda, los límites y los plazos en Configuración comercial.', status, 'booking_policy_invalid');
+  return policy;
+}
+
 export function departureStatus(tour, date, time, taken) {
   const d = getDb();
   const left = Math.max(0, tour.capacity - taken);
   if (isClosed(date, tour.id)) return { left: 0, status: 'closed' };
-  if (dateToEpoch(date, time) <= Date.now() + Number(d.settings.booking.cutoffHours || 0) * 3600000) return { left: 0, status: 'past' };
+  if (dateToEpoch(date, time) <= Date.now() + d.settings.booking.cutoffHours * 3600000) return { left: 0, status: 'past' };
   if (left <= 0) return { left: 0, status: 'soldout' };
-  if (left <= Math.max(1, Math.round(tour.capacity * 0.2))) return { left, status: 'last' };
+  if (left <= tour.capacity * d.settings.booking.lastSeatsPercent / 100) return { left, status: 'last' };
   return { left, status: 'open' };
 }
 
@@ -344,9 +355,12 @@ function operatesOn(tour, date, time) {
 export function buildAvailability({ tourId = null, from = todayISO(), days = 21 } = {}) {
   const d = getDb();
   const tours = d.tours.filter((t) => t.active !== false && (!tourId || t.id === tourId));
+  const policy = validateBookingPolicy(d.settings.booking);
+  const lastDate = isoAddDaysFrom(todayISO(), policy.advanceDays);
   const out = [];
   for (let i = 0; i < days; i++) {
     const date = isoAddDaysFrom(from, i);
+    if (date > lastDate) break;
     const dow = dayOfWeek(date);
     const tourDays = [];
     for (const tour of tours) {
@@ -454,13 +468,14 @@ export function createReservation(input, { user = null } = {}) {
   if (!user?.id) throw new AppError('Inicia sesión para reservar.', 401, 'login_required');
   const requestId = String(input.requestId || '');
   if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new AppError('Identificador de solicitud inválido.', 422, 'request_id_required');
-  const requestDigest = crypto.createHash('sha256').update(JSON.stringify({ tourId: input.tourId, date: input.date, time: input.time, participants: Number(input.participants), customer: input.customer })).digest('hex');
+  const requestDigest = crypto.createHash('sha256').update(JSON.stringify({ tourId: input.tourId, date: input.date, time: input.time, participants: Number(input.participants), customer: input.customer, participantNames: input.participantNames })).digest('hex');
   const previous = d.reservations.find(r => r.userId === user.id && r.requestId === requestId);
   if (previous) {
     if (previous.requestDigest !== requestDigest) throw new AppError('La solicitud ya se usó con otros datos.', 409, 'idempotency_conflict');
     return previous;
   }
-  if (d.reservations.filter(r => r.userId === user.id && r.status === 'pending_payment' && Date.parse(r.holdExpiresAt) > Date.now()).length >= 3) throw new AppError('Ya tienes tres reservas pendientes de pago.', 429, 'pending_limit');
+  const policy = validateBookingPolicy(d.settings.booking);
+  if (d.reservations.filter(r => r.userId === user.id && r.status === 'pending_payment' && Date.parse(r.holdExpiresAt) > Date.now()).length >= policy.pendingLimit) throw new AppError('Alcanzaste el límite de reservas pendientes.', 429, 'pending_limit');
   const tour = findTour(input.tourId);
   const date = String(input.date || '');
   const time = String(input.time || '');
@@ -471,12 +486,17 @@ export function createReservation(input, { user = null } = {}) {
   if (!Number.isInteger(participants) || participants < tour.minParticipants || participants > tour.maxParticipants) {
     throw new AppError(`Este tour admite entre ${tour.minParticipants} y ${tour.maxParticipants} participantes.`, 422, 'validation');
   }
+  const participantNames = input.participantNames ?? (participants === 1 ? [input.customer?.name] : []);
+  if (!Array.isArray(participantNames) || participantNames.length !== participants ||
+      participantNames.some(name => typeof name !== 'string' || !name.trim() || name.length > 120)) {
+    throw new AppError('Indica el nombre de cada participante.', 422, 'validation');
+  }
   if (!operatesOn(tour,date,time) || !tour.days.includes(dayOfWeek(date))) throw new AppError('El tour no opera en esa fecha.', 422, 'unavailable');
   if (isClosed(date, tour.id)) throw new AppError('La cueva está cerrada en esa fecha por mantenimiento o clima.', 409, 'closed');
-  if (dateToEpoch(date, time) <= Date.now() + Number(d.settings.booking.cutoffHours || 0) * 3600000) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
+  if (dateToEpoch(date, time) <= Date.now() + d.settings.booking.cutoffHours * 3600000) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
 
-  const maxAdvance = Number(d.settings.booking.advanceDays || 120);
-  if (dateToEpoch(date, '23:59') > Date.now() + (maxAdvance + 1) * 86400000) {
+  const maxAdvance = policy.advanceDays;
+  if (date > isoAddDaysFrom(todayISO(), maxAdvance)) {
     throw new AppError(`Solo se puede reservar con ${maxAdvance} días de anticipación.`, 409, 'too_far');
   }
 
@@ -487,7 +507,7 @@ export function createReservation(input, { user = null } = {}) {
   }
 
   const customer = validateCustomer(input.customer || {});
-  const holdMinutes = Number(d.settings.booking.holdMinutes || 20);
+  const holdMinutes = policy.holdMinutes;
   const total = Math.round(tour.price * participants * 100) / 100;
   const now = Date.now();
   const code = nextReservationCode();
@@ -508,8 +528,9 @@ export function createReservation(input, { user = null } = {}) {
     participants,
     unitPrice: tour.price,
     total,
-    currency: d.settings.booking.currency || 'GTQ',
+    currency: policy.currency,
     customer,
+    participantNames: participantNames.map(name => name.trim()),
     status: 'pending_payment',
     userId: user ? user.id : null,
     createdByRole: user ? user.role : null,
@@ -522,7 +543,7 @@ export function createReservation(input, { user = null } = {}) {
       provider: d.settings.payments.provider,
       status: 'requires_payment',
       amount: total,
-      currency: d.settings.booking.currency || 'GTQ',
+      currency: policy.currency,
       last4: null,
       brand: null,
       reference: null,

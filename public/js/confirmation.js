@@ -7,7 +7,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const state = { code: '', token: '', reservation: null };
 
-  const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
+  const money = (value, currency) => currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(value) : Number(value).toFixed(2);
 
   async function api(url) {
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -38,7 +38,7 @@
       ['Fecha', reservation.dateLong || '—'],
       ['Horario', reservation.time || '—'],
       ['Participantes', `${reservation.participants} ${reservation.participants === 1 ? 'persona' : 'personas'}`],
-      ['Total pagado', money(reservation.total)],
+      ['Total pagado', money(reservation.total, reservation.currency)],
       ['Punto de encuentro', tour.meetingPoint || 'Recepción K’anba'],
       ['Titular', reservation.customer?.name || '—'],
       ['Correo', reservation.customer?.email || '—']

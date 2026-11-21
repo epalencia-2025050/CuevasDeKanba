@@ -5,7 +5,7 @@ import { getRuntime } from './runtime.js';
 import { safeErrorMessage } from './safe-errors.js';
 import { readWebBody } from './web-http.js';
 import {
-  rotateReservationToken, saveUploadToDb,
+  validateBookingPolicy, rotateReservationToken, saveUploadToDb,
   getDb, saveDb, publicSite, publicTour, buildAvailability, occupancyFor,
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
@@ -415,7 +415,7 @@ function cancelReservation(reservation, { reason, by = 'customer', refundAmount 
   reservation.history.push({
     at: now,
     type: 'cancelled',
-    label: `Cancelación (${by === 'admin' ? 'administración' : 'cliente'}) · reembolso Q${amount.toFixed(2)}`
+    label: `Cancelación (${by === 'admin' ? 'administración' : 'cliente'}) · reembolso ${reservation.currency} ${amount.toFixed(2)}`
   });
   if (reservation.payment?.status === 'paid') reservation.payment.status = amount > 0 ? 'refund_pending' : 'paid';
 
@@ -428,7 +428,7 @@ function cancelReservation(reservation, { reason, by = 'customer', refundAmount 
       customerName: reservation.customer.name,
       customerEmail: reservation.customer.email,
       amount,
-      currency: reservation.currency || 'GTQ',
+      currency: reservation.currency || d.settings.booking.currency,
       percent,
       method: refundMethod,
       status: 'pending',
@@ -482,6 +482,7 @@ function adminOverview() {
     .map((r) => reservationView(r, { admin: true }));
 
   return {
+    currency: d.settings.booking.currency,
     kpis: {
       revenue,
       confirmed: confirmed.length,
@@ -520,7 +521,7 @@ function cleanTour(input, existing = null) {
   if (!id) throw new AppError('Identificador inválido.', 422, 'validation');
   const times = (Array.isArray(input.times) ? input.times : String(input.times || '').split(','))
     .map((t) => String(t).trim())
-    .filter((t) => /^\d{2}:\d{2}$/.test(t));
+    .filter(Boolean);
   if (!times.length) throw new AppError('Agrega al menos un horario válido (HH:MM).', 422, 'validation');
   const days = (Array.isArray(input.days) ? input.days : [])
     .map(Number).filter((d) => d >= 0 && d <= 6);
@@ -535,10 +536,17 @@ function cleanTour(input, existing = null) {
   const { startDate = '', endDate = '', startTime = '', endTime = '' } = input;
   const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
   const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
-  if ([startDate,endDate].some(v => v && !validDate(v)) || [startTime,endTime,...times].some(v => v && !validTime(v))
-      || (startDate && endDate && startDate > endDate) || (startTime && endTime && startTime > endTime)
-      || times.some(t => (startTime && t < startTime) || (endTime && t > endTime))) {
-    throw new AppError('Revisa el periodo de operación y los horarios de salida.', 422, 'validation');
+  const reject = message => { throw new AppError(message, 422, 'validation'); };
+  if (startDate && !validDate(startDate)) reject('Fecha de inicio inválida.');
+  if (endDate && !validDate(endDate)) reject('Fecha de finalización inválida.');
+  if (startDate && endDate && endDate < startDate) reject('La fecha final debe ser igual o posterior a la inicial.');
+  if (startTime && !validTime(startTime)) reject('Hora de inicio inválida.');
+  if (endTime && !validTime(endTime)) reject('Hora de finalización inválida.');
+  if (startTime && endTime && endTime < startTime) reject('La hora final debe ser igual o posterior a la inicial.');
+  for (const time of times) {
+    if (!validTime(time)) reject('Horarios de salida: usa HH:MM para cada salida.');
+    if (startTime && time < startTime) reject('Hay una salida anterior a la hora de inicio.');
+    if (endTime && time > endTime) reject('Hay una salida posterior a la hora final.');
   }
   const { longDescription, ...previous } = existing || {};
   return {
@@ -559,7 +567,6 @@ function cleanTour(input, existing = null) {
     minAge: Math.max(0, Number(input.minAge) || 0),
     meetingPoint: String(input.meetingPoint || '').trim().slice(0, 160),
     includes: (Array.isArray(input.includes) ? input.includes : String(input.includes || '').split('\n')).map((x) => String(x).trim()).filter(Boolean).slice(0, 20),
-    notIncludes: (Array.isArray(input.notIncludes) ? input.notIncludes : String(input.notIncludes || '').split('\n')).map((x) => String(x).trim()).filter(Boolean).slice(0, 20),
     image: String(input.image || '').trim(),
     active: input.active !== false && input.active !== 'false',
     featured: input.featured === true || input.featured === 'true',
@@ -1050,7 +1057,7 @@ async function handleApi(req, res, url) {
     if (r) {
       r.refund = { id: refund.id, amount: refund.amount, status: 'processed', reference: refund.reference, processedAt: refund.processedAt };
       if (r.payment) r.payment.status = 'refunded';
-      r.history.push({ at: refund.processedAt, type: 'refunded', label: `Reembolso procesado · ${refund.reference} · Q${Number(refund.amount).toFixed(2)}` });
+      r.history.push({ at: refund.processedAt, type: 'refunded', label: `Reembolso procesado · ${refund.reference} · ${refund.currency} ${Number(refund.amount).toFixed(2)}` });
       saveDb();
       try { await notifyRefund(r, refund); } catch (err) { console.error(safeErrorMessage(err)); }
     } else {
@@ -1173,10 +1180,7 @@ async function handleApi(req, res, url) {
     const d = getDb();
     const incoming = body.settings || body;
     d.settings = mergeAdminSettings(d.settings, incoming);
-    d.settings.booking.holdMinutes = Math.max(5, Math.min(120, Number(d.settings.booking.holdMinutes) || 20));
-    d.settings.booking.advanceDays = Math.max(7, Math.min(365, Number(d.settings.booking.advanceDays) || 120));
-    d.settings.booking.cutoffHours = Math.max(0, Number(d.settings.booking.cutoffHours) || 0);
-    d.settings.booking.exchangeRate = Math.max(1, Number(d.settings.booking.exchangeRate) || 7.8);
+    validateBookingPolicy(d.settings.booking, 422);
     saveDb();
     return sendJson(res, 200, { ok: true, settings: publicAdminSettings(d.settings) });
   }

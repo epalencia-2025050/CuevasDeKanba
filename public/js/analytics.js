@@ -8,7 +8,6 @@
 
   window.dataLayer = window.dataLayer || [];
 
-  const CURRENCY = 'GTQ';
   const INTERNAL_HOSTS = [window.location.hostname, 'cuevas-de-kanba.onrender.com'];
 
   /**
@@ -45,7 +44,7 @@
    */
   function trackBooking(event, reservation = {}) {
     const payload = {
-      currency: CURRENCY,
+      currency: reservation.currency,
       value: money(reservation.total),
       items: [itemFromBooking(reservation)]
     };

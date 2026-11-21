@@ -49,4 +49,11 @@ VALUES (1, jsonb_build_object(
   'settings', '{"business":{},"booking":{},"payments":{},"smtp":{}}'::jsonb
 ))
 ON CONFLICT (id) DO NOTHING;
+-- Completar solo las claves ausentes. El UPDATE toma el bloqueo de la fila.
+UPDATE kanba_rel.kanba_store
+SET doc = jsonb_set(doc, '{settings,booking}',
+  '{"pendingLimit":3,"lastSeatsPercent":20,"currency":"GTQ","advanceDays":120,"cutoffHours":2,"holdMinutes":20}'::jsonb
+  || (doc #> '{settings,booking}'))
+WHERE id = 1 AND jsonb_typeof(doc #> '{settings,booking}') = 'object'
+  AND NOT ((doc #> '{settings,booking}') ?& ARRAY['pendingLimit','lastSeatsPercent','currency','advanceDays','cutoffHours','holdMinutes']);
 COMMIT;

@@ -75,7 +75,7 @@
         <div class="section-head center light">
           <p class="eyebrow eyebrow-light center"><span class="line"></span><span id="bookingKicker">Reserva en línea</span><span class="line"></span></p>
           <h2 class="display" id="bookingTitle">Tu lugar bajo tierra</h2>
-          <p id="bookingText">Selecciona experiencia, fecha, horario y participantes. Bloqueamos tus cupos durante 20 minutos mientras completas el pago.</p>
+          <p id="bookingText">Selecciona experiencia, fecha, horario y participantes.</p>
         </div>
 
         <div class="booking-layout">
@@ -121,6 +121,18 @@
                 <div class="time-slots" id="timeSlots"></div>
               </div>
               <div class="inline-note" id="availabilityNote" hidden></div>
+              <div class="participants-row">
+                <div>
+                  <h4>¿Cuántos son?</h4>
+                  <p id="participantHelp">Selecciona una salida.</p>
+                </div>
+                <div class="stepper" role="group" aria-label="Cantidad de participantes">
+                  <button type="button" id="minusPax" aria-label="Quitar participante">−</button>
+                  <output id="paxValue" aria-live="polite">&mdash;</output>
+                  <button type="button" id="plusPax" aria-label="Agregar participante">+</button>
+                </div>
+              </div>
+
               <div class="wizard-actions">
                 <button class="btn btn-ghost-dark" data-prev="1" type="button">Atrás</button>
                 <button class="btn btn-primary" data-next="3" id="toStep3" data-requires-auth type="button" disabled>Agregar participantes <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
@@ -133,19 +145,8 @@
                 <p>El titular recibirá la confirmación y el comprobante por correo.</p>
               </div>
 
-              <div class="participants-row">
-                <div>
-                  <h4>¿Cuántos son?</h4>
-                  <p id="participantHelp">Máximo 12 por grupo.</p>
-                </div>
-                <div class="stepper" role="group" aria-label="Cantidad de participantes">
-                  <button type="button" id="minusPax" aria-label="Quitar participante">−</button>
-                  <output id="paxValue" aria-live="polite">2</output>
-                  <button type="button" id="plusPax" aria-label="Agregar participante">+</button>
-                </div>
-              </div>
-
               <form class="booking-form" id="bookingForm" novalidate>
+                <div id="participantNames"></div>
                 <div class="form-grid">
                   <label class="field">
                     <span>Nombre completo <em>*</em></span>
@@ -195,7 +196,7 @@
                     <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
                   </button>
                 </div>
-                <p class="form-legal">Al continuar se crea una reserva con número único y un enlace de pago privado. El cupo se libera automáticamente si no pagas en <strong id="holdMinutesText">20</strong> minutos.</p>
+                <p class="form-legal">Al continuar se crea una reserva con número único y un enlace de pago privado. El cupo se libera automáticamente si no pagas en <strong id="holdMinutesText"></strong> minutos.</p>
               </form>
             </div>
           </div>
@@ -229,12 +230,12 @@
                 <div><dt>Precio unitario</dt><dd id="summaryUnit">—</dd></div>
               </dl>
               <div class="summary-total">
-                <div><span>Total a pagar</span><small>Impuestos incluidos · GTQ</small></div>
-                <strong id="summaryTotal">Q0.00</strong>
+                <div><span>Total a pagar</span><small>Impuestos incluidos</small></div>
+                <strong id="summaryTotal">&mdash;</strong>
               </div>
               <div class="summary-hold">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                <span>Al continuar, tus cupos quedan bloqueados <strong>20 minutos</strong>.</span>
+                <span>Al continuar, tus cupos quedan bloqueados <strong></strong> minutos.</span>
               </div>
             </div>
             <div class="summary-foot">
