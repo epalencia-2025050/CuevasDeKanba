@@ -1029,7 +1029,6 @@
       formField('Duración (minutos)', 'durationMinutes', tour?.durationMinutes ?? '', { type: 'number', min: 30, max: 720 }),
       formField('Precio (Q)', 'price', tour?.price || '', { type: 'number', min: 1, step: '0.01' }),
       formField('Cupo por salida', 'capacity', tour?.capacity ?? '', { type: 'number', min: 1, max: 60 }),
-      formField('Mínimo de participantes', 'minParticipants', tour?.minParticipants ?? '', { type: 'number', min: 1, max: 60 }),
       formField('Máximo de participantes', 'maxParticipants', tour?.maxParticipants ?? tour?.capacity ?? '', { type: 'number', min: 1, max: 60 }),
       formField('Dificultad', 'difficulty', tour?.difficulty || '', { placeholder: 'Moderada · agua al pecho' }),
       formField('Edad mínima', 'minAge', tour?.minAge || 0, { type: 'number', min: 0, max: 99 }),
@@ -1044,7 +1043,7 @@
 
     const extras = el('fieldset', 'tour-editor-section full');
     extras.append(el('legend', '', 'Incluye'));
-    const addItem = el('button', 'btn btn-outline', 'Agregar elemento');
+    const addItem = el('button', 'tour-add-item', 'Agregar elemento');
     addItem.type = 'button';
     const rows = el('div', 'tour-items');
     function addRow(value) {
@@ -1160,7 +1159,6 @@
         durationMinutes: Number(form.elements.namedItem('durationMinutes')?.value),
         price: Number(form.elements.namedItem('price')?.value),
         capacity: Number(form.elements.namedItem('capacity')?.value),
-        minParticipants: Number(form.elements.namedItem('minParticipants')?.value),
         maxParticipants: Number(form.elements.namedItem('maxParticipants')?.value),
         difficulty: form.elements.namedItem('difficulty')?.value.trim(),
         minAge: Number(form.elements.namedItem('minAge')?.value) || 0,

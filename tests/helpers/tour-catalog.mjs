@@ -12,7 +12,7 @@ export function defaultTours() {
       times: ['08:30', '10:30', '13:00'],
       days: [0, 1, 2, 3, 4, 5, 6],
       capacity: 12,
-      minParticipants: 1,
+      minParticipants: 15,
       maxParticipants: 12,
       difficulty: 'Aventura moderada',
       minAge: 8,

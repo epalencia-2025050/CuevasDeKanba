@@ -109,9 +109,9 @@
             <div class="wizard-panel" data-panel="2" hidden>
               <div class="panel-head">
                 <h3>2. Fecha y horario</h3>
-                <p>Próximos 30 días. Los días tachados no tienen cupo para este tour.</p>
+                <p>Elige un día de operación y consulta los cupos de cada salida.</p>
               </div>
-              <div class="date-strip-wrap">
+              <div class="date-strip-wrap" hidden>
                 <button class="strip-arrow" id="datePrev" aria-label="Fechas anteriores" type="button"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
                 <div class="date-strip" id="dateStrip" role="listbox" aria-label="Fechas disponibles"></div>
                 <button class="strip-arrow" id="dateNext" aria-label="Fechas siguientes" type="button"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
@@ -120,7 +120,7 @@
                 <h4>Horarios disponibles <span id="selectedDateLabel"></span></h4>
                 <div class="time-slots" id="timeSlots"></div>
               </div>
-              <div class="inline-note" id="availabilityNote" hidden></div>
+              <div class="inline-note" role="status" id="availabilityNote" hidden></div>
               <div class="participants-row">
                 <div>
                   <h4>¿Cuántos son?</h4>

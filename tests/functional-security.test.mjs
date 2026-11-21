@@ -189,7 +189,7 @@ test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sa
     assert.equal((await call('PUT', '/api/admin/settings', { settings: { payments: { secretKey: 'SYNTHETIC_SECRET' } } }, admin.cookie)).status, 422);
     const content = await call('GET', '/api/admin/content', undefined, admin.cookie);
     assert.equal((await call('PUT', '/api/admin/content', { content: content.body.content }, admin.cookie)).status, 200);
-    const tour = await call('POST', '/api/admin/tours', { id: 'synthetic-tour', name: 'Synthetic Tour', price: 10, capacity: 4, minParticipants: 1, maxParticipants: 4, durationMinutes: 60, days: [1], includes: ['Synthetic item'], startDate: '2030-01-01', endDate: '2030-01-31', startTime: '09:00', endTime: '13:00', times: ['12:00'] }, admin.cookie);
+    const tour = await call('POST', '/api/admin/tours', { id: 'synthetic-tour', name: 'Synthetic Tour', price: 10, capacity: 4, maxParticipants: 4, durationMinutes: 60, days: [1], includes: ['Synthetic item'], startDate: '2030-01-01', endDate: '2030-01-31', startTime: '09:00', endTime: '13:00', times: ['12:00'] }, admin.cookie);
     assert.equal(tour.status, 201);
     assert.equal(tour.body.tour.endDate, '2030-01-31');
     assert.deepEqual(tour.body.tour.includes, ['Synthetic item']);

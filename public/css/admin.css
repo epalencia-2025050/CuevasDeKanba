@@ -571,3 +571,6 @@
 .tour-filter-bar { display: flex; flex-wrap: wrap; gap: .4rem; margin: .75rem 0 1.25rem; }
 .tour-filter-bar button { background: #fbfcf8; border: 1px solid #c4d2c3; border-radius: 99px; padding: .5rem .9rem; color: #214d3b; cursor: pointer; font: inherit; font-size: .83rem; }
 .tour-filter-bar button[aria-pressed=true] { color: white; background: #214d3b; }
+.admin-body .tour-add-item { appearance: none; place-self: start; display: inline-flex; align-items: center; height: auto; min-height: 2rem; width: fit-content; max-width: 100%; background: #edf5ec; border: 1px solid #9eb6a0; border-radius: .45rem; color: #214535; cursor: pointer; padding: .35rem .7rem; font: 600 .85rem/1.2 var(--sans); }
+.tour-add-item:hover { background: #dbead6; }
+.availability-help { margin: .5rem 0 1.2rem; color: #466252; line-height: 1.5; }

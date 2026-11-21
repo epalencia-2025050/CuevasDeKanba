@@ -178,7 +178,7 @@
         <!-- Disponibilidad -->
         <section class="admin-view" id="view-availability" data-view-panel="availability" hidden>
           <div class="toolbar">
-            <label class="inline-field">Ventana
+            <label class="inline-field">Consultar los próximos
               <select id="availabilityDays" class="select-compact">
                 <option value="7">7 días</option>
                 <option value="14" selected>14 días</option>
@@ -190,12 +190,14 @@
             <span class="toolbar-note" id="availabilityNote"></span>
           </div>
           <div class="admin-card">
-            <div class="card-head"><div><span class="card-kicker">Cupos</span><h2>Ocupación por salida</h2></div><span class="legend"><i class="open"></i> Disponible <i class="last"></i> Últimos <i class="full"></i> Agotado</span></div>
+            <div class="card-head"><div><span class="card-kicker">Cupos</span><h2>Cupos por fecha y horario</h2></div><span class="legend"><i class="open"></i> Disponible <i class="last"></i> Últimos <i class="full"></i> Agotado</span></div>
+            <p class="availability-help">Consulta cada salida por tour. Para bloquear nuevas reservas en una fecha, registra un cierre debajo.</p>
             <div class="availability-grid" id="availabilityGrid"></div>
           </div>
           <div class="admin-grid two">
             <div class="admin-card">
               <div class="card-head"><div><span class="card-kicker">Bloqueos</span><h2>Registrar cierre</h2></div></div>
+              <p class="availability-help">Selecciona la fecha y el tour que deseas bloquear. Puedes retirar el bloqueo desde Cierres programados.</p>
               <form id="closureForm" class="stack-form">
                 <label class="field"><span>Fecha</span><input type="date" id="closureDate" required></label>
                 <label class="field"><span>Alcance</span><select id="closureTour"><option value="all">Todos los tours</option></select></label>

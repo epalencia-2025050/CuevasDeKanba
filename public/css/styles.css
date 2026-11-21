@@ -1753,3 +1753,10 @@ svg { display: block; }
   content: ""; width: 40px; height: 1px;
   background: linear-gradient(90deg, transparent, rgba(184, 217, 140, .45), transparent);
 }
+
+.date-strip-wrap[hidden] { display: none; }
+.booking-summary { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.summary-tour div, .summary-lines dd, .summary-total strong { min-width: 0; }
+.summary-head, .summary-total, .summary-lines > div { flex-wrap: wrap; }
+.summary-lines dd { margin-inline-start: auto; }
+.summary-total strong { max-width: 100%; line-height: 1.15; }

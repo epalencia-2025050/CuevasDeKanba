@@ -619,7 +619,12 @@
     state.tourId = tourId;
     state.date = null;
     state.time = null;
-    state.pax = Number(tour.minParticipants);
+    state.pax = 1;
+    state.availability = [];
+    renderDates();
+    renderTimes();
+    setText('selectedDateLabel', '');
+    showAvailabilityNote('Consultando las salidas del tour…');
     renderTourOptions();
     updatePaxControls();
     renderSummary();
@@ -631,10 +636,16 @@
 
     try {
       const availableDays = [];
-      let from = state.site.today;
-      const horizon = state.site.settings.booking.advanceDays + 1;
-      while (availableDays.length < horizon) {
-        const days = Math.min(45, horizon - availableDays.length);
+      const today = state.site.today;
+      const advance = state.site.settings?.booking?.advanceDays;
+      if (!Number.isInteger(advance) || advance < 0) throw new Error('Las reservas no están disponibles en este momento.');
+      const limit = new Date(today + 'T00:00:00Z');
+      limit.setUTCDate(limit.getUTCDate() + advance);
+      const lastSale = limit.toISOString().slice(0, 10);
+      let from = tour.startDate && tour.startDate > today ? tour.startDate : today;
+      const until = tour.endDate && tour.endDate < lastSale ? tour.endDate : lastSale;
+      while (from <= until) {
+        const days = Math.min(45, 1 + (Date.parse(until) - Date.parse(from)) / 86400000);
         const data = await api(`/api/availability?tour=${encodeURIComponent(tourId)}&days=${days}&from=${from}`);
         if (state.tourId !== tourId) return;
         const page = data.daysList || [];
@@ -644,13 +655,16 @@
         next.setUTCDate(next.getUTCDate() + 1);
         from = next.toISOString().slice(0, 10);
       }
-      state.availability = availableDays;
+      state.availability = availableDays.filter(day => day.tours?.some(entry => entry.tourId === tourId));
       renderDates();
       const first = state.availability.find(dayHasSeats);
       if (first) selectDate(first.date);
       else {
         renderTimes();
-        showAvailabilityNote('No hay cupos disponibles para este tour en el periodo de venta. Escríbenos y buscamos una alternativa.');
+        showAvailabilityNote(tour.endDate && tour.endDate < today ? 'El periodo de operación de este tour ya terminó.'
+          : tour.startDate > lastSale ? 'La venta para este tour aún no está abierta.'
+          : state.availability.length ? 'No quedan salidas con cupos reservables en este periodo.'
+          : 'No hay días y horarios de operación en el periodo de venta vigente.');
       }
     } catch (error) {
       if (state.tourId !== tourId) return;
@@ -663,7 +677,7 @@
 
   function dayHasSeats(day) {
     const entry = (day.tours || []).find((item) => item.tourId === state.tourId);
-    return Boolean(entry && entry.departures.some((departure) => departure.left >= currentTour().minParticipants && !['past', 'closed', 'soldout'].includes(departure.status)));
+    return Boolean(entry && entry.departures.some((departure) => departure.left > 0 && !['past', 'closed', 'soldout'].includes(departure.status)));
   }
 
   function tourEntryFor(date) {
@@ -676,6 +690,7 @@
     const strip = $('#dateStrip');
     if (!strip) return;
     strip.replaceChildren();
+    strip.parentElement.hidden = !state.availability.length;
     const today = state.site?.today;
     state.availability.forEach((day) => {
       const entry = (day.tours || []).find((item) => item.tourId === state.tourId);
@@ -744,7 +759,7 @@
       return;
     }
     entry.departures.forEach((departure) => {
-      const disabled = departure.left < currentTour().minParticipants || ['past', 'closed', 'soldout'].includes(departure.status);
+      const disabled = departure.left < 1 || ['past', 'closed', 'soldout'].includes(departure.status);
       let label = `${departure.left} cupos`;
       if (departure.status === 'past') label = 'Ya pasó';
       else if (departure.status === 'closed') label = 'Cerrado';
@@ -778,11 +793,7 @@
     updatePaxControls();
     renderSummary();
     updateToStep3();
-    if (departure && tour && departure.left < tour.minParticipants) {
-      showAvailabilityNote(`Este horario tiene ${departure.left} cupo(s) y el tour requiere un mínimo de ${tour.minParticipants}.`);
-    } else {
-      hideAvailabilityNote();
-    }
+    hideAvailabilityNote();
   }
 
   function currentTour() {
@@ -816,15 +827,15 @@
     if (!tour || !output) return;
     const left = selectedDepartureLeft();
     const max = Math.max(1, Math.min(tour.maxParticipants, left === null ? tour.maxParticipants : left));
-    const min = Math.max(1, Math.min(tour.minParticipants || 1, max));
+    const min = 1;
     state.pax = Math.min(Math.max(state.pax, min), max);
     output.textContent = String(state.pax);
     if (minus) minus.disabled = left === null || state.pax <= min;
     if (plus) plus.disabled = left === null || state.pax >= max;
     if (help) {
       help.textContent = left !== null
-        ? `Este horario tiene ${left} cupos libres. Este tour admite de ${tour.minParticipants} a ${tour.maxParticipants} personas.`
-        : `Máximo ${tour.maxParticipants} por grupo · mínimo ${tour.minParticipants}.`;
+        ? `Este horario tiene ${left} cupos libres. Máximo por reserva: ${tour.maxParticipants}.`
+        : `Máximo ${tour.maxParticipants} por reserva.`;
     }
   }
 
@@ -833,7 +844,7 @@
     if (!button) return;
     const tour = currentTour();
     const left = selectedDepartureLeft();
-    const valid = Boolean(tour && state.date && state.time && left !== null && left >= state.pax && state.pax >= (tour.minParticipants || 1));
+    const valid = Boolean(tour && state.date && state.time && left !== null && left >= state.pax && state.pax >= 1);
     button.disabled = !valid || !state.user;
     if (tour && left !== null && left < state.pax) {
       showAvailabilityNote(`Solo quedan ${left} cupos en ese horario. Reduce los participantes o elige otro horario.`);
@@ -934,9 +945,7 @@
     if (minus) minus.addEventListener('click', () => {
       const tour = currentTour();
       if (!tour) return;
-      const left = selectedDepartureLeft();
-      const min = Math.max(1, Math.min(tour.minParticipants || 1, left === null ? tour.maxParticipants : left));
-      state.pax = Math.max(min, state.pax - 1);
+      state.pax = Math.max(1, state.pax - 1);
       renderSummary();
       updateToStep3();
     });

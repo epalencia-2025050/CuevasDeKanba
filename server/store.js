@@ -298,7 +298,7 @@ export function publicSite() {
 }
 
 export function publicTour(t) {
-  const { secret, ...rest } = t;
+  const { secret, minParticipants, ...rest } = t;
   return rest;
 }
 
@@ -333,7 +333,7 @@ export function validateBookingPolicy(policy, status = 503) {
     && Number.isFinite(policy.cutoffHours) && policy.cutoffHours >= 0
     && Number.isInteger(policy.advanceDays) && policy.advanceDays >= 0
     && Number.isFinite(policy.holdMinutes) && policy.holdMinutes > 0;
-  if (!valid) throw new AppError('Revisa la moneda, los límites y los plazos en Configuración comercial.', status, 'booking_policy_invalid');
+  if (!valid) throw new AppError(status === 503 ? 'Las reservas no están disponibles en este momento. Inténtalo más tarde.' : 'Revisa la moneda, los límites y los plazos en Configuración comercial.', status, 'booking_policy_invalid');
   return policy;
 }
 
@@ -483,8 +483,8 @@ export function createReservation(input, { user = null } = {}) {
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new AppError('Fecha inválida.', 422, 'validation');
   if (!tour.times.includes(time)) throw new AppError('Horario no válido para este tour.', 422, 'validation');
-  if (!Number.isInteger(participants) || participants < tour.minParticipants || participants > tour.maxParticipants) {
-    throw new AppError(`Este tour admite entre ${tour.minParticipants} y ${tour.maxParticipants} participantes.`, 422, 'validation');
+  if (!Number.isInteger(participants) || participants < 1 || participants > tour.maxParticipants) {
+    throw new AppError(`Este tour admite entre 1 y ${tour.maxParticipants} participantes.`, 422, 'validation');
   }
   const participantNames = input.participantNames ?? (participants === 1 ? [input.customer?.name] : []);
   if (!Array.isArray(participantNames) || participantNames.length !== participants ||

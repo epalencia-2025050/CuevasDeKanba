@@ -529,8 +529,8 @@ function cleanTour(input, existing = null) {
   const price = Number(input.price);
   if (!Number.isFinite(price) || price <= 0) throw new AppError('El precio debe ser mayor a cero.', 422, 'validation');
   const capacity = Number(input.capacity);
-  if (![capacity, Number(input.minParticipants), Number(input.maxParticipants), Number(input.durationMinutes)].every(n => Number.isInteger(n) && n > 0)
-      || Number(input.maxParticipants) > capacity || Number(input.minParticipants) > Number(input.maxParticipants)) {
+  if (![capacity, Number(input.maxParticipants), Number(input.durationMinutes)].every(n => Number.isInteger(n) && n > 0)
+      || Number(input.maxParticipants) > capacity) {
     throw new AppError('Revisa el cupo, los participantes y la duración.', 422, 'validation');
   }
   const { startDate = '', endDate = '', startTime = '', endTime = '' } = input;
@@ -548,7 +548,7 @@ function cleanTour(input, existing = null) {
     if (startTime && time < startTime) reject('Hay una salida anterior a la hora de inicio.');
     if (endTime && time > endTime) reject('Hay una salida posterior a la hora final.');
   }
-  const { longDescription, ...previous } = existing || {};
+  const { longDescription, minParticipants, ...previous } = existing || {};
   return {
     ...previous, startDate, endDate, startTime, endTime,
     id,
@@ -561,7 +561,6 @@ function cleanTour(input, existing = null) {
     times: [...new Set(times)].sort(),
     days: [...new Set(days)].sort(),
     capacity,
-    minParticipants: Math.max(1, Math.min(capacity, Number(input.minParticipants) || 1)),
     maxParticipants: Math.max(1, Math.min(capacity, Number(input.maxParticipants) || capacity)),
     difficulty: String(input.difficulty || '').trim().slice(0, 80),
     minAge: Math.max(0, Number(input.minAge) || 0),
