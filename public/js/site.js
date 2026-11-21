@@ -100,7 +100,6 @@
     if (node && value !== undefined && value !== null) node.setAttribute(name, value);
   }
 
-  const CATEGORY_LABELS = { cueva: 'Cueva', rio: 'Río Cahabón', selva: 'Selva', semuc: 'Semuc Champey' };
 
   let toastTimer = null;
   function toast(message) {
@@ -245,7 +244,6 @@
     authChecked: false
   };
 
-  const DEFAULT_WHATSAPP = '50240002026';
 
   /* ------------------------------------------------------------------ */
   /* Header, navegación y detalles                                         */
@@ -489,12 +487,12 @@
       const email = $('#footerEmail');
       if (phone) phone.href = `tel:${String(contact.phone || '').replace(/[^\d+]/g, '')}`;
       if (email) email.href = `mailto:${contact.email}`;
-      const wa = String(contact.whatsapp || DEFAULT_WHATSAPP).replace(/\D/g, '');
+      const wa = String(contact.whatsapp || '').replace(/\D/g, '');
       $$('a[href*="wa.me"]').forEach((link) => { link.href = `https://wa.me/${wa}`; });
     }
     setText('footerNote', site.footerNote);
 
-    const holdMinutes = Number(site.settings?.booking?.holdMinutes || 20);
+    const holdMinutes = site.settings?.booking?.holdMinutes ?? '';
     setText('holdMinutesText', holdMinutes);
     $$('#bookingSummary .summary-hold strong, #bookingForm .form-legal strong').forEach((node) => { node.textContent = holdMinutes; });
 
@@ -555,7 +553,7 @@
         ]),
         el('h3', { text: tour.name }),
         el('p', { className: 'tour-desc', text: tour.description }),
-        el('div', { className: 'tour-includes' }, (tour.includes || []).slice(0, 3).map((item) => el('span', { text: item }))),
+        el('details', { className: 'tour-includes' }, [el('summary', { text: 'Ver qué incluye' }), ...(tour.includes || []).map(item => el('span', { text: item }))]),
         el('div', { className: 'tour-schedule' }, [
           el('span', { className: 'label', text: 'Horarios de salida' }),
           ...(tour.times || []).map((time) => el('span', { className: 'time-pill', text: time }))
@@ -1095,6 +1093,10 @@
   function renderGalleryFilters() {
     const wrap = $('#galleryFilters');
     if (!wrap) return;
+    wrap.replaceChildren(el('button', { className: 'active', text: 'Todo', dataset: { filter: 'all' }, attrs: { type: 'button', role: 'tab', 'aria-selected': 'true' } }));
+    for (const category of new Set(state.gallery.map(item => item.category).filter(Boolean))) {
+      wrap.append(el('button', { text: category, dataset: { filter: category }, attrs: { type: 'button', role: 'tab', 'aria-selected': 'false' } }));
+    }
     $$('button', wrap).forEach((button) => {
       button.addEventListener('click', () => {
         const filter = button.dataset.filter || 'all';
@@ -1128,7 +1130,7 @@
         el('span', { className: 'zoom', html: icon('zoom') }),
         el('figcaption', {}, [
           el('strong', { text: item.caption }),
-          el('span', { text: CATEGORY_LABELS[item.category] || item.category })
+          el('span', { text: item.category })
         ])
       ]);
       button.addEventListener('click', () => openLightbox(items, index));
@@ -1606,9 +1608,6 @@
     setupLightbox();
     setupVideoModal();
     setupMapButtons();
-    if ($('#map')) {
-      setupMap({ lat: 15.537628, lng: -89.955361, address: "Cuevas de K'anba, Lanquín, Alta Verapaz, Guatemala" });
-    }
     setupKeyboard();
     setText('year', String(new Date().getFullYear()));
     await loadAuth();

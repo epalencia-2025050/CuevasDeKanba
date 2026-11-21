@@ -1,3 +1,4 @@
+import { defaultTours, defaultSettings } from './tour-catalog.mjs';
 import { serve } from '@hono/node-server';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
@@ -15,6 +16,8 @@ const config = createConfig({ ...process.env, PUBLIC_URL: `http://127.0.0.1:${po
 const initial = withRuntime({ config }, createInitialStore);
 initial.users.push({ id: 'test-admin', name: 'Test Admin', email: 'admin@example.invalid',
   role: 'admin', password: initial.admin.password, createdAt: new Date().toISOString() });
+initial.tours = defaultTours();
+initial.settings = defaultSettings();
 const database = memoryRepository(initial, document => fs.writeFile(path.join(process.env.DATA_DIR, 'db.json'), JSON.stringify(document)));
 app = createApp({ config, database, fetch, mailConfigured: false,
   sendMail: async () => { throw new Error('External mail forbidden in tests.'); },

@@ -530,3 +530,13 @@
   .admin-content { padding: 0; }
   .admin-card { box-shadow: none; border-color: #ccc; }
 }
+.tour-editor-section { border: 1px solid #bdc9bd; border-radius: 14px; padding: 1rem; min-width: 0; display: grid; gap: .8rem; }
+.tour-editor-section legend { font-weight: 700; padding-inline: .4rem; }
+.tour-items { display: grid; gap: .5rem; }
+.tour-item { display: flex; flex-wrap: wrap; gap: .5rem; }
+.tour-item input { flex: 1 1 12rem; min-width: 0; }
+.tour-preview { width: min(100%, 22rem); max-height: 14rem; object-fit: cover; border-radius: 10px; }
+.check-grid .inline-check { border: 1px solid #899e90; border-radius: 99px; padding: .4rem .7rem; cursor: pointer; }
+.check-grid .inline-check:has(:checked) { background: #244d3b; color: white; }
+.check-grid .inline-check:focus-within { outline: 2px solid #aa722a; outline-offset: 2px; }
+.tour-admin-card { box-shadow: 0 5px 20px rgb(17 47 36 / 9%); }

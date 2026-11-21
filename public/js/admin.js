@@ -1019,30 +1019,84 @@
     const grid = el('div', 'form-grid');
     grid.append(
       formField('Identificador', 'id', tour?.id || '', { readOnly: editing, placeholder: 'se genera del nombre', hint: editing ? 'No se puede cambiar.' : undefined }),
-      formField('Nombre', 'name', tour?.name || '', { placeholder: 'Ritual de la Cueva' }),
+      formField('Nombre', 'name', tour?.name || ''),
       formField('Etiqueta', 'badge', tour?.badge || '', { placeholder: 'Más reservado' }),
-      formField('Duración (texto)', 'duration', tour?.duration || '2 horas'),
-      formField('Duración (minutos)', 'durationMinutes', tour?.durationMinutes || 120, { type: 'number', min: 30, max: 720 }),
+      formField('Duración (texto)', 'duration', tour?.duration || ''),
+      formField('Duración (minutos)', 'durationMinutes', tour?.durationMinutes ?? '', { type: 'number', min: 30, max: 720 }),
       formField('Precio (Q)', 'price', tour?.price || '', { type: 'number', min: 1, step: '0.01' }),
-      formField('Cupo por salida', 'capacity', tour?.capacity || 12, { type: 'number', min: 1, max: 60 }),
-      formField('Mínimo de participantes', 'minParticipants', tour?.minParticipants || 1, { type: 'number', min: 1, max: 60 }),
-      formField('Máximo de participantes', 'maxParticipants', tour?.maxParticipants || tour?.capacity || 12, { type: 'number', min: 1, max: 60 }),
+      formField('Cupo por salida', 'capacity', tour?.capacity ?? '', { type: 'number', min: 1, max: 60 }),
+      formField('Mínimo de participantes', 'minParticipants', tour?.minParticipants ?? '', { type: 'number', min: 1, max: 60 }),
+      formField('Máximo de participantes', 'maxParticipants', tour?.maxParticipants ?? tour?.capacity ?? '', { type: 'number', min: 1, max: 60 }),
       formField('Dificultad', 'difficulty', tour?.difficulty || '', { placeholder: 'Moderada · agua al pecho' }),
       formField('Edad mínima', 'minAge', tour?.minAge || 0, { type: 'number', min: 0, max: 99 }),
       formField('Punto de encuentro', 'meetingPoint', tour?.meetingPoint || '', { full: true }),
-      formField('Horarios (separados por coma)', 'times', (tour?.times || []).join(', '), { full: true, placeholder: '08:00, 10:30, 13:00' }),
-      formField('Imagen (URL o /assets/…)', 'image', tour?.image || '/assets/img/kanba-cave-01.jpg', { full: true }),
-      formField('Descripción corta', 'description', tour?.description || '', { textarea: true, full: true, rows: 2 }),
-      formField('Descripción larga', 'longDescription', tour?.longDescription || '', { textarea: true, full: true, rows: 4 }),
-      formField('Incluye (uno por línea)', 'includes', (tour?.includes || []).join('\n'), { textarea: true, full: true, rows: 3 }),
+      formField('Horarios (separados por coma)', 'times', (tour?.times || []).join(', '), { full: true, placeholder: 'HH:MM' }),
+      formField('Descripción', 'description', [tour?.description, tour?.longDescription].filter(Boolean).join('\n\n'), { textarea: true, full: true, rows: 5 }),
+      formField('Fecha de inicio', 'startDate', tour?.startDate, { type: 'date' }),
+      formField('Fecha de finalización', 'endDate', tour?.endDate, { type: 'date' }),
+      formField('Hora de inicio', 'startTime', tour?.startTime, { type: 'time' }),
+      formField('Hora de finalización', 'endTime', tour?.endTime, { type: 'time' }),
       formField('No incluye (uno por línea)', 'notIncludes', (tour?.notIncludes || []).join('\n'), { textarea: true, full: true, rows: 3 })
     );
 
+    const extras = el('fieldset', 'tour-editor-section full');
+    extras.append(el('legend', '', 'Incluye'));
+    const addItem = el('button', 'btn btn-outline', 'Agregar elemento');
+    addItem.type = 'button';
+    const rows = el('div', 'tour-items');
+    function addRow(value) {
+      const row = el('div', 'tour-item');
+      const input = el('input');
+      input.name = 'includeItem';
+      input.setAttribute('aria-label', 'Elemento incluido');
+      input.value = value;
+      const remove = el('button', 'btn btn-outline', 'Quitar');
+      remove.type = 'button';
+      remove.onclick = () => row.remove();
+      row.append(input, remove);
+      rows.append(row);
+      return input;
+    }
+    (tour?.includes || []).forEach(addRow);
+    addItem.onclick = () => addRow('').focus();
+    extras.append(rows, addItem);
+    const media = el('fieldset', 'tour-editor-section full');
+    media.append(el('legend', '', 'Imagen del tour'));
+    const picker = el('input');
+    picker.type = 'file';
+    picker.accept = 'image/jpeg,image/png,image/webp,image/gif';
+    picker.setAttribute('aria-label', 'Subir imagen del tour');
+    const preview = el('img', 'tour-preview');
+    let image = tour?.image || '';
+    preview.hidden = !image;
+    if (image) preview.src = image;
+    picker.onchange = async () => {
+      const file = picker.files[0];
+      if (!file) return;
+      if (file.size > 8 * 1024 * 1024) { toast('La imagen supera los 8 MB.'); return; }
+      picker.disabled = save.disabled = true;
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const result = await api('/api/admin/media', { method: 'POST', body: JSON.stringify({ dataUrl }) });
+        image = result.url;
+        preview.src = image;
+        preview.hidden = false;
+      } catch (error) { handleError(error); }
+      finally { picker.disabled = save.disabled = false; }
+    };
+    media.append(picker, preview);
+    grid.append(extras, media);
     const daysWrap = el('div', 'field full');
     daysWrap.append(el('span', '', 'Días de operación'));
     const checks = el('div', 'check-grid');
-    const activeDays = tour?.days || [0, 1, 2, 3, 4, 5, 6];
-    DAY_NAMES.forEach((label, index) => {
+    const activeDays = tour?.days || [];
+    [1, 2, 3, 4, 5, 6, 0].forEach(index => {
+      const label = DAY_NAMES[index];
       const check = el('label', 'inline-check');
       const input = el('input');
       input.type = 'checkbox';
@@ -1052,7 +1106,14 @@
       check.append(input, document.createTextNode(label));
       checks.append(check);
     });
-    daysWrap.append(checks);
+    const shortcuts = el('div', 'tour-item');
+    for (const [label, predicate] of [['Todos', () => true], ['Entre semana', day => day >= 1 && day <= 5], ['Ninguno', () => false]]) {
+      const button = el('button', 'btn btn-outline', label);
+      button.type = 'button';
+      button.onclick = () => checks.querySelectorAll('input').forEach(input => { input.checked = predicate(Number(input.value)); });
+      shortcuts.append(button);
+    }
+    daysWrap.append(checks, shortcuts);
     grid.append(daysWrap);
 
     const flags = el('div', 'field full');
@@ -1088,19 +1149,19 @@
         name: form.elements.namedItem('name')?.value.trim(),
         badge: form.elements.namedItem('badge')?.value.trim(),
         duration: form.elements.namedItem('duration')?.value.trim(),
-        durationMinutes: Number(form.elements.namedItem('durationMinutes')?.value) || 120,
+        durationMinutes: Number(form.elements.namedItem('durationMinutes')?.value),
         price: Number(form.elements.namedItem('price')?.value),
-        capacity: Number(form.elements.namedItem('capacity')?.value) || 12,
-        minParticipants: Number(form.elements.namedItem('minParticipants')?.value) || 1,
-        maxParticipants: Number(form.elements.namedItem('maxParticipants')?.value) || 12,
+        capacity: Number(form.elements.namedItem('capacity')?.value),
+        minParticipants: Number(form.elements.namedItem('minParticipants')?.value),
+        maxParticipants: Number(form.elements.namedItem('maxParticipants')?.value),
         difficulty: form.elements.namedItem('difficulty')?.value.trim(),
         minAge: Number(form.elements.namedItem('minAge')?.value) || 0,
         meetingPoint: form.elements.namedItem('meetingPoint')?.value.trim(),
         times: (form.elements.namedItem('times')?.value || '').split(',').map((t) => t.trim()).filter(Boolean),
-        image: form.elements.namedItem('image')?.value.trim(),
+        image,
         description: form.elements.namedItem('description')?.value.trim(),
-        longDescription: form.elements.namedItem('longDescription')?.value.trim(),
-        includes: (form.elements.namedItem('includes')?.value || '').split('\n').map((t) => t.trim()).filter(Boolean),
+        includes: $$('input[name="includeItem"]', form).map(input => input.value.trim()).filter(Boolean),
+        ...Object.fromEntries(['startDate', 'endDate', 'startTime', 'endTime'].map(key => [key, form.elements.namedItem(key).value])),
         notIncludes: (form.elements.namedItem('notIncludes')?.value || '').split('\n').map((t) => t.trim()).filter(Boolean),
         days: $$('input[name="days"]:checked', form).map((input) => Number(input.value)),
         active: form.elements.namedItem('active')?.checked !== false,

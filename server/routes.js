@@ -522,21 +522,33 @@ function cleanTour(input, existing = null) {
     .map((t) => String(t).trim())
     .filter((t) => /^\d{2}:\d{2}$/.test(t));
   if (!times.length) throw new AppError('Agrega al menos un horario válido (HH:MM).', 422, 'validation');
-  const days = (Array.isArray(input.days) ? input.days : [0, 1, 2, 3, 4, 5, 6])
+  const days = (Array.isArray(input.days) ? input.days : [])
     .map(Number).filter((d) => d >= 0 && d <= 6);
   if (!days.length) throw new AppError('Selecciona al menos un día de operación.', 422, 'validation');
   const price = Number(input.price);
   if (!Number.isFinite(price) || price <= 0) throw new AppError('El precio debe ser mayor a cero.', 422, 'validation');
-  const capacity = Math.max(1, Math.min(60, Number(input.capacity) || 12));
+  const capacity = Number(input.capacity);
+  if (![capacity, Number(input.minParticipants), Number(input.maxParticipants), Number(input.durationMinutes)].every(n => Number.isInteger(n) && n > 0)
+      || Number(input.maxParticipants) > capacity || Number(input.minParticipants) > Number(input.maxParticipants)) {
+    throw new AppError('Revisa el cupo, los participantes y la duración.', 422, 'validation');
+  }
+  const { startDate = '', endDate = '', startTime = '', endTime = '' } = input;
+  const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+  const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  if ([startDate,endDate].some(v => v && !validDate(v)) || [startTime,endTime,...times].some(v => v && !validTime(v))
+      || (startDate && endDate && startDate > endDate) || (startTime && endTime && startTime > endTime)
+      || times.some(t => (startTime && t < startTime) || (endTime && t > endTime))) {
+    throw new AppError('Revisa el periodo de operación y los horarios de salida.', 422, 'validation');
+  }
+  const { longDescription, ...previous } = existing || {};
   return {
-    ...(existing || {}),
+    ...previous, startDate, endDate, startTime, endTime,
     id,
     name,
     badge: String(input.badge || '').trim().slice(0, 40),
-    description: String(input.description || '').trim().slice(0, 600),
-    longDescription: String(input.longDescription || '').trim().slice(0, 2000),
-    duration: String(input.duration || '2 horas').trim().slice(0, 40),
-    durationMinutes: Number(input.durationMinutes) || 120,
+    description: String(input.description || '').trim(),
+    duration: String(input.duration || '').trim().slice(0, 40),
+    durationMinutes: Number(input.durationMinutes),
     price: Math.round(price * 100) / 100,
     times: [...new Set(times)].sort(),
     days: [...new Set(days)].sort(),
@@ -548,7 +560,7 @@ function cleanTour(input, existing = null) {
     meetingPoint: String(input.meetingPoint || '').trim().slice(0, 160),
     includes: (Array.isArray(input.includes) ? input.includes : String(input.includes || '').split('\n')).map((x) => String(x).trim()).filter(Boolean).slice(0, 20),
     notIncludes: (Array.isArray(input.notIncludes) ? input.notIncludes : String(input.notIncludes || '').split('\n')).map((x) => String(x).trim()).filter(Boolean).slice(0, 20),
-    image: String(input.image || '/assets/img/kanba-cave-01.jpg').trim(),
+    image: String(input.image || '').trim(),
     active: input.active !== false && input.active !== 'false',
     featured: input.featured === true || input.featured === 'true',
     updatedAt: new Date().toISOString(),
