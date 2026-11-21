@@ -47,7 +47,7 @@ export function createRequestSecurity(env = {}) {
       if (!req.url?.startsWith('/') || req.url.startsWith('//')) throw new RequestSecurityError('Ruta inválida.');
       if (env.NODE_ENV === 'production' && !this.secure(req)) throw new RequestSecurityError('Se requiere HTTPS.', 426);
       if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
-      if (req.url.split('?')[0] === '/api/webhooks/payments') return; // Separate authenticated protocol; currently disabled.
+      if (req.url.split('?')[0] === '/api/webhooks/payments') return; // Authenticated by the payment provider signature.
       if (String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/json') throw new RequestSecurityError('Se requiere application/json.', 415);
       let origin = publicOrigin;
       if (!origin) {

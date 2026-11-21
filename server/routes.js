@@ -13,9 +13,9 @@ import {
   registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared,
   createUserSession, registerGoogleUser, linkGoogleAccount
 } from './store.js';
-import { hashPassword, verifyPassword, randomToken, signPayload, verifySignature, safeEqual } from './security.js';
-import { charge } from './gateway.js';
-import { PaymentPolicyError, requirePaymentPermission } from './payment-policy.js';
+import { hashPassword, verifyPassword, randomToken, safeEqual } from './security.js';
+import { paymentsEnabled, requireGateway, chargeAmount, refundLatePayment, refundReservation, verifiedEvent } from './gateway.js';
+
 import { paymentSecrets, settingsWithoutSecrets, containsIncomingSecrets } from './runtime-secrets.js';
 import {
   notifyPending, notifyConfirmed, notifyExpired, notifyCancellation, notifyRefund, resendMail,
@@ -213,8 +213,8 @@ function publicAdminSettings(settings = {}) {
     business: settings.business || {},
     booking: settings.booking || {},
     payments: {
-      provider: payments.provider || '',
-      mode: payments.mode || 'sandbox',
+      provider: config.PAYMENTS_PROVIDER || '',
+      mode: config.NODE_ENV === 'production' ? 'live' : 'test',
       merchantId: payments.merchantId || '',
       publicKey: payments.publicKey || '',
       statement: payments.statement || '',
@@ -315,7 +315,7 @@ function reservationView(r, { admin = false } = {}) {
     cancellation: r.cancellation || null,
     refund: r.refund || null,
     history: admin || r.status === 'confirmed' ? r.history : r.history.slice(-3),
-    paymentsEnabled: ['development', 'test'].includes(NODE_ENV) && getDb().settings.payments.mode === 'sandbox',
+    paymentsEnabled: paymentsEnabled(config),
     secondsLeft: r.status === 'pending_payment'
       ? Math.max(0, Math.floor((new Date(r.holdExpiresAt).getTime() - Date.now()) / 1000))
       : 0
@@ -339,7 +339,7 @@ function receiptView(r) {
       total,
       currency: r.currency
     },
-    payment: r.payment,
+    payment: reservationView(r).payment,
     verifyUrl: `/verificar.html?code=${encodeURIComponent(r.code)}`
   };
 }
@@ -348,8 +348,7 @@ function receiptView(r) {
 /* Business actions                                                   */
 /* ------------------------------------------------------------------ */
 
-function applyApprovedPayment(reservation, result, { manual = false } = {}) {
-  requirePaymentPermission(getDb().settings.payments.mode, manual ? 'manual' : 'charge');
+function applyApprovedPayment(reservation, result) {
   const now = new Date().toISOString();
   if (reservation.status === 'confirmed') return reservation;
   reservation.status = 'confirmed';
@@ -358,12 +357,12 @@ function applyApprovedPayment(reservation, result, { manual = false } = {}) {
   reservation.payment = {
     ...reservation.payment,
     status: 'paid',
-    brand: result.brand || (manual ? 'Manual' : 'Tarjeta'),
-    last4: result.last4 || '—',
+    brand: result.brand || 'Tarjeta',
+    last4: null,
     reference: result.reference,
     paidAt: now,
     provider: result.provider || reservation.payment.provider,
-    manual
+    manual: false
   };
   if (!reservation.receipt) {
     reservation.receipt = { number: nextReceiptNumber(), issuedAt: now };
@@ -371,9 +370,7 @@ function applyApprovedPayment(reservation, result, { manual = false } = {}) {
   reservation.history.push({
     at: now,
     type: 'paid',
-    label: manual
-      ? `Pago confirmado manualmente · comprobante ${reservation.receipt.number}`
-      : `Pago aprobado · comprobante ${reservation.receipt.number}`
+    label: `Pago aprobado · comprobante ${reservation.receipt.number}`
   });
   saveDb();
   return reservation;
@@ -401,6 +398,7 @@ function cancelReservation(reservation, { reason, by = 'customer', refundAmount 
   const percent = reservation.total > 0 ? Math.round((amount / reservation.total) * 100) : 0;
 
   reservation.status = 'cancelled';
+  if (!reservation.paidAt) reservation.payment.status = 'cancelled';
   reservation.tokenRevokedAt = now;
   reservation.cancelledAt = now;
   reservation.updatedAt = now;
@@ -524,10 +522,10 @@ function cleanTour(input, existing = null) {
     .filter(Boolean);
   if (!times.length) throw new AppError('Agrega al menos un horario válido (HH:MM).', 422, 'validation');
   const days = (Array.isArray(input.days) ? input.days : [])
-    .map(Number).filter((d) => d >= 0 && d <= 6);
+    .map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
   if (!days.length) throw new AppError('Selecciona al menos un día de operación.', 422, 'validation');
   const price = Number(input.price);
-  if (!Number.isFinite(price) || price <= 0) throw new AppError('El precio debe ser mayor a cero.', 422, 'validation');
+  if (!Number.isSafeInteger(Math.round(price * 100)) || price <= 0 || Math.round(price * 100) / 100 !== price) throw new AppError('El precio debe ser positivo y tener hasta dos decimales.', 422, 'validation');
   const capacity = Number(input.capacity);
   if (![capacity, Number(input.maxParticipants), Number(input.durationMinutes)].every(n => Number.isInteger(n) && n > 0)
       || Number(input.maxParticipants) > capacity) {
@@ -755,6 +753,7 @@ async function handleApi(req, res, url) {
 
   if (method === 'POST' && p === '/api/reservations') {
     const session = requireUser(req);
+    requireGateway(config);
     await rateLimit(`reserve:${session.user.id}`, 10, 3600000);
     const body = await readJson(req);
     const reservation = createReservation(body, { user: session.user });
@@ -827,80 +826,6 @@ async function handleApi(req, res, url) {
     });
   }
 
-  m = p.match(/^\/api\/payments\/([A-Za-z0-9_-]+)\/pay$/);
-  if (method === 'POST' && m) {
-    requirePaymentPermission(getDb().settings.payments.mode);
-    const body = await readJson(req);
-    const d = getDb();
-    const reservation = d.reservations.find((r) => r.payment?.intentId === m[1]);
-    if (!reservation) throw new AppError('Intento de pago no encontrado.', 404, 'not_found');
-    if (!safeEqual(String(body.token || ''), reservation.token)) throw new AppError('Enlace de pago inválido.', 403, 'forbidden');
-    getReservation(reservation.code, body.token);
-    if (reservation.status === 'confirmed') {
-      return sendJson(res, 200, { ok: true, alreadyPaid: true, status: 'confirmed', code: reservation.code });
-    }
-    if (reservation.status !== 'pending_payment') {
-      throw new AppError('Esta reserva ya no admite pagos.', 409, 'not_payable');
-    }
-    if (new Date(reservation.holdExpiresAt).getTime() <= Date.now()) {
-      reservation.status = 'expired';
-      reservation.payment.status = 'expired';
-      reservation.updatedAt = new Date().toISOString();
-      reservation.history.push({ at: new Date().toISOString(), type: 'expired', label: 'Intento de pago después del plazo · cupos liberados' });
-      saveDb();
-      try { await notifyExpired(reservation); } catch { /* noop */ }
-      throw new AppError('El plazo de pago venció y los cupos fueron liberados. Vuelve a reservar.', 410, 'expired');
-    }
-
-    // Defensa en profundidad: este servidor nunca procesa PAN/CVV.
-    if (body.card && (body.card.number || body.card.cvc || body.card.expiry)) {
-      throw new AppError('Este servidor no procesa datos de tarjeta. Usa un token de pago emitido por la pasarela.', 400, 'card_data_not_accepted');
-    }
-    const paymentToken = String(body.paymentToken || '').trim();
-    if (!paymentToken) {
-      throw new AppError('Se requiere un token de pago válido.', 422, 'payment_token_required');
-    }
-    const result = charge({
-      reservation,
-      paymentToken,
-      provider: d.settings.payments.provider,
-      mode: d.settings.payments.mode
-    });
-    if (!result.approved) {
-      reservation.payment.attempts = (reservation.payment.attempts || 0) + 1;
-      reservation.updatedAt = new Date().toISOString();
-      reservation.history.push({
-        at: new Date().toISOString(),
-        type: 'payment_declined',
-        label: `Pago rechazado (${result.code}) · intento ${reservation.payment.attempts}`
-      });
-      saveDb();
-      return sendJson(res, 402, {
-        ok: false,
-        code: result.code,
-        message: result.message,
-        fields: result.errors || null,
-        attempts: reservation.payment.attempts,
-        secondsLeft: Math.max(0, Math.floor((new Date(reservation.holdExpiresAt).getTime() - Date.now()) / 1000))
-      });
-    }
-
-    applyApprovedPayment(reservation, result);
-    try {
-      await notifyConfirmed(reservation);
-    } catch (err) {
-      console.error('[pago] correos de confirmación fallaron:', safeErrorMessage(err));
-    }
-    return sendJson(res, 200, {
-      ok: true,
-      status: 'confirmed',
-      code: reservation.code,
-      receipt: reservation.receipt,
-      reference: result.reference,
-      redirect: `/confirmacion.html?code=${encodeURIComponent(reservation.code)}&token=${encodeURIComponent(reservation.token)}`
-    });
-  }
-
   m = p.match(/^\/api\/receipt\/([A-Za-z0-9-]+)$/);
   if (method === 'GET' && m) {
     const token = url.searchParams.get('token') || '';
@@ -925,37 +850,38 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'POST' && p === '/api/webhooks/payments') {
-    requirePaymentPermission(getDb().settings.payments.mode, 'webhook');
-    const raw = await readBody(req);
-    const signature = req.headers['x-kanba-signature'] || '';
-    const secret = paymentSecrets().webhookSecret;
-    if (!secret || !verifySignature(secret, raw, signature)) {
-      return sendJson(res, 401, { ok: false, message: 'Firma inválida o webhook sin configurar.' });
-    }
-    let event;
-    try { event = JSON.parse(raw); } catch { return sendJson(res, 400, { ok: false }); }
-    if (event.type === 'payment.approved' && event.intentId) {
-      const reservation = getDb().reservations.find((r) => r.payment?.intentId === event.intentId);
-      if (reservation) {
-        // Idempotencia / anti-replay: un mismo evento no puede aplicarse dos veces.
-        const eventKey = String(event.id || event.eventId || '').trim() || signPayload(secret, raw);
-        const seen = reservation.payment?.eventIds || [];
-        if (seen.includes(eventKey)) {
-          return sendJson(res, 200, { ok: true, received: true, duplicate: true });
-        }
-        if (reservation.status === 'pending_payment') {
-          reservation.payment.eventIds = [...seen.slice(-19), eventKey];
-          applyApprovedPayment(reservation, {
-            brand: event.brand || 'Tarjeta',
-            last4: event.last4 || '—',
-            reference: event.reference || `WH-${Date.now()}`,
-            provider: event.provider || getDb().settings.payments.provider
-          });
-          try { await notifyConfirmed(reservation); } catch { /* noop */ }
-        }
+    requireGateway(config);
+    const event = verifiedEvent(await readBody(req), req.headers['stripe-signature'], config);
+    const session = event.data?.object;
+    if (event.type === 'payment_intent.payment_failed' && session?.metadata?.booking_intent) {
+      const r = getDb().reservations.find(item => item.payment?.intentId === session.metadata.booking_intent);
+      if (r?.status === 'pending_payment' && !r.paidAt) {
+        r.payment.status = 'failed';
+        saveDb();
       }
     }
-    return sendJson(res, 200, { ok: true, received: true });
+    if (['checkout.session.completed', 'checkout.session.expired', 'checkout.session.async_payment_failed'].includes(event.type) && session?.client_reference_id) {
+      const r = getDb().reservations.find(item => item.payment?.intentId === session.client_reference_id);
+      if (r && session.id === r.payment.sessionId && !r.paidAt && !r.payment.lateRefundId) {
+        if (event.type === 'checkout.session.completed' && session.payment_status === 'paid') {
+          if (!session.payment_intent || session.amount_total !== chargeAmount(r) || session.currency !== r.currency.toLowerCase())
+            throw new AppError('El pago requiere conciliación.', 409, 'payment_mismatch');
+          if (r.status !== 'pending_payment' || Date.parse(r.holdExpiresAt) <= Date.now()) {
+            r.payment.lateRefundId = await refundLatePayment(session.payment_intent, config, getRuntime().fetch);
+            if (r.status === 'pending_payment') r.status = 'expired';
+            r.payment.status = 'refund_initiated';
+          } else {
+            applyApprovedPayment(r, { reference: session.payment_intent, provider: 'Stripe' });
+            await notifyConfirmed(r);
+          }
+        } else if (event.type !== 'checkout.session.completed' && r.status === 'pending_payment') {
+          r.status = 'expired';
+          r.payment.status = event.type === 'checkout.session.expired' ? 'cancelled' : 'failed';
+        }
+        saveDb();
+      }
+    }
+    return sendJson(res, 200, { received: true });
   }
 
   /* ---------- Admin auth ---------- */
@@ -991,16 +917,6 @@ async function handleApi(req, res, url) {
   if (method === 'GET' && m) {
     const r = getDb().reservations.find((x) => x.code === m[1]);
     if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
-    return sendJson(res, 200, { ok: true, reservation: reservationView(r, { admin: true }) });
-  }
-
-  m = p.match(/^\/api\/admin\/reservations\/([A-Za-z0-9-]+)\/confirm$/);
-  if (method === 'POST' && m) {
-    const r = getDb().reservations.find((x) => x.code === m[1]);
-    if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
-    if (r.status !== 'pending_payment') throw new AppError('Solo se pueden confirmar reservas pendientes de pago.', 409, 'invalid_status');
-    applyApprovedPayment(r, { brand: 'Manual', last4: '—', reference: `MANUAL-${Date.now().toString(36).toUpperCase()}`, provider: 'Confirmación manual' }, { manual: true });
-    try { await notifyConfirmed(r); } catch (err) { console.error(safeErrorMessage(err)); }
     return sendJson(res, 200, { ok: true, reservation: reservationView(r, { admin: true }) });
   }
 
@@ -1043,16 +959,21 @@ async function handleApi(req, res, url) {
 
   m = p.match(/^\/api\/admin\/refunds\/([A-Za-z0-9_-]+)\/process$/);
   if (method === 'POST' && m) {
-    requirePaymentPermission(getDb().settings.payments.mode, 'refund');
-    const body = await readJson(req);
-    const refund = getDb().refunds.find((x) => x.id === m[1]);
+    requireGateway(config);
+    const refund = getDb().refunds.find(x => x.id === m[1]);
     if (!refund) throw new AppError('Reembolso no encontrado.', 404, 'not_found');
     if (refund.status === 'processed') throw new AppError('Este reembolso ya fue procesado.', 409, 'already_processed');
+    const r = getDb().reservations.find(x => x.code === refund.reservationCode);
+    if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
+    const result = await refundReservation(r, refund, config, getRuntime().fetch);
+    refund.reference = result.id;
+    if (result.status !== 'succeeded') {
+      refund.status = 'pending';
+      saveDb();
+      return sendJson(res, 202, { ok: true, refund });
+    }
     refund.status = 'processed';
     refund.processedAt = new Date().toISOString();
-    refund.reference = String(body.reference || `RF-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000 + 10000))}`).slice(0, 60);
-    refund.method = String(body.method || refund.method).slice(0, 120);
-    const r = getDb().reservations.find((x) => x.code === refund.reservationCode);
     if (r) {
       r.refund = { id: refund.id, amount: refund.amount, status: 'processed', reference: refund.reference, processedAt: refund.processedAt };
       if (r.payment) r.payment.status = 'refunded';

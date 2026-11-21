@@ -1011,7 +1011,7 @@
         setFieldError(name, 'Correo electrónico inválido.');
         valid = false;
         if (!firstInvalid) firstInvalid = input;
-      } else if (name === 'phone' && value.replace(/\D/g, '').length < 7) {
+      } else if (name === 'phone' && (!/^\+?[\d ()-]{7,25}$/.test(value) || !/^\d{7,15}$/.test(value.replace(/\D/g, '')))) {
         setFieldError(name, 'El teléfono debe tener al menos 7 dígitos.');
         valid = false;
         if (!firstInvalid) firstInvalid = input;

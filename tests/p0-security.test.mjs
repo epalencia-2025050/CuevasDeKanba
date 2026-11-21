@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { EventEmitter } from 'node:events';
-import { charge } from '../server/gateway.js';
-import { requirePaymentPermission, PaymentPolicyError } from '../server/payment-policy.js';
+import { requireGateway, verifiedEvent } from '../server/gateway.js';
+
 import { postgresConnectionOptions, verifiedTlsOptions } from '../server/tls-config.js';
 import { paymentSecrets, settingsWithoutSecrets, serializeStore, containsIncomingSecrets } from '../server/runtime-secrets.js';
 
@@ -34,7 +34,7 @@ function router(mode) {
     payment: { intentId: 'pi_synthetic', provider: 'test' } };
   const db = { settings: { payments: { mode, provider: 'test' } }, reservations: [reservation] };
   let saves = 0;
-  const context = vm.createContext({ process, config: process.env, Date, Buffer, requirePaymentPermission, charge,
+  const context = vm.createContext({ process, config: process.env, Date, Buffer, requireGateway,
     paymentSecrets, settingsWithoutSecrets, containsIncomingSecrets, safeEqual, getReservation: () => reservation,
     getDb: () => db, saveDb: () => saves++, readJson: async req => req.body,
     readBody: async () => { throw new Error('webhook body must not be read'); },
@@ -49,36 +49,9 @@ function router(mode) {
     request: (path, body = {}) => context.handleApi({ method: 'POST', body }, {}, new URL(path, 'https://test.invalid')) };
 }
 
-test('production rejects sandbox, live, unknown modes, demo/test tokens and manual confirmations', async () => {
-  await environment({ NODE_ENV: 'production' }, async () => {
-    for (const mode of ['sandbox', 'live', 'invalid', '', null]) {
-      for (const token of ['tok_demo_4242', 'tok_test_4242', 'provider_token']) {
-        assert.equal(charge({ reservation: { total: 10 }, paymentToken: token, mode }).approved, false);
-      }
-      const r = router(mode);
-      const before = JSON.stringify(r.reservation);
-      await assert.rejects(r.request('/api/payments/pi_synthetic/pay', { token: 'synthetic-token', paymentToken: 'tok_demo_4242', mode: 'sandbox' }), PaymentPolicyError);
-      await assert.rejects(r.request('/api/webhooks/payments'), PaymentPolicyError);
-      await assert.rejects(r.request('/api/admin/reservations/SYNTHETIC/confirm'), PaymentPolicyError);
-      assert.equal(JSON.stringify(r.reservation), before);
-      assert.equal(r.saves(), 0);
-      assert.throws(() => r.context.applyApprovedPayment(r.reservation, { approved: true }), PaymentPolicyError);
-    }
-  });
-});
-
-test('development sandbox works; browser cannot override live mode; unknown modes and webhooks fail closed', async () => {
-  await environment({ NODE_ENV: 'development' }, async () => {
-    const r = router('sandbox');
-    const result = await r.request('/api/payments/pi_synthetic/pay', { token: 'synthetic-token', paymentToken: 'tok_demo_4242', mode: 'live' });
-    assert.equal(result.status, 200);
-    assert.equal(r.reservation.status, 'confirmed');
-    const live = router('live');
-    await assert.rejects(live.request('/api/payments/pi_synthetic/pay', { token: 'synthetic-token', paymentToken: 'tok_demo_4242', mode: 'sandbox' }), PaymentPolicyError);
-    assert.equal(live.saves(), 0);
-    assert.throws(() => requirePaymentPermission('unknown'), PaymentPolicyError);
-    await assert.rejects(router('sandbox').request('/api/webhooks/payments'), PaymentPolicyError);
-  });
+test('gateway rejects absent or test credentials in production and unsigned notifications', () => {
+  for (const key of ['', 'sk_test_fixture']) assert.throws(() => requireGateway({ NODE_ENV: 'production', PAYMENTS_PROVIDER: 'stripe', PAYMENTS_SECRET_KEY: key, PAYMENTS_WEBHOOK_SECRET: 'fixture' }), /disponibles/);
+  assert.throws(() => verifiedEvent('{}', 'invalid', { PAYMENTS_WEBHOOK_SECRET: 'fixture' }), /Firma/);
 });
 
 test('PostgreSQL TLS verifies host and certificates; URL/environment overrides cannot downgrade it', () => {

@@ -51,7 +51,7 @@ Sitio web demostrativo y sistema de reservas para las Cuevas de K’anba, en Lan
 
 - Inicio de sesión con contraseña y cookie de sesión `HttpOnly`, `SameSite=Strict`.
 - Resumen con indicadores, gráfico de reservas y ocupación por tour.
-- Búsqueda y filtro de reservas, detalle completo, confirmación manual de pago y reenvío de correos.
+- Búsqueda y filtro de reservas, detalle completo, reenvío de correos.
 - Cancelación con registro de reembolso manual o automático según la política.
 - Calendario de disponibilidad y cierres por fecha/tour.
 - CRUD de tours (crear, editar, archivar) y editor de contenido por secciones.
@@ -151,7 +151,7 @@ El acceso de visitantes acepta dos métodos: correo/contraseña y **Google OAuth
 1. El visitante elige tour, fecha, horario y cantidad de participantes.
 2. Al enviar el formulario se crea una reserva con código único `KAN-AAAA-#####` y token privado.
 3. Los cupos quedan bloqueados durante `booking.holdMinutes` (20 minutos por defecto).
-4. El visitante paga en `/pago.html` con la pasarela sandbox.
+4. El visitante paga en `/pago.html` en el checkout alojado.
 5. Si el pago se aprueba:
    - la reserva pasa a `confirmed`;
    - se genera el comprobante `REC-AAAA-#####`;
@@ -164,17 +164,11 @@ El acceso de visitantes acepta dos métodos: correo/contraseña y **Google OAuth
    - 0 % con menos de 24 horas.
 9. Cada cancelación y reembolso queda registrado con folio, importe, porcentaje, método, fecha y estado.
 
-### Tarjetas de prueba
+### Activación de pagos y correo
 
-| Número | Resultado |
-| --- | --- |
-| `4242 4242 4242 4242` | Pago aprobado |
-| Cualquier tarjeta con Luhn válido | Aprobada (sandbox) |
-| Terminación `0002` | Rechazo: fondos insuficientes |
-| Terminación `0003` | Rechazo: autenticación requerida |
-| `4000 0000 0000 0069` | Rechazo: tarjeta vencida |
+La instalación queda sin credenciales. El adaptador disponible es Stripe Checkout. Si el cliente contrata otra pasarela, debe integrarse su API y su protocolo de notificaciones antes de habilitarla. Configura las variables de `.env.example` en el gestor de secretos de cada entorno. Registra el webhook HTTPS y habilita los eventos indicados allí. El regreso del navegador abre Mi cuenta. Solo el webhook firmado confirma el pago. Si llega tras liberarse los cupos se solicita el reembolso a Stripe.
 
-Usa cualquier nombre, una fecha futura `MM/AA` y un CVC de 3 o 4 dígitos. No se procesan cargos reales.
+El Worker entrega los correos de la cola mediante el cron y el transporte HTTPS. Puede usarse Resend con remitente verificado o un gateway compatible con `server/mail-transport.js`. En Node también está disponible SMTP autenticado. Verifica una compra, su notificación y la entrega al buzón en un entorno de pruebas propio antes de activar cobros reales.
 
 ---
 
@@ -264,7 +258,7 @@ node server/index.js
 └── server/
     ├── index.js              # servidor HTTP, rutas, auth, pagos, worker
     ├── store.js              # semillas, persistencia y lógica de reservas
-    ├── gateway.js            # adaptador de pasarela sandbox
+    ├── gateway.js            # adaptador de Stripe Checkout
     ├── mailer.js             # plantillas y registro de correos
     ├── smtp.js               # cliente SMTP nativo opcional
     └── security.js           # hash de contraseña, tokens y firmas
@@ -285,7 +279,7 @@ node server/index.js
 | `POST` | `/api/reservations/lookup` | Busca por código y correo del titular. |
 | `GET` | `/api/reservations/:code?token=` | Detalle con enlace privado. |
 | `POST` | `/api/reservations/:code/cancel` | Cancela y calcula el reembolso. |
-| `POST` | `/api/payments/:intentId/pay` | Procesa el pago sandbox. |
+| `POST` | `/api/payments/:intentId/pay` | Inicia el checkout alojado. |
 | `GET` | `/api/receipt/:code?token=` | Comprobante digital. |
 | `GET` | `/api/verify/:code` | Verificación pública de un comprobante. |
 | `POST` | `/api/webhooks/payments` | Webhook firmado de la pasarela. |
@@ -542,7 +536,7 @@ Esta implementación es una demo funcional, no un sistema listo para producción
 
 - Cambia la contraseña de demostración y usa `ADMIN_PASSWORD` + `FORCE_ADMIN_PASSWORD=1` en el primer arranque.
 - Sirve el sitio detrás de HTTPS y un proxy inverso (Caddy, Nginx, IIS).
-- Sustituye la pasarela sandbox por una real y configura el webhook firmado.
+- Configura el proveedor contratado y verifica su webhook firmado.
 - Configura SMTP real y verifica SPF, DKIM y DMARC del dominio remitente.
 - Haz respaldos de la base PostgreSQL (`pg_dump` de `DATABASE_URL`) y de `data/` si usas el modo archivo local. La base Free de Render no tiene respaldos y caduca a los 30 días.
 - Revisa las políticas, requisitos y precios con la operación real antes de publicar.

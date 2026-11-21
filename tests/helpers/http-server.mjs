@@ -19,7 +19,10 @@ initial.users.push({ id: 'test-admin', name: 'Test Admin', email: 'admin@example
 initial.tours = defaultTours();
 initial.settings = defaultSettings();
 const database = memoryRepository(initial, document => fs.writeFile(path.join(process.env.DATA_DIR, 'db.json'), JSON.stringify(document)));
-app = createApp({ config, database, fetch, mailConfigured: false,
+app = createApp({ config, database, fetch: async (url, options) => {
+    if (url !== 'https://api.stripe.com/v1/checkout/sessions') throw Error('Unexpected external request');
+    return Response.json({ id: 'cs_fixture', url: 'https://checkout.stripe.com/c/pay/fixture' });
+  }, mailConfigured: false,
   sendMail: async () => { throw new Error('External mail forbidden in tests.'); },
   network: () => ({ secure: false, ip: '127.0.0.1' }), assets: async () => new Response('fixture') });
 process.send({ port });

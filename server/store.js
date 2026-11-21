@@ -290,7 +290,7 @@ export function publicSite() {
     tours: d.tours.filter((t) => t.active !== false).map(publicTour),
     settings: {
       booking: d.settings.booking,
-      payments: { provider: d.settings.payments.provider, mode: d.settings.payments.mode, publicKey: d.settings.payments.publicKey }
+      payments: { provider: getConfig().PAYMENTS_PROVIDER || null }
     },
     serverNow: new Date().toISOString(),
     today: todayISO()
@@ -429,8 +429,8 @@ export function validateCustomer(input = {}) {
   const errors = {};
   if (customer.name.length < 3 || customer.name.length > 120) errors.name = 'Escribe tu nombre completo.';
   if (customer.email.length > 254 || !EMAIL_RE.test(customer.email)) errors.email = 'Correo electrónico inválido.';
-  if (customer.phone.replace(/\D/g, '').length < 7) errors.phone = 'Teléfono inválido.';
-  if (customer.country.length < 2) errors.country = 'Indica tu país.';
+  if (!/^\+?[\d ()-]{7,25}$/.test(customer.phone) || !/^\d{7,15}$/.test(customer.phone.replace(/\D/g, ''))) errors.phone = 'Teléfono inválido.';
+  if (customer.country.length < 2 || customer.country.length > 100) errors.country = 'Indica tu país.';
   if (input.acceptPolicies !== true) errors.acceptPolicies = 'Debes aceptar las políticas de reserva.';
   if (input.acceptTerms !== true) errors.acceptTerms = 'Debes aceptar los términos y la carta de responsabilidad.';
   if (Object.keys(errors).length) {
@@ -479,10 +479,10 @@ export function createReservation(input, { user = null } = {}) {
   const tour = findTour(input.tourId);
   const date = String(input.date || '');
   const time = String(input.time || '');
-  const participants = Number(input.participants);
+  const participants = input.participants;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new AppError('Fecha inválida.', 422, 'validation');
-  if (!tour.times.includes(time)) throw new AppError('Horario no válido para este tour.', 422, 'validation');
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time) || !tour.times.includes(time)) throw new AppError('Horario no válido para este tour.', 422, 'validation');
   if (!Number.isInteger(participants) || participants < 1 || participants > tour.maxParticipants) {
     throw new AppError(`Este tour admite entre 1 y ${tour.maxParticipants} participantes.`, 422, 'validation');
   }
@@ -508,7 +508,10 @@ export function createReservation(input, { user = null } = {}) {
 
   const customer = validateCustomer(input.customer || {});
   const holdMinutes = policy.holdMinutes;
-  const total = Math.round(tour.price * participants * 100) / 100;
+  const cents = Math.round(tour.price * 100);
+  if (!Number.isSafeInteger(cents * participants) || cents <= 0 || cents / 100 !== tour.price)
+    throw new AppError('Precio del tour no disponible.', 409, 'invalid_price');
+  const total = cents * participants / 100;
   const now = Date.now();
   const code = nextReservationCode();
   const token = randomToken();
@@ -540,7 +543,7 @@ export function createReservation(input, { user = null } = {}) {
     paidAt: null,
     payment: {
       intentId,
-      provider: d.settings.payments.provider,
+      provider: getConfig().PAYMENTS_PROVIDER || null,
       status: 'requires_payment',
       amount: total,
       currency: policy.currency,

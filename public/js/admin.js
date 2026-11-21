@@ -595,23 +595,7 @@
         pay.target = '_blank';
         pay.rel = 'noopener';
         actions.append(pay);
-        const confirmButton = el('button', 'btn btn-outline btn-compact', 'Confirmar pago manual');
-        confirmButton.type = 'button';
-        confirmButton.addEventListener('click', async () => {
-          if (!window.confirm(`¿Confirmar manualmente el pago de ${r.code} por ${money(r.total)}? Se emitirá comprobante y se enviarán correos.`)) return;
-          busy(confirmButton, true);
-          try {
-            await api(`/api/admin/reservations/${encodeURIComponent(r.code)}/confirm`, { method: 'POST' });
-            toast('Pago confirmado manualmente.');
-            openReservation(r.code);
-            loadReservations();
-          } catch (error) {
-            handleError(error);
-          } finally {
-            busy(confirmButton, false);
-          }
-        });
-        actions.append(confirmButton);
+
       }
       if (r.status === 'confirmed') {
         const receipt = el('a', 'btn btn-primary btn-compact', 'Ver comprobante');
@@ -2001,16 +1985,10 @@
 
   function openRefundProcess(refund) {
     const form = el('form');
-    const grid = el('div', 'form-grid');
-    grid.append(
-      formField('Referencia del reembolso', 'reference', refund.reference || `RF-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000 + 10000))}`, { full: true }),
-      formField('Método', 'method', refund.method || 'Medio de pago original', { full: true })
-    );
-    form.append(grid);
     const note = el('div', 'modal-note warn', `Se procesará un reembolso de ${money(refund.amount)} para ${refund.customerName} (${refund.reservationCode}). Se enviará un correo automático.`);
     form.append(note);
     const actions = el('div', 'modal-actions');
-    const process = el('button', 'btn btn-primary btn-compact', 'Marcar como procesado');
+    const process = el('button', 'btn btn-primary btn-compact', refund.reference ? 'Consultar reembolso' : 'Solicitar reembolso');
     process.type = 'submit';
     const cancel = el('button', 'btn btn-outline btn-compact', 'Cancelar');
     cancel.type = 'button';
@@ -2021,14 +1999,10 @@
       event.preventDefault();
       busy(process, true);
       try {
-        await api(`/api/admin/refunds/${encodeURIComponent(refund.id)}/process`, {
-          method: 'POST',
-          body: JSON.stringify({
-            reference: form.elements.namedItem('reference')?.value.trim(),
-            method: form.elements.namedItem('method')?.value.trim()
-          })
+        const result = await api(`/api/admin/refunds/${encodeURIComponent(refund.id)}/process`, {
+          method: 'POST', body: '{}'
         });
-        toast('Reembolso procesado y correo generado.');
+        toast(result.refund.status === 'processed' ? 'Reembolso procesado y correo generado.' : 'Solicitud registrada. La pasarela está procesando el reembolso.');
         closeModal();
         loadRefunds();
         if (state.view === 'overview') loadOverview();
@@ -2137,8 +2111,7 @@
     }
     if (payments) {
       payments.replaceChildren();
-      settingsField(payments, 'payments.provider', 'Proveedor', { full: true });
-      settingsField(payments, 'payments.mode', 'Modo', { select: [['sandbox', 'Sandbox'], ['live', 'Producción']] });
+      settingsField(payments, 'payments.provider', 'Proveedor configurado en el servidor', { full: true, disabled: true });
       settingsField(payments, 'payments.merchantId', 'Merchant ID');
       settingsField(payments, 'payments.publicKey', 'Llave pública', { full: true });
       settingsField(payments, 'payments.secretKey', 'Llave secreta', { full: true, secret: true, disabled: true, placeholder: 'Variable PAYMENTS_SECRET_KEY', configured: Boolean(state.settings.payments?.secretKeyConfigured) });

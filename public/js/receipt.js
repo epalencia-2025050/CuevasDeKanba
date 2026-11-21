@@ -71,9 +71,9 @@
 
     document.title = `Comprobante ${receipt.receiptNumber} · K’anba Cuevas Vivas`;
 
-    text('businessName', business.legalName || 'K’anba Cuevas Vivas · Operadora local');
-    text('businessDetails', `${business.address || 'Lanquín, Alta Verapaz, Guatemala'} · NIT ${business.nit || '—'}`);
-    text('businessEmail', business.email || 'reservas@kanba.gt');
+    text('businessName', business.legalName || '');
+    text('businessDetails', `${business.address || ''} · NIT ${business.nit || '—'}`);
+    text('businessEmail', business.email || '');
     text('receiptNumber', receipt.receiptNumber);
     text('receiptDate', `Emitido: ${formatDate(receipt.issuedAt, true)}`);
     text('receiptStatus', reservation.status === 'confirmed' ? 'Pago aprobado' : reservation.status);
@@ -94,9 +94,6 @@
       const row = document.createElement('tr');
       const desc = document.createElement('td');
       desc.textContent = tour.name || 'Experiencia K’anba';
-      const note = document.createElement('small');
-      note.textContent = 'Guía local, casco, chaleco salvavidas y entrada';
-      desc.append(note);
       const qty = document.createElement('td');
       qty.textContent = String(reservation.participants || 1);
       const unit = document.createElement('td');
@@ -112,7 +109,7 @@
     text('total', money(breakdown.total, reservation.currency));
     text('paymentMethod', payment.brand ? `${payment.brand} ****${payment.last4 || ''}` : 'Tarjeta');
     text('paymentReference', payment.reference || '—');
-    text('paymentProvider', payment.provider || 'KanbaPay Sandbox');
+    text('paymentProvider', payment.provider || '—');
     text('paymentDate', formatDate(payment.paidAt || reservation.paidAt, true));
 
     const back = $('#backConfirm');

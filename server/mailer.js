@@ -58,7 +58,6 @@ function layout({ preheader, title, body, cta, ctaUrl, ctaSecondary, ctaSecondar
     <a href="${baseUrl()}" style="color:#b8d98c;text-decoration:none;">kanba.gt</a> · Este es un correo transaccional generado automáticamente.
   </td></tr>
 </table>
-<div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#8a9a92;padding:16px 8px;">Sitio y sistema demostrativos. No es el sitio oficial de las Cuevas de K’anba.</div>
 </td></tr></table></body></html>`;
 }
 
@@ -72,9 +71,9 @@ function receiptEmailCard(r) {
     month: 'long',
     year: 'numeric'
   });
-  const paymentMethod = r.payment?.brand ? `${r.payment.brand} ****${r.payment.last4 || '4242'}` : 'Tarjeta ****4242';
-  const paymentRef = r.payment?.reference || 'PAY-JR5JFD59';
-  const provider = r.payment?.provider || 'KanbaPay Sandbox';
+  const paymentMethod = r.payment?.brand || 'Pago en línea';
+  const paymentRef = r.payment?.reference || '';
+  const provider = r.payment?.provider || '';
 
   return `
     <div style="background:#ffffff;border:1px solid #e5ded0;border-radius:12px;padding:26px 28px;margin:24px 0;box-shadow:0 8px 30px rgba(14,36,32,.08);position:relative;overflow:hidden;">
@@ -86,12 +85,12 @@ function receiptEmailCard(r) {
           <td valign="top" style="width:55%;">
             <div style="font-family:Georgia,serif;font-size:26px;font-weight:bold;color:#0e2420;line-height:1;">K’anba</div>
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:8.5px;letter-spacing:.28em;text-transform:uppercase;color:#2f6b57;font-weight:bold;margin-top:3px;">Cuevas Vivas · Lanquín</div>
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#6b7c73;margin-top:6px;">K’anba Cuevas Vivas · Operadora local</div>
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#6b7c73;">Lanquín, Alta Verapaz, Guatemala · NIT 1234567-8</div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#6b7c73;margin-top:6px;">${esc(getDb().settings.business?.legalName || '')}</div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#6b7c73;">${esc([getDb().settings.business?.address, getDb().settings.business?.nit].filter(Boolean).join(' · '))}</div>
           </td>
           <td valign="top" align="right" style="width:45%;">
             <div style="font-family:Georgia,serif;font-size:19px;font-weight:bold;color:#0e2420;text-transform:uppercase;letter-spacing:.05em;">COMPROBANTE</div>
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:12.5px;font-weight:bold;color:#0e2420;margin-top:3px;">${esc(r.receipt?.number || 'REC-2026-00488')}</div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:12.5px;font-weight:bold;color:#0e2420;margin-top:3px;">${esc(r.receipt?.number || '')}</div>
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#7b8c83;margin-top:3px;">Emitido: ${esc(issuedDate)}</div>
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#2f6b57;font-weight:bold;margin-top:3px;">Pago aprobado</div>
           </td>
@@ -106,7 +105,7 @@ function receiptEmailCard(r) {
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:12.5px;font-weight:bold;color:#0e2420;">${esc(r.customer?.name || '')}</div>
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#55685f;margin-top:2px;">${esc(r.customer?.email || '')}</div>
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#55685f;">${esc(r.customer?.phone || '')}</div>
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#55685f;">${esc(r.customer?.country || 'Guatemala')}</div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#55685f;">${esc(r.customer?.country || '')}</div>
           </td>
           <td valign="top" style="width:50%;">
             <div style="font-family:Arial,Helvetica,sans-serif;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#7b8c83;font-weight:bold;margin-bottom:4px;">RESERVA</div>
@@ -132,7 +131,7 @@ function receiptEmailCard(r) {
           <tr style="border-bottom:1px solid #e5ded0;">
             <td style="padding:10px 0;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;color:#0e2420;font-weight:600;">
               ${esc(r.tourName)}
-              <div style="font-size:9.5px;color:#7b8c83;font-weight:normal;margin-top:2px;">Guía local, casco, chaleco salvavidas y entrada</div>
+              <div style="font-size:9.5px;color:#7b8c83;font-weight:normal;margin-top:2px;"></div>
             </td>
             <td align="center" style="padding:10px 0;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;color:#0e2420;">${esc(r.participants)}</td>
             <td align="right" style="padding:10px 0;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;color:#0e2420;">${money(r.unitPrice || (r.total / r.participants), r.currency)}</td>
@@ -187,7 +186,7 @@ function receiptEmailCard(r) {
       </table>
 
       <div style="margin-top:16px;padding-top:12px;border-top:1px dashed #d6cebe;font-family:Arial,Helvetica,sans-serif;font-size:8.5px;line-height:1.6;color:#85968d;">
-        <strong>Notas:</strong> Los precios se expresan en ${esc(r.currency)} e incluyen impuestos. Este documento es un comprobante de pago demostrativo. Para cualquier gestión o consulta escribe a reservas@kanba.gt con el número de reserva.
+        <strong>Notas:</strong> Los precios se expresan en ${esc(r.currency)} e incluyen impuestos. Conserva el número de reserva para tus consultas.
       </div>
     </div>
   `;
@@ -253,7 +252,7 @@ function templates(r, extra = {}) {
       ctaUrl: manageUrl,
       ctaSecondary: 'Ver comprobante imprimible',
       ctaSecondaryUrl: receiptUrl,
-      note: `¿Necesitas hacer cambios? Puedes consultar o gestionar tu tour directamente desde el botón superior o escribiéndonos a reservas@kanba.gt indicando tu código <strong>${esc(r.code)}</strong>.`
+      note: `¿Necesitas hacer cambios? Puedes consultar o gestionar tu tour directamente desde el botón superior indicando tu código <strong>${esc(r.code)}</strong>.`
     },
     receipt: {
       subject: `Comprobante ${r.receipt?.number || ''} · ${r.code} · K’anba`,
@@ -266,7 +265,7 @@ function templates(r, extra = {}) {
       ctaUrl: manageUrl,
       ctaSecondary: 'Abrir comprobante imprimible',
       ctaSecondaryUrl: receiptUrl,
-      note: 'Documento no fiscal para fines demostrativos. Conserva el comprobante y preséntalo en recepción junto con tu documento de identidad.'
+      note: 'Comprobante de pago. Conserva el comprobante y preséntalo en recepción junto con tu documento de identidad.'
     },
     expired: {
       subject: `Tu reserva expiró · ${r.code} · K’anba`,
@@ -277,7 +276,7 @@ function templates(r, extra = {}) {
         <p style="${p}">No se realizó ningún cargo. Si aún quieres venir, puedes reservar de nuevo y elegir otro horario disponible.</p>`,
       cta: 'Reservar de nuevo',
       ctaUrl: `${url}/#reservar`,
-      note: 'Si crees que esto es un error o el pago se cobró, escríbenos a reservas@kanba.gt con el número de reserva.'
+      note: 'Si crees que esto es un error o el pago se cobró, contacta al equipo con el número de reserva.'
     },
     cancellation: {
       subject: `Cancelación registrada · ${r.code} · K’anba`,
@@ -308,7 +307,7 @@ function templates(r, extra = {}) {
         </table>
         <p style="${p}">El abono puede tardar de 5 a 10 días hábiles en reflejarse, según tu banco o emisor de tarjeta.</p>`,
       cta: 'Contactar soporte',
-      ctaUrl: `mailto:reservas@kanba.gt?subject=${encodeURIComponent('Reembolso ' + r.code)}`,
+      ctaUrl: `${baseUrl()}/mi-reserva.html`,
       note: 'Gracias por viajar con guías locales. Esperamos verte en otra temporada.'
     }
   };
@@ -349,7 +348,7 @@ export function getEffectiveSmtpConfig() {
   const secure = envSecure !== undefined ? envSecure === 'true' : dbSmtp.secure !== false;
   const user = (hasEnvUser ? envUser : dbSmtp.user) || '';
   const pass = envPass || ''; // Never load a credential from persisted settings.
-  const fromEmail = (envFrom !== undefined ? envFrom : (dbSmtp.fromEmail || user)) || 'reservas@kanba.gt';
+  const fromEmail = (envFrom !== undefined ? envFrom : (dbSmtp.fromEmail || user)) || '';
   const fromName = (envFromName !== undefined ? envFromName : (dbSmtp.fromName || 'K’anba Cuevas Vivas')) || 'K’anba Cuevas Vivas';
 
   let source = 'none';
@@ -359,7 +358,7 @@ export function getEffectiveSmtpConfig() {
     source = 'database';
   }
 
-  const isConfigured = getRuntime().mailConfigured ?? Boolean(host && user && pass);
+  const isConfigured = Boolean(fromEmail && (getRuntime().mailConfigured ?? Boolean(host && user && pass)));
 
   return {
     host,

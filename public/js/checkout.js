@@ -1,5 +1,5 @@
 /* ==========================================================================
-   K’anba · pago de la reserva (pasarela sandbox)
+   K’anba · pago de la reserva (pago alojado)
    ========================================================================== */
 (() => {
   'use strict';
@@ -189,7 +189,7 @@
     content.append(links);
 
     const provider = $('#providerName');
-    if (provider) provider.textContent = reservation.payment?.provider || 'KanbaPay Sandbox';
+    if (provider) provider.textContent = 'Stripe';
   }
 
   function startCountdown(seconds) {
@@ -236,79 +236,6 @@
   }
 
   /* ---------------------------- Tarjeta ---------------------------- */
-
-  function formatCardNumber(input) {
-    const digits = input.value.replace(/\D/g, '').slice(0, 19);
-    input.value = digits.replace(/(.{4})/g, '$1 ').trim();
-  }
-
-  function formatExpiry(input) {
-    let digits = input.value.replace(/\D/g, '').slice(0, 4);
-    if (digits.length >= 3) digits = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    input.value = digits;
-  }
-
-  function luhn(number) {
-    const digits = String(number).replace(/\D/g, '');
-    if (digits.length < 13 || digits.length > 19) return false;
-    let sum = 0;
-    let alt = false;
-    for (let i = digits.length - 1; i >= 0; i -= 1) {
-      let digit = Number(digits[i]);
-      if (alt) {
-        digit *= 2;
-        if (digit > 9) digit -= 9;
-      }
-      sum += digit;
-      alt = !alt;
-    }
-    return sum % 10 === 0;
-  }
-
-  function setFieldError(name, message) {
-    const field = document.querySelector(`[data-error="${name}"]`);
-    if (field) field.textContent = message;
-    const input = document.querySelector(`#paymentForm [name="${name}"]`);
-    if (input) input.classList.toggle('invalid', Boolean(message));
-  }
-
-  function validateCardForm() {
-    const number = $('#cardNumber').value.replace(/\s/g, '');
-    const name = $('#cardName').value.trim();
-    const expiry = $('#cardExpiry').value.trim();
-    const cvc = $('#cardCvc').value.trim();
-    let valid = true;
-
-    ['number', 'name', 'expiry', 'cvc'].forEach((field) => setFieldError(field, ''));
-
-    if (!luhn(number)) {
-      setFieldError('number', 'Número de tarjeta inválido. Revisa los dígitos.');
-      valid = false;
-    }
-    if (name.length < 3) {
-      setFieldError('name', 'Escribe el nombre del titular.');
-      valid = false;
-    }
-    if (!/^\d{2}\s*\/\s*\d{2}$/.test(expiry)) {
-      setFieldError('expiry', 'Usa el formato MM/AA.');
-      valid = false;
-    } else {
-      const [mm, yy] = expiry.split('/').map((value) => Number(value.trim()));
-      const end = new Date(2000 + yy, mm, 1).getTime();
-      if (mm < 1 || mm > 12) {
-        setFieldError('expiry', 'Mes inválido.');
-        valid = false;
-      } else if (end <= Date.now()) {
-        setFieldError('expiry', 'La tarjeta está vencida.');
-        valid = false;
-      }
-    }
-    if (!/^\d{3,4}$/.test(cvc)) {
-      setFieldError('cvc', 'CVV inválido.');
-      valid = false;
-    }
-    return valid;
-  }
 
   function renderPayment(reservation) {
     state.reservation = reservation;
@@ -410,7 +337,6 @@
     if (state.paying) return;
     const errorBox = $('#payError');
     if (errorBox) errorBox.hidden = true;
-    if (!validateCardForm()) return;
     if (state.secondsLeft <= 0) { expirePayment(); return; }
 
     const reservation = state.reservation;
@@ -424,14 +350,9 @@
     state.paying = true;
     trackBooking('add_payment_info', reservation);
     try {
-      // Los datos de la tarjeta no salen del navegador: se genera un token de
-      // demostración local. En producción, la pasarela tokeniza (campos alojados).
-      const digits = $('#cardNumber').value.replace(/\D/g, '');
-      const suffix = digits.slice(-4);
-      const paymentToken = `tok_demo_${suffix || '4242'}`;
       const data = await api(`/api/payments/${encodeURIComponent(reservation.payment.intentId)}/pay`, {
         method: 'POST',
-        body: JSON.stringify({ token: state.token, paymentToken })
+        body: JSON.stringify({ token: state.token })
       });
       clearInterval(state.timer);
       window.location.href = data.redirect || `/confirmacion.html?code=${encodeURIComponent(state.code)}&token=${encodeURIComponent(state.token)}`;
@@ -442,9 +363,6 @@
         errorBox.textContent = error.message;
         errorBox.hidden = false;
       }
-      if (error.fields) {
-        Object.entries(error.fields).forEach(([field, message]) => setFieldError(field, message));
-      }
       if (error.status === 410) {
         expirePayment();
       } else if (error.data?.secondsLeft !== undefined) {
@@ -454,16 +372,6 @@
   }
 
   function setupInputs() {
-    const number = $('#cardNumber');
-    const expiry = $('#cardExpiry');
-    const cvc = $('#cardCvc');
-    number?.addEventListener('input', () => formatCardNumber(number));
-    expiry?.addEventListener('input', () => formatExpiry(expiry));
-    cvc?.addEventListener('input', () => { cvc.value = cvc.value.replace(/\D/g, '').slice(0, 4); });
-    ['number', 'name', 'expiry', 'cvc'].forEach((name) => {
-      const input = $(`#paymentForm [name="${name}"]`);
-      input?.addEventListener('input', () => setFieldError(name, ''));
-    });
     $('#paymentForm')?.addEventListener('submit', pay);
   }
 

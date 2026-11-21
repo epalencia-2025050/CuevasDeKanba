@@ -6,7 +6,9 @@ export function createHttpMailTransport(config, fetcher = fetch) {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000),
       headers: { Authorization: `Bearer ${config.MAIL_API_TOKEN}`, 'Content-Type': 'application/json',
         ...(message.messageId ? { 'Idempotency-Key': message.messageId } : {}) },
-      body: JSON.stringify({ from: { email: message.fromEmail, name: message.fromName },
+      body: JSON.stringify(config.MAIL_API_URL === 'https://api.resend.com/emails' ? {
+        from: message.fromEmail, to: [message.to], subject: message.subject, html: message.html, text: message.text
+      } : { from: { email: message.fromEmail, name: message.fromName },
         to: message.to, subject: message.subject, html: message.html, text: message.text, messageId: message.messageId })
     });
     if (!response.ok) throw new Error('Mail delivery failed.');

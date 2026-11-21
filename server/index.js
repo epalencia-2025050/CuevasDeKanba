@@ -3,8 +3,8 @@ import { withRuntime } from './runtime.js';
 import { createHandlers } from './routes.js';
 import { webRequest, webReply, readWebBody, validateRequest } from './web-http.js';
 import { withStoreTransaction, AppError, closeExpiredHolds } from './store.js';
-import { PaymentPolicyError } from './payment-policy.js';
-import { RequestSecurityError } from './request-security.js';
+import { startCheckout } from './gateway.js';
+import { RequestSecurityError, parseJsonObject } from './request-security.js';
 import { notifyExpired, processEmailRetryQueue } from './mailer.js';
 import { safeErrorMessage } from './safe-errors.js';
 import { StoreInvalidError, isDatabaseUnavailable } from './data-errors.js';
@@ -25,7 +25,7 @@ export function createApp(services) {
       c.header('Cache-Control', 'no-store');
       return c.json({ error: { code: 'database_unavailable', message: 'Base de datos temporalmente no disponible.' } }, 503);
     }
-    const known = error instanceof StoreInvalidError || error instanceof AppError || error instanceof PaymentPolicyError || error instanceof RequestSecurityError;
+    const known = error instanceof StoreInvalidError || error instanceof AppError || error instanceof RequestSecurityError;
     if (!known) console.error('[app]', safeErrorMessage(error));
     c.header('Cache-Control', 'no-store');
     return c.json({ error: { code: known ? error.code : 'server_error',
@@ -38,6 +38,12 @@ export function createApp(services) {
     if (await services.database.rateLimit(`request:${req.ip}`, 60000) > 180) throw new AppError('Demasiados intentos.', 429, 'rate_limited');
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
       await readWebBody(req, c.req.path === '/api/admin/media' ? 12 * 1024 * 1024 : 65536);
+    }
+    const checkout = c.req.path.match(/^\/api\/payments\/([A-Za-z0-9_-]+)\/pay$/);
+    if (req.method === 'POST' && checkout) {
+      const redirect = await startCheckout(checkout[1], parseJsonObject(req.bodyText), services.config, services.fetch);
+      c.header('Cache-Control', 'no-store');
+      return c.json({ redirect });
     }
     const reply = webReply();
     await withStoreTransaction(async () => {

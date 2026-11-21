@@ -1760,3 +1760,6 @@ svg { display: block; }
 .summary-head, .summary-total, .summary-lines > div { flex-wrap: wrap; }
 .summary-lines dd { margin-inline-start: auto; }
 .summary-total strong { max-width: 100%; line-height: 1.15; }
+
+.order-lines dd, .order-total strong { min-width: 0; overflow-wrap: anywhere; }
+.order-total { flex-wrap: wrap; }

@@ -122,11 +122,12 @@ test('explicit relational export is transaction-scoped, skips completed imports 
   assert.equal(queries.at(-1), 'ROLLBACK');
 });
 
-test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sandbox, receipt and cancellation', { timeout: 30000 }, async () => {
+test('HTTP workflow: auth, reservation, retry idempotency, ownership, hosted payment, receipt and cancellation', { timeout: 30000 }, async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kanba-functional-'));
   const env = { ...process.env, NODE_ENV: 'test', HOST: '127.0.0.1', PORT: '0', DATA_DIR: temporary,
     UPLOADS_DIR: path.join(temporary, 'uploads'), ADMIN_PASSWORD: 'SYNTHETIC-ADMIN-PASSWORD' };
   for (const key of Object.keys(env)) if (/^(SMTP_|PAYMENTS_|PG|DATABASE_URL|PUBLIC_URL|TRUST_PROXY|TRUSTED_PROXY|FORCE_ADMIN_PASSWORD|RENDER)/.test(key)) delete env[key];
+  Object.assign(env, { PAYMENTS_PROVIDER: 'stripe', PAYMENTS_SECRET_KEY: 'sk_test_fixture', PAYMENTS_WEBHOOK_SECRET: 'fixture-signing' });
   const child = fork(new URL('./helpers/http-server.mjs', import.meta.url), [], { env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   let diagnostics = '';
   child.stderr.on('data', chunk => { diagnostics += chunk; });
@@ -166,8 +167,22 @@ test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sa
     const token = recovered.body.token;
     const privateView = await call('GET', `/api/reservations/${code}?token=${token}`);
     assert.equal(privateView.status, 200);
-    const paid = await call('POST', `/api/payments/${privateView.body.reservation.payment.intentId}/pay`, { token, paymentToken: 'tok_demo_4242' });
-    assert.equal(paid.status, 200, JSON.stringify(paid.body));
+    const intent = privateView.body.reservation.payment.intentId;
+    assert.equal((await call('POST', `/api/payments/${intent}/pay`, { token, total: 1 })).status, 422);
+    const checkout = await call('POST', `/api/payments/${intent}/pay`, { token });
+    assert.equal(checkout.body.redirect, 'https://checkout.stripe.com/c/pay/fixture');
+    assert.equal((await call('GET', `/api/receipt/${code}?token=${token}`)).status, 409);
+    const session = { id: 'cs_fixture', client_reference_id: intent, payment_status: 'paid', currency: 'gtq',
+      payment_intent: 'pi_fixture', amount_total: privateView.body.reservation.total * 100 };
+    async function deliver(object) {
+      const event = { type: 'checkout.session.completed', livemode: false, data: { object } };
+      const t = Math.floor(Date.now()/1000);
+      const digest = crypto.createHmac('sha256', env.PAYMENTS_WEBHOOK_SECRET).update(t + '.' + JSON.stringify(event)).digest('hex');
+      return call('POST', '/api/webhooks/payments', event, '', { 'Stripe-Signature': 't=' + t + ',v1=' + digest });
+    }
+    assert.equal((await deliver({ ...session, amount_total: 1 })).status, 409);
+    assert.equal((await deliver(session)).status, 200);
+    assert.equal((await deliver(session)).status, 200);
     assert.equal((await call('GET', `/api/receipt/${code}?token=${token}`)).status, 200);
     const verification = await call('GET', `/api/verify/${code}`);
     assert.deepEqual(Object.keys(verification.body).sort(), ['code', 'ok', 'status', 'valid']);
@@ -179,6 +194,7 @@ test('HTTP workflow: auth, reservation, retry idempotency, ownership, payment sa
     const mail = await call('GET', '/api/admin/emails', undefined, admin.cookie);
     assert(mail.body.emails.every(record => record.status === 'queued'));
     const persisted = JSON.parse(fs.readFileSync(path.join(temporary, 'db.json'), 'utf8'));
+    assert.equal(persisted.emails.filter(record => record.template === 'confirmation').length, 1);
     assert.equal(persisted.reservations.length, 1);
     assert.equal(persisted.reservations[0].status, 'cancelled');
     assert.equal(persisted.emails.filter(record => record.template === 'pending').length, 1);
