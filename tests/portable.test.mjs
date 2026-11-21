@@ -58,7 +58,7 @@ test('Google state survives app instances, is browser-bound and consumed once', 
   assert.match(missing.headers.get('location'), /google_state/);
   assert.equal(exchanges, 0);
   const success = await second.app.request(callback, { headers: { Cookie: cookie } });
-  assert.equal(success.headers.get('location'), '/cuenta.html');
+  assert.equal(success.headers.get('location'), '/');
   assert(success.headers.getSetCookie().some(c => c.startsWith('kanba_user=')));
   assert.equal(second.database.snapshot().users.length, 1);
   const replay = await first.app.request(callback, { headers: { Cookie: cookie } });
@@ -103,7 +103,7 @@ test('OAuth reports safe failure stages, consumes state once and rejects recursi
     const callback = `https://kanba.test/api/auth/google/callback?state=${state}${scenario === 'missing' ? '' : '&code=synthetic'}`;
     const result = await app.request(callback, { headers: { Cookie: cookie } });
     assert.equal(result.status, 302);
-    assert.equal(result.headers.get('location'), expected ? `/login.html?error=${expected}` : '/cuenta.html');
+    assert.equal(result.headers.get('location'), expected ? `/login.html?error=${expected}` : '/');
     assert(result.headers.getSetCookie().some(c => /^kanba_oauth=;.*Path=\/api\/auth\/google; Max-Age=0; Secure/.test(c)));
     assert(!result.headers.get('location').includes('SENSITIVE'));
     if (expected) {

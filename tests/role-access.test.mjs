@@ -26,7 +26,7 @@ function setup() {
   async function login(role) {
     const response = await request('/api/auth/login', '', 'POST', { email: `${role}@example.invalid`, password: 'synthetic-password', role: 'admin' });
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).redirectTo, role === 'admin' ? '/admin.html' : '/cuenta.html');
+    assert.equal((await response.json()).redirectTo, role === 'admin' ? '/admin.html' : '/');
     return response.headers.getSetCookie().find(c => c.startsWith('kanba_user=')).split(';')[0];
   }
   return { request, login, database, services, assets: () => assets };
@@ -83,7 +83,7 @@ test('Google chooses dashboard by store role and never elevates new users from p
     const state = new URL(start.headers.get('location')).searchParams.get('state');
     const cookie = start.headers.get('set-cookie').split(';')[0];
     const callback = await request(`/api/auth/google/callback?state=${state}&code=synthetic`, cookie);
-    assert.equal(callback.headers.get('location'), role === 'admin' ? '/admin.html' : '/cuenta.html');
+    assert.equal(callback.headers.get('location'), role === 'admin' ? '/admin.html' : '/');
     const sessionCookie = callback.headers.getSetCookie().find(c => c.startsWith('kanba_user=')).split(';')[0];
     assert.equal((await request('/api/admin/me', sessionCookie)).status, role === 'admin' ? 200 : 403);
     if (role === 'new') assert.equal(database.snapshot().users.find(u => u.email === 'new@example.invalid').role, 'user');

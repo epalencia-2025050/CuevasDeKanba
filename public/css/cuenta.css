@@ -1,0 +1,27 @@
+﻿* { box-sizing: border-box; }
+body { margin: 0; color: #18392e; background: #f7f6ef; font: 1rem/1.55 system-ui, sans-serif; }
+header { background: #13392e; color: #fffef5; }
+nav, main { width: min(calc(100% - 2rem), 68rem); margin-inline: auto; }
+nav, .links { display: flex; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; flex-wrap: wrap; }
+nav { padding-block: 1rem; }
+nav a { color: inherit; text-decoration: none; }
+nav a:hover { text-decoration: underline; }
+.brand { font: bold 1.7rem Georgia, serif; }
+.brand small { display: block; font: .68rem system-ui; text-transform: uppercase; letter-spacing: .16em; color: #d8e8bd; }
+button { color: inherit; background: transparent; border: 1px solid #9ab7a4; padding: .5rem .8rem; border-radius: 2rem; font: inherit; cursor: pointer; }
+main { padding-block: clamp(1.4rem,4vw,3rem); }
+h1,h2,h3 { font-family: Georgia, serif; line-height: 1.2; }
+h1 { font-size: clamp(2.4rem,6vw,4rem); margin: 0 0 1.25rem; }
+.profile, .groups section { padding: clamp(1.1rem,3vw,2rem); border-radius: 1rem; }
+.profile { background: #1c483b; color: #faf8e9; display: flex; align-items: center; gap: 1.2rem; margin-bottom: 2.5rem; overflow-wrap: anywhere; }
+.profile h2,.groups h3 { margin: 0; }
+.profile p { margin: .3rem 0 0; }
+.avatar { flex: none; position: relative; display: grid; place-items: center; width: 4rem; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: #d9e7bb; color: #153e30; font: bold 1.55rem Georgia,serif; }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.groups { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit,minmax(min(100%,24rem),1fr)); align-items: start; }
+.groups section { background: #fffefa; border: 1px solid #d7dfd3; box-shadow: 0 6px 20px rgb(26 57 41 / 5%); }
+.groups article { padding-top: .9rem; margin-top: .9rem; border-top: 1px solid #d7dfd3; overflow-wrap: anywhere; }
+.groups article p { margin: .25rem 0; }
+.groups a { color: #265e45; text-underline-offset: .2em; }
+:focus-visible { outline: 3px solid #c68f42; outline-offset: 3px; }
+@media (max-width: 36rem) { nav { align-items: flex-start; flex-direction: column; } .links { width: 100%; gap: .5rem; font-size: .9rem; } }

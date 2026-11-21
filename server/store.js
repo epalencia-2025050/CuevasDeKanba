@@ -106,7 +106,7 @@ export function createInitialStore() {
 const USER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, email: u.email, phone: u.phone, country: u.country, role: u.role, createdAt: u.createdAt };
+  return { id: u.id, name: u.name, email: u.email, avatar: u.avatar || null, phone: u.phone, country: u.country, role: u.role, createdAt: u.createdAt };
 }
 
 export function findUserByEmail(email) {

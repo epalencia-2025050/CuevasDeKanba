@@ -51,7 +51,7 @@ function securityHeaders(res) {
     "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://googleads.g.doubleclick.net",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com https://www.google.co.uk",
+    "img-src 'self' https://*.googleusercontent.com data: blob: https://i.ytimg.com https://img.youtube.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com https://www.google.co.uk",
     "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://www.googletagmanager.com https://td.doubleclick.net",
     "connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://stats.g.doubleclick.net https://*.g.doubleclick.net https://region1.google-analytics.com",
     "media-src 'self'",
@@ -173,7 +173,7 @@ function requireAdmin(req) {
   return session;
 }
 
-function dashboardFor(user) { return user.role === 'admin' ? '/admin.html' : '/cuenta.html'; }
+function dashboardFor(user) { return user.role === 'admin' ? '/admin.html' : '/'; }
 
 function getSessionUser(req) {
   const token = parseCookies(req)[USER_COOKIE];
@@ -628,7 +628,7 @@ async function handleApi(req, res, url) {
   if (method === 'GET' && p === '/api/auth/dashboard') {
     const session = requireUser(req);
     return sendJson(res, 200, { user: session.user, redirectTo: dashboardFor(session.user),
-      reservations: getDb().reservations.filter(r => r.userId === session.user.id)
+      today: todayISO(), reservations: getDb().reservations.filter(r => r.userId === session.user.id)
         .map(r => ({ code: r.code, tourName: r.tourName, date: r.date, time: r.time, status: r.status })) });
   }
 

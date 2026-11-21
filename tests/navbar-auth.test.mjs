@@ -24,7 +24,7 @@ test('navbar remains neutral until auth resolves and clears stale identity on an
   for (const mode of ['authenticated', 'anonymous', 'failure']) {
     let resolve, reject;
     const attributes = new Map([['aria-busy', 'true'], ['title', 'old identity']]);
-    const button = { textContent: 'Cuenta', dataset: {}, removeAttribute: key => attributes.delete(key) };
+    const button = { textContent: 'Cuenta', dataset: {}, querySelector: () => ({}), removeAttribute: key => attributes.delete(key) };
     const badge = { textContent: 'old identity', hidden: false };
     const context = vm.createContext({
       AbortSignal,
@@ -45,7 +45,7 @@ test('navbar remains neutral until auth resolves and clears stale identity on an
     await pending;
     assert.equal(attributes.has('aria-busy'), false);
     assert.equal(context.state.authChecked, true);
-    if (mode === 'authenticated') assert.equal(button.className, 'user-profile-btn');
+    if (mode === 'authenticated') { assert.equal(button.className, 'user-profile-btn'); assert.equal(button.href, '/cuenta.html'); }
     else {
       assert.equal(button.textContent, 'Iniciar sesión');
       assert.equal(context.state.user, null);

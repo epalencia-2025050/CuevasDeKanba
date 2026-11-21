@@ -1,26 +1,34 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Mi cuenta · Cuevas de K’anba</title>
-  <link rel="stylesheet" href="/css/styles.css">
+  <title>Mi cuenta · K’anba Cuevas Vivas</title>
+  <link rel="stylesheet" href="/css/cuenta.css">
   <script src="/js/cuenta.js" defer></script>
 </head>
 <body>
-  <header class="site-header"><nav class="container" aria-label="Mi cuenta">
-    <a href="/">Cuevas de K’anba</a>
-    <a href="/reservar.html">Reservar un tour</a>
-    <button type="button" id="accountLogout" class="btn">Cerrar sesión</button>
+  <header><nav aria-label="Navegación de la cuenta">
+    <a class="brand" href="/">K’anba <small>Cuevas Vivas</small></a>
+    <div class="links"><a href="/">Inicio</a><a href="/reservar.html">Reservar un tour</a>
+    <button type="button" id="accountLogout">Cerrar sesión</button></div>
   </nav></header>
-  <main class="section container">
+  <main>
     <h1>Mi cuenta</h1>
-    <p id="accountName"></p>
-    <p id="accountStatus" role="status">Cargando tus reservas…</p>
-    <h2>Mis reservas</h2>
-    <ul id="accountReservations"></ul>
-    <a class="btn" href="/mi-reserva.html">Consultar o cancelar una reserva</a>
+    <p id="accountStatus" role="status">Cargando tu perfil y tus reservas…</p>
+    <div id="accountContent" hidden>
+      <section class="profile" aria-labelledby="accountName">
+        <div class="avatar" aria-hidden="true"><span id="initials"></span><img id="photo" alt="" referrerpolicy="no-referrer" hidden></div>
+        <div><h2 id="accountName"></h2><p id="email"></p><p id="contact" hidden></p></div>
+      </section>
+      <h2>Mis reservas</h2>
+      <div class="groups">
+        <section><h3>Reservas activas</h3><div id="active"></div></section>
+        <section><h3>Reservas canceladas</h3><div id="cancelled"></div></section>
+        <section id="historySection" hidden><h3>Historial</h3><div id="history"></div></section>
+      </div>
+    </div>
   </main>
 </body>
 </html>

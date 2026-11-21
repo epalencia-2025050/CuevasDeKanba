@@ -151,17 +151,19 @@
           const firstName = (state.user.name || state.user.email || 'Mi cuenta').split(' ')[0];
           const initial = firstName.charAt(0).toUpperCase();
           loginBtn.className = 'user-profile-btn';
-          loginBtn.removeAttribute('href');
+          loginBtn.href = state.user.role === 'admin' ? '/admin.html' : '/cuenta.html';
           loginBtn.title = 'Sesión activa: ' + (state.user.name || state.user.email);
           loginBtn.innerHTML = `
-            <span class="user-avatar" aria-hidden="true">${initial}</span>
-            <span>${firstName}</span>
+            <span class="user-avatar" aria-hidden="true"></span>
+            <span class="profile-name"></span>
             <span class="btn-logout-icon" title="Cerrar sesión" aria-label="Cerrar sesión">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </span>
           `;
+          loginBtn.querySelector('.user-avatar').textContent = initial;
+          loginBtn.querySelector('.profile-name').textContent = firstName;
           loginBtn.onclick = async (e) => {
-            if (e.target.closest('.btn-logout-icon') || confirm('¿Deseas cerrar tu sesión?')) {
+            if (e.target.closest('.btn-logout-icon')) {
               e.preventDefault();
               if (loginBtn.dataset.loggingOut === 'true') return;
               loginBtn.dataset.loggingOut = 'true';
