@@ -638,11 +638,12 @@
       const availableDays = [];
       const today = state.site.today;
       const advance = state.site.settings?.booking?.advanceDays;
-      if (!Number.isInteger(advance) || advance < 0) throw new Error('Las reservas no están disponibles en este momento.');
-      const limit = new Date(today + 'T00:00:00Z');
-      limit.setUTCDate(limit.getUTCDate() + advance);
-      const lastSale = limit.toISOString().slice(0, 10);
+      const hasAdvance = /^\d+$/.test(String(advance));
       let from = tour.startDate && tour.startDate > today ? tour.startDate : today;
+      // With no sales horizon, preview one API page starting at the first operating date.
+      const limit = new Date((hasAdvance ? today : from) + 'T00:00:00Z');
+      limit.setUTCDate(limit.getUTCDate() + (hasAdvance ? Number(advance) : 44));
+      const lastSale = limit.toISOString().slice(0, 10);
       const until = tour.endDate && tour.endDate < lastSale ? tour.endDate : lastSale;
       while (from <= until) {
         const days = Math.min(45, 1 + (Date.parse(until) - Date.parse(from)) / 86400000);
@@ -650,9 +651,8 @@
         if (state.tourId !== tourId) return;
         const page = data.daysList || [];
         availableDays.push(...page);
-        if (page.length < days) break;
-        const next = new Date(page[page.length - 1].date + 'T00:00:00Z');
-        next.setUTCDate(next.getUTCDate() + 1);
+        const next = new Date(from + 'T00:00:00Z');
+        next.setUTCDate(next.getUTCDate() + days);
         from = next.toISOString().slice(0, 10);
       }
       state.availability = availableDays.filter(day => day.tours?.some(entry => entry.tourId === tourId));

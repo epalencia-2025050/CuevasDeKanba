@@ -574,3 +574,5 @@
 .admin-body .tour-add-item { appearance: none; place-self: start; aspect-ratio: auto; flex: none; display: inline-flex; align-items: center; height: auto; min-height: 2rem; width: fit-content; max-width: 100%; background: #edf5ec; border: 1px solid #9eb6a0; border-radius: .45rem; color: #214535; cursor: pointer; padding: .35rem .7rem; font: 600 .85rem/1.2 var(--sans); }
 .tour-add-item:hover { background: #dbead6; }
 .availability-help { margin: .5rem 0 1.2rem; color: #466252; line-height: 1.5; }
+#view-availability .card-head { flex-wrap: wrap; }
+#view-availability .availability-help { display: block; width: auto; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

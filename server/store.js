@@ -341,30 +341,32 @@ export function departureStatus(tour, date, time, taken) {
   const d = getDb();
   const left = Math.max(0, tour.capacity - taken);
   if (isClosed(date, tour.id)) return { left: 0, status: 'closed' };
-  if (dateToEpoch(date, time) <= Date.now() + d.settings.booking.cutoffHours * 3600000) return { left: 0, status: 'past' };
+  if (dateToEpoch(date, time) <= Date.now() + (d.settings.booking?.cutoffHours || 0) * 3600000) return { left: 0, status: 'past' };
   if (left <= 0) return { left: 0, status: 'soldout' };
-  if (left <= tour.capacity * d.settings.booking.lastSeatsPercent / 100) return { left, status: 'last' };
+  if (left <= tour.capacity * d.settings.booking?.lastSeatsPercent / 100) return { left, status: 'last' };
   return { left, status: 'open' };
 }
 
 function operatesOn(tour, date, time) {
-  return (!tour.startDate || date >= tour.startDate) && (!tour.endDate || date <= tour.endDate)
+  const weekday = dayOfWeek(date);
+  return Array.isArray(tour.days) && tour.days.some(day => day === weekday || day === String(weekday))
+    && (!tour.startDate || date >= tour.startDate) && (!tour.endDate || date <= tour.endDate)
     && (!time || ((!tour.startTime || time >= tour.startTime) && (!tour.endTime || time <= tour.endTime)));
 }
 
-export function buildAvailability({ tourId = null, from = todayISO(), days = 21 } = {}) {
+export function buildAvailability({ tourId = null, from = todayISO(), days = 21, calendarOnly = false } = {}) {
   const d = getDb();
-  const tours = d.tours.filter((t) => t.active !== false && (!tourId || t.id === tourId));
-  const policy = validateBookingPolicy(d.settings.booking);
-  const lastDate = isoAddDaysFrom(todayISO(), policy.advanceDays);
+  const tours = d.tours.filter(t => t.active !== false && (!tourId || t.id === tourId));
+  const advance = d.settings.booking?.advanceDays;
+  const lastDate = !calendarOnly && /^\d+$/.test(String(advance)) ? isoAddDaysFrom(todayISO(), Number(advance)) : null;
   const out = [];
   for (let i = 0; i < days; i++) {
     const date = isoAddDaysFrom(from, i);
-    if (date > lastDate) break;
+    if (lastDate && date > lastDate) break;
     const dow = dayOfWeek(date);
     const tourDays = [];
     for (const tour of tours) {
-      if (!operatesOn(tour,date) || !tour.days.includes(dow)) continue;
+      if (!operatesOn(tour,date)) continue;
       const departures = tour.times.filter(time => operatesOn(tour,date,time)).map((time) => {
         const taken = seatsTaken(tour.id, date, time);
         const info = departureStatus(tour, date, time, taken);
@@ -380,7 +382,7 @@ export function buildAvailability({ tourId = null, from = todayISO(), days = 21 
         departures
       });
     }
-    out.push({ date, dow, tours: tourDays });
+    if (tourDays.length) out.push({ date, dow, tours: tourDays });
   }
   return out;
 }
@@ -491,7 +493,7 @@ export function createReservation(input, { user = null } = {}) {
       participantNames.some(name => typeof name !== 'string' || !name.trim() || name.length > 120)) {
     throw new AppError('Indica el nombre de cada participante.', 422, 'validation');
   }
-  if (!operatesOn(tour,date,time) || !tour.days.includes(dayOfWeek(date))) throw new AppError('El tour no opera en esa fecha.', 422, 'unavailable');
+  if (!operatesOn(tour,date,time)) throw new AppError('El tour no opera en esa fecha.', 422, 'unavailable');
   if (isClosed(date, tour.id)) throw new AppError('La cueva está cerrada en esa fecha por mantenimiento o clima.', 409, 'closed');
   if (dateToEpoch(date, time) <= Date.now() + d.settings.booking.cutoffHours * 3600000) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
 
@@ -564,20 +566,6 @@ export function createReservation(input, { user = null } = {}) {
 /* ------------------------------------------------------------------ */
 /* Availability guards for admin                                     */
 /* ------------------------------------------------------------------ */
-
-export function occupancyFor(date, tourId = null) {
-  const d = getDb();
-  const tours = d.tours.filter((t) => t.active !== false && (!tourId || t.id === tourId));
-  return tours.map((t) => ({
-    tourId: t.id,
-    tourName: t.name,
-    capacity: t.capacity,
-    times: t.times.map((time) => {
-      const taken = seatsTaken(t.id, date, time);
-      return { time, taken, left: Math.max(0, t.capacity - taken), capacity: t.capacity };
-    })
-  }));
-}
 
 export function closeExpiredHolds() {
   const d = getDb();

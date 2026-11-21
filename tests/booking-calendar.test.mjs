@@ -8,7 +8,7 @@ const selection = source.slice(source.indexOf('  async function selectTour('), s
 for (const expired of [true, false]) {
   test(expired ? 'past operating period explains empty calendar' : 'future tour requests its operating window and allows a single remaining seat', async () => {
     const tour = { id: 'fixture', startDate: '2030-03-01', endDate: '2030-03-02', minParticipants: 15 };
-    const state = { tours: [tour], site: { today: expired ? '2030-04-01' : '2030-01-01', settings: { booking: { advanceDays: 120 } } } };
+    const state = { tours: [tour], site: { today: expired ? '2030-04-01' : '2030-01-01', settings: { booking: {} } } };
     const queries = [];
     let note, selected;
     const context = vm.createContext({ state, currentTour: () => tour, renderDates() {}, renderTimes() {}, setText() {}, track() {},

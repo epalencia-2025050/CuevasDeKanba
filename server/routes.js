@@ -6,7 +6,7 @@ import { safeErrorMessage } from './safe-errors.js';
 import { readWebBody } from './web-http.js';
 import {
   validateBookingPolicy, rotateReservationToken, saveUploadToDb,
-  getDb, saveDb, publicSite, publicTour, buildAvailability, occupancyFor,
+  getDb, saveDb, publicSite, publicTour, buildAvailability,
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
   AppError, nextReceiptNumber, TZ,
@@ -1057,11 +1057,12 @@ async function handleApi(req, res, url) {
 
   if (method === 'GET' && p === '/api/admin/availability') {
     const days = Math.max(1, Math.min(30, Number(url.searchParams.get('days')) || 14));
-    const grid = [];
-    for (let i = 0; i < days; i++) {
-      const date = isoAddDays(i);
-      grid.push({ date, dateLong: formatDateLong(date), occupancy: occupancyFor(date), closures: getDb().closures.filter((c) => c.date === date) });
-    }
+    const grid = buildAvailability({ days, calendarOnly: true })
+      .map(day => ({
+        date: day.date, dateLong: formatDateLong(day.date),
+        occupancy: day.tours.map(({ departures, ...tour }) => ({ ...tour, times: departures })),
+        closures: getDb().closures.filter(c => c.date === day.date)
+      }));
     return sendJson(res, 200, { ok: true, grid });
   }
 

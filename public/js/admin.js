@@ -809,10 +809,10 @@
           row.append(el('strong', '', tour.tourName));
           const times = el('div', 'avail-times');
           tour.times.forEach((slot) => {
-            const closed = closures.some((c) => c.tourId === 'all' || c.tourId === tour.tourId);
-            const status = closed || slot.left <= 0 ? 'full' : slot.left <= Math.max(1, Math.round(slot.capacity * 0.2)) ? 'last' : 'open';
+            const closed = slot.status === 'closed';
+            const status = ['open', 'last'].includes(slot.status) ? slot.status : 'full';
             const chip = el('span', `avail-time ${status}`);
-            chip.append(el('b', '', slot.time), el('span', '', closed ? 'cerrado' : `${slot.left} cupos`));
+            chip.append(el('b', '', slot.time), el('span', '', closed ? 'cerrado' : slot.status === 'past' ? 'venta cerrada' : `${slot.left} cupos`));
             times.append(chip);
           });
           row.append(times);
@@ -1093,7 +1093,7 @@
       input.type = 'checkbox';
       input.name = 'days';
       input.value = String(index);
-      input.checked = activeDays.includes(index);
+      input.checked = activeDays.includes(index) || activeDays.includes(String(index));
       check.append(input, document.createTextNode(label));
       checks.append(check);
     });

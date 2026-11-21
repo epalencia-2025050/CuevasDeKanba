@@ -135,3 +135,36 @@ test('admin password change targets the authenticated user and revokes unified s
   assert.equal(loginResponse.status, 200);
   assert.equal((await loginResponse.json()).redirectTo, '/admin.html');
 });
+
+test('both calendars enforce inclusive dates, operating weekdays and hours without payment settings', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-21T18:00:00Z') });
+  const { database, request, login } = setup();
+  const admin = await login('admin');
+  await database.transaction(unit => {
+    unit.document.tours = [{ id: 'cave', name: 'Cave', capacity: 6, days: ['2', 6],
+      startDate: '2026-12-09', endDate: '2026-12-12', startTime: '09:00', endTime: '14:00',
+      times: ['08:00', '09:00', '14:00', '15:00'] }];
+    unit.document.settings.booking = {};
+    unit.document.reservations = [{ status: 'confirmed', tourId: 'cave', date: '2026-12-12', time: '09:00', participants: 2 }];
+    unit.dirty = true;
+  });
+  async function calendars() {
+    const publicResponse = await request('/api/availability?tour=cave&days=30');
+    const adminResponse = await request('/api/admin/availability?days=30', admin);
+    assert.equal(publicResponse.status, 200);
+    assert.equal(adminResponse.status, 200);
+    const { daysList } = await publicResponse.json();
+    const { grid } = await adminResponse.json();
+    assert.deepEqual(daysList.map(day => day.date), ['2026-12-12']);
+    assert.deepEqual(grid.map(day => day.date), ['2026-12-12']);
+    const slots = daysList[0].tours[0].departures;
+    assert.deepEqual(slots, grid[0].occupancy[0].times);
+    return slots;
+  }
+  assert.deepEqual((await calendars()).map(s => [s.time, s.left]), [['09:00', 4], ['14:00', 6]]);
+  await database.transaction(unit => {
+    unit.document.closures.push({ date: '2026-12-12', tourId: 'cave' });
+    unit.dirty = true;
+  });
+  assert((await calendars()).every(slot => slot.status === 'closed' && slot.left === 0));
+});
