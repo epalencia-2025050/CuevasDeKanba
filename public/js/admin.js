@@ -53,6 +53,37 @@
   };
 
   const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const DAY_INDEX_MAP = {
+    dom: 0, domingo: 0, sun: 0, sunday: 0,
+    lun: 1, lunes: 1, mon: 1, monday: 1,
+    mar: 2, martes: 2, tue: 2, tuesday: 2,
+    mie: 3, mié: 3, miercoles: 3, miércoles: 3, wed: 3, wednesday: 3,
+    jue: 4, jueves: 4, thu: 4, thursday: 4,
+    vie: 5, viernes: 5, fri: 5, friday: 5,
+    sab: 6, sáb: 6, sabado: 6, sábado: 6, sat: 6, saturday: 6
+  };
+  function normalizeWeekday(val) {
+    if (typeof val === 'number') {
+      if (val === 7) return 0;
+      if (Number.isInteger(val) && val >= 0 && val <= 6) return val;
+      return null;
+    }
+    const str = String(val ?? '').trim().toLowerCase();
+    if (/^[0-6]$/.test(str)) return Number(str);
+    if (str === '7') return 0;
+    const clean = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (clean in DAY_INDEX_MAP) return DAY_INDEX_MAP[clean];
+    if (str in DAY_INDEX_MAP) return DAY_INDEX_MAP[str];
+    return null;
+  }
+
+  function formatUtcLong(dateStr) {
+    if (!dateStr) return '—';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Intl.DateTimeFormat('es-GT', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
+    }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+  }
   const CATEGORY_OPTIONS = [
     ['cueva', 'Cueva'],
     ['rio', 'Río'],
@@ -793,7 +824,7 @@
     days.forEach((day) => {
       const card = el('div', 'avail-day');
       const head = el('div', 'avail-day-head');
-      head.append(el('strong', '', day.dateLong || day.date), el('span', '', day.date));
+      head.append(el('strong', '', day.dateLong || formatUtcLong(day.date)), el('span', '', day.date));
       const closures = state.closures.filter((c) => c.date === day.date);
       if (closures.length) {
         const closed = el('span', 'avail-closed', closures.some((c) => c.tourId === 'all') ? 'Cerrado todo el día' : 'Con cierres parciales');
@@ -838,10 +869,11 @@
     sorted.forEach((closure) => {
       const item = el('div', 'closure-item');
       const date = el('div', 'closure-date');
-      const parsed = new Date(`${closure.date}T12:00:00-06:00`);
+      const [y, m, d] = closure.date.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d, 12));
       date.append(
-        el('strong', '', String(parsed.getUTCDate()).padStart(2, '0')),
-        el('span', '', parsed.toLocaleDateString('es-GT', { month: 'short' }).replace('.', ''))
+        el('strong', '', String(d).padStart(2, '0')),
+        el('span', '', new Intl.DateTimeFormat('es-GT', { month: 'short', timeZone: 'UTC' }).format(dt).replace('.', ''))
       );
       const info = el('div', 'closure-info');
       const tour = closure.tourId === 'all' ? 'Todos los tours' : state.tours.find((t) => t.id === closure.tourId)?.name || closure.tourId;
@@ -947,7 +979,7 @@
         ['Duración', tour.duration],
         ['Cupo', `${tour.capacity} por salida`],
         ['Horarios', (tour.times || []).join(' · ')],
-        ['Días', (tour.days || []).map((d) => DAY_NAMES[d]).join(' ')]
+        ['Días', (tour.days || tour.diasOperacion || []).map(normalizeWeekday).filter((d) => d !== null).map((d) => DAY_NAMES[d]).join(' ')]
       ].forEach(([label, value]) => {
         const item = el('span');
         item.append(el('b', '', `${label}: `), document.createTextNode(value || '—'));
@@ -1019,10 +1051,10 @@
       formField('Punto de encuentro', 'meetingPoint', tour?.meetingPoint || '', { full: true }),
       formField('Horarios (separados por coma)', 'times', (tour?.times || []).join(', '), { full: true, placeholder: 'HH:MM' }),
       formField('Descripción', 'description', [tour?.description, tour?.longDescription].filter(Boolean).join('\n\n'), { textarea: true, full: true, rows: 5 }),
-      formField('Fecha de inicio', 'startDate', tour?.startDate, { type: 'date' }),
-      formField('Fecha de finalización', 'endDate', tour?.endDate, { type: 'date' }),
-      formField('Hora de inicio', 'startTime', tour?.startTime, { type: 'time' }),
-      formField('Hora de finalización', 'endTime', tour?.endTime, { type: 'time' }),
+      formField('Fecha de inicio', 'startDate', tour?.startDate || tour?.fechaInicio || '', { type: 'date' }),
+      formField('Fecha de finalización', 'endDate', tour?.endDate || tour?.fechaFin || '', { type: 'date' }),
+      formField('Hora de inicio', 'startTime', tour?.startTime || tour?.horaInicio || '', { type: 'time' }),
+      formField('Hora de finalización', 'endTime', tour?.endTime || tour?.horaFin || '', { type: 'time' }),
     );
 
     const extras = el('fieldset', 'tour-editor-section full');
@@ -1085,7 +1117,7 @@
     const daysWrap = el('div', 'field full');
     daysWrap.append(el('span', '', 'Días de operación'));
     const checks = el('div', 'check-grid');
-    const activeDays = tour?.days || [];
+    const activeDays = (tour?.days || tour?.diasOperacion || []).map(normalizeWeekday).filter((d) => d !== null);
     [1, 2, 3, 4, 5, 6, 0].forEach(index => {
       const label = DAY_NAMES[index];
       const check = el('label', 'inline-check');
@@ -1093,7 +1125,7 @@
       input.type = 'checkbox';
       input.name = 'days';
       input.value = String(index);
-      input.checked = activeDays.includes(index) || activeDays.includes(String(index));
+      input.checked = activeDays.includes(index);
       check.append(input, document.createTextNode(label));
       checks.append(check);
     });
@@ -1151,8 +1183,13 @@
         image,
         description: form.elements.namedItem('description')?.value.trim(),
         includes: $$('input[name="includeItem"]', form).map(input => input.value.trim()).filter(Boolean),
-        ...Object.fromEntries(['startDate', 'endDate', 'startTime', 'endTime'].map(key => [key, form.elements.namedItem(key).value])),
+        ...Object.fromEntries(['startDate', 'endDate', 'startTime', 'endTime'].map(key => [key, form.elements.namedItem(key)?.value || ''])),
+        fechaInicio: form.elements.namedItem('startDate')?.value || '',
+        fechaFin: form.elements.namedItem('endDate')?.value || '',
+        horaInicio: form.elements.namedItem('startTime')?.value || '',
+        horaFin: form.elements.namedItem('endTime')?.value || '',
         days: $$('input[name="days"]:checked', form).map((input) => Number(input.value)),
+        diasOperacion: $$('input[name="days"]:checked', form).map((input) => Number(input.value)),
         active: form.elements.namedItem('active')?.checked !== false,
         featured: Boolean(form.elements.namedItem('featured')?.checked)
       };

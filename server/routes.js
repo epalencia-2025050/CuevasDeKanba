@@ -6,7 +6,7 @@ import { safeErrorMessage } from './safe-errors.js';
 import { readWebBody } from './web-http.js';
 import {
   validateBookingPolicy, rotateReservationToken, saveUploadToDb,
-  getDb, saveDb, publicSite, publicTour, buildAvailability,
+  getDb, saveDb, publicSite, publicTour, buildAvailability, operatesOn, normalizeWeekday,
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
   AppError, nextReceiptNumber, TZ,
@@ -454,7 +454,7 @@ function adminOverview() {
   const refundsProcessed = d.refunds.filter((r) => r.status === 'processed');
 
   const today = todayISO();
-  const todaysTours = d.tours.filter((t) => t.active !== false && t.days.includes(dayOfWeek(today)));
+  const todaysTours = d.tours.filter((t) => t.active !== false && operatesOn(t, today));
   const capacityToday = todaysTours.reduce((s, t) => s + t.capacity * t.times.length, 0);
   const seatsToday = todaysTours.reduce((s, t) => s + t.times.reduce((x, time) => x + seatsTaken(t.id, today, time), 0), 0);
 
@@ -521,8 +521,9 @@ function cleanTour(input, existing = null) {
     .map((t) => String(t).trim())
     .filter(Boolean);
   if (!times.length) throw new AppError('Agrega al menos un horario válido (HH:MM).', 422, 'validation');
-  const days = (Array.isArray(input.days) ? input.days : [])
-    .map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  const rawDays = input.days !== undefined ? input.days : (input.diasOperacion !== undefined ? input.diasOperacion : (input.dias !== undefined ? input.dias : existing?.days || existing?.diasOperacion || []));
+  const days = (Array.isArray(rawDays) ? rawDays : [rawDays])
+    .map(normalizeWeekday).filter((d) => d !== null);
   if (!days.length) throw new AppError('Selecciona al menos un día de operación.', 422, 'validation');
   const price = Number(input.price);
   if (!Number.isSafeInteger(Math.round(price * 100)) || price <= 0 || Math.round(price * 100) / 100 !== price) throw new AppError('El precio debe ser positivo y tener hasta dos decimales.', 422, 'validation');
@@ -531,7 +532,10 @@ function cleanTour(input, existing = null) {
       || Number(input.maxParticipants) > capacity) {
     throw new AppError('Revisa el cupo, los participantes y la duración.', 422, 'validation');
   }
-  const { startDate = '', endDate = '', startTime = '', endTime = '' } = input;
+  const startDate = String(input.startDate !== undefined ? input.startDate : (input.fechaInicio !== undefined ? input.fechaInicio : existing?.startDate || existing?.fechaInicio || '')).trim();
+  const endDate = String(input.endDate !== undefined ? input.endDate : (input.fechaFin !== undefined ? input.fechaFin : existing?.endDate || existing?.fechaFin || '')).trim();
+  const startTime = String(input.startTime !== undefined ? input.startTime : (input.horaInicio !== undefined ? input.horaInicio : existing?.startTime || existing?.horaInicio || '')).trim();
+  const endTime = String(input.endTime !== undefined ? input.endTime : (input.horaFin !== undefined ? input.horaFin : existing?.endTime || existing?.horaFin || '')).trim();
   const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
   const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
   const reject = message => { throw new AppError(message, 422, 'validation'); };
@@ -547,8 +551,17 @@ function cleanTour(input, existing = null) {
     if (endTime && time > endTime) reject('Hay una salida posterior a la hora final.');
   }
   const { longDescription, minParticipants, ...previous } = existing || {};
+  const normalizedDays = [...new Set(days)].sort((a, b) => a - b);
   return {
-    ...previous, startDate, endDate, startTime, endTime,
+    ...previous,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    fechaInicio: startDate,
+    fechaFin: endDate,
+    horaInicio: startTime,
+    horaFin: endTime,
     id,
     name,
     badge: String(input.badge || '').trim().slice(0, 40),
@@ -557,7 +570,8 @@ function cleanTour(input, existing = null) {
     durationMinutes: Number(input.durationMinutes),
     price: Math.round(price * 100) / 100,
     times: [...new Set(times)].sort(),
-    days: [...new Set(days)].sort(),
+    days: normalizedDays,
+    diasOperacion: normalizedDays,
     capacity,
     maxParticipants: Math.max(1, Math.min(capacity, Number(input.maxParticipants) || capacity)),
     difficulty: String(input.difficulty || '').trim().slice(0, 80),
@@ -1056,8 +1070,10 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'GET' && p === '/api/admin/availability') {
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('from') || '') ? url.searchParams.get('from') : todayISO();
     const days = Math.max(1, Math.min(30, Number(url.searchParams.get('days')) || 14));
-    const grid = buildAvailability({ days, calendarOnly: true })
+    const tourId = url.searchParams.get('tour') || null;
+    const grid = buildAvailability({ tourId, from, days, calendarOnly: true })
       .map(day => ({
         date: day.date, dateLong: formatDateLong(day.date),
         occupancy: day.tours.map(({ departures, ...tour }) => ({ ...tour, times: departures })),

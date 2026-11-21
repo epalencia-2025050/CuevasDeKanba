@@ -30,6 +30,31 @@ export function nowMs() {
   return Date.now();
 }
 
+export const DAY_INDEX_MAP = Object.freeze({
+  dom: 0, domingo: 0, sun: 0, sunday: 0,
+  lun: 1, lunes: 1, mon: 1, monday: 1,
+  mar: 2, martes: 2, tue: 2, tuesday: 2,
+  mie: 3, mié: 3, miercoles: 3, miércoles: 3, wed: 3, wednesday: 3,
+  jue: 4, jueves: 4, thu: 4, thursday: 4,
+  vie: 5, viernes: 5, fri: 5, friday: 5,
+  sab: 6, sáb: 6, sabado: 6, sábado: 6, sat: 6, saturday: 6
+});
+
+export function normalizeWeekday(val) {
+  if (typeof val === 'number') {
+    if (val === 7) return 0;
+    if (Number.isInteger(val) && val >= 0 && val <= 6) return val;
+    return null;
+  }
+  const str = String(val ?? '').trim().toLowerCase();
+  if (/^[0-6]$/.test(str)) return Number(str);
+  if (str === '7') return 0;
+  const clean = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (clean in DAY_INDEX_MAP) return DAY_INDEX_MAP[clean];
+  if (str in DAY_INDEX_MAP) return DAY_INDEX_MAP[str];
+  return null;
+}
+
 export function dayOfWeek(date) {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
@@ -299,7 +324,25 @@ export function publicSite() {
 
 export function publicTour(t) {
   const { secret, minParticipants, ...rest } = t;
-  return rest;
+  const startDate = rest.startDate || rest.fechaInicio || '';
+  const endDate = rest.endDate || rest.fechaFin || '';
+  const startTime = rest.startTime || rest.horaInicio || '';
+  const endTime = rest.endTime || rest.horaFin || '';
+  const rawDays = rest.days ?? rest.diasOperacion ?? rest.dias ?? [];
+  const days = (Array.isArray(rawDays) ? rawDays : [rawDays]).map(normalizeWeekday).filter(d => d !== null);
+  return {
+    ...rest,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    fechaInicio: startDate,
+    fechaFin: endDate,
+    horaInicio: startTime,
+    horaFin: endTime,
+    days,
+    diasOperacion: days
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -347,11 +390,36 @@ export function departureStatus(tour, date, time, taken) {
   return { left, status: 'open' };
 }
 
-function operatesOn(tour, date, time) {
+export function operatesOn(tour, date, time) {
+  if (!tour || typeof tour !== 'object') return false;
+  const startDate = tour.startDate || tour.fechaInicio || null;
+  const endDate = tour.endDate || tour.fechaFin || null;
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
+
   const weekday = dayOfWeek(date);
-  return Array.isArray(tour.days) && tour.days.some(day => day === weekday || day === String(weekday))
-    && (!tour.startDate || date >= tour.startDate) && (!tour.endDate || date <= tour.endDate)
-    && (!time || ((!tour.startTime || time >= tour.startTime) && (!tour.endTime || time <= tour.endTime)));
+  const rawDays = Array.isArray(tour.days)
+    ? tour.days
+    : Array.isArray(tour.diasOperacion)
+      ? tour.diasOperacion
+      : Array.isArray(tour.dias)
+        ? tour.dias
+        : [];
+  if (!rawDays.length) return false;
+
+  const matches = rawDays.some(d => {
+    const norm = normalizeWeekday(d);
+    return norm !== null && norm === weekday;
+  });
+  if (!matches) return false;
+
+  const startTime = tour.startTime || tour.horaInicio || null;
+  const endTime = tour.endTime || tour.horaFin || null;
+  if (time) {
+    if (startTime && time < startTime) return false;
+    if (endTime && time > endTime) return false;
+  }
+  return true;
 }
 
 export function buildAvailability({ tourId = null, from = todayISO(), days = 21, calendarOnly = false } = {}) {

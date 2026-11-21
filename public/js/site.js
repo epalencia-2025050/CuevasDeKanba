@@ -72,22 +72,48 @@
 
   const money = value => state.site?.settings?.booking?.currency ? new Intl.NumberFormat('es-GT', { style: 'currency', currency: state.site.settings.booking.currency }).format(value) : String(value);
 
+  const DAY_INDEX_MAP = {
+    dom: 0, domingo: 0, sun: 0, sunday: 0,
+    lun: 1, lunes: 1, mon: 1, monday: 1,
+    mar: 2, martes: 2, tue: 2, tuesday: 2,
+    mie: 3, mié: 3, miercoles: 3, miércoles: 3, wed: 3, wednesday: 3,
+    jue: 4, jueves: 4, thu: 4, thursday: 4,
+    vie: 5, viernes: 5, fri: 5, friday: 5,
+    sab: 6, sáb: 6, sabado: 6, sábado: 6, sat: 6, saturday: 6
+  };
+  function normalizeWeekday(val) {
+    if (typeof val === 'number') {
+      if (val === 7) return 0;
+      if (Number.isInteger(val) && val >= 0 && val <= 6) return val;
+      return null;
+    }
+    const str = String(val ?? '').trim().toLowerCase();
+    if (/^[0-6]$/.test(str)) return Number(str);
+    if (str === '7') return 0;
+    const clean = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (clean in DAY_INDEX_MAP) return DAY_INDEX_MAP[clean];
+    if (str in DAY_INDEX_MAP) return DAY_INDEX_MAP[str];
+    return null;
+  }
+
   function dateObj(date) {
-    return new Date(`${date}T12:00:00`);
+    const [y, m, d] = String(date).split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 12));
   }
 
   function formatLong(date) {
     if (!date) return '—';
-    return new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long' }).format(dateObj(date));
+    return new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(dateObj(date));
   }
 
   function formatFull(date) {
     if (!date) return '—';
-    return new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(dateObj(date));
+    return new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(dateObj(date));
   }
 
   function formatShort(date) {
-    return new Intl.DateTimeFormat('es-GT', { day: '2-digit', month: 'short' }).format(dateObj(date));
+    if (!date) return '—';
+    return new Intl.DateTimeFormat('es-GT', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(dateObj(date));
   }
 
   function setText(id, value) {
@@ -639,14 +665,19 @@
       const today = state.site.today;
       const advance = state.site.settings?.booking?.advanceDays;
       const hasAdvance = /^\d+$/.test(String(advance));
-      let from = tour.startDate && tour.startDate > today ? tour.startDate : today;
+      const tourStart = tour.startDate || tour.fechaInicio || null;
+      const tourEnd = tour.endDate || tour.fechaFin || null;
+      let from = tourStart && tourStart > today ? tourStart : today;
       // With no sales horizon, preview one API page starting at the first operating date.
       const limit = new Date((hasAdvance ? today : from) + 'T00:00:00Z');
       limit.setUTCDate(limit.getUTCDate() + (hasAdvance ? Number(advance) : 44));
       const lastSale = limit.toISOString().slice(0, 10);
-      const until = tour.endDate && tour.endDate < lastSale ? tour.endDate : lastSale;
+      const until = tourEnd && tourEnd < lastSale ? tourEnd : lastSale;
       while (from <= until) {
-        const days = Math.min(45, 1 + (Date.parse(until) - Date.parse(from)) / 86400000);
+        const fromMs = Date.parse(from + 'T00:00:00Z');
+        const untilMs = Date.parse(until + 'T00:00:00Z');
+        const diffDays = Math.max(0, Math.round((untilMs - fromMs) / 86400000));
+        const days = Math.min(45, diffDays + 1);
         const data = await api(`/api/availability?tour=${encodeURIComponent(tourId)}&days=${days}&from=${from}`);
         if (state.tourId !== tourId) return;
         const page = data.daysList || [];
@@ -655,14 +686,18 @@
         next.setUTCDate(next.getUTCDate() + days);
         from = next.toISOString().slice(0, 10);
       }
-      state.availability = availableDays.filter(day => day.tours?.some(entry => entry.tourId === tourId));
+      state.availability = availableDays.filter(day => {
+        if (tourStart && day.date < tourStart) return false;
+        if (tourEnd && day.date > tourEnd) return false;
+        return day.tours?.some(entry => entry.tourId === tourId);
+      });
       renderDates();
       const first = state.availability.find(dayHasSeats);
       if (first) selectDate(first.date);
       else {
         renderTimes();
-        showAvailabilityNote(tour.endDate && tour.endDate < today ? 'El periodo de operación de este tour ya terminó.'
-          : tour.startDate > lastSale ? 'La venta para este tour aún no está abierta.'
+        showAvailabilityNote(tourEnd && tourEnd < today ? 'El periodo de operación de este tour ya terminó.'
+          : (tourStart && tourStart > lastSale) ? 'La venta para este tour aún no está abierta.'
           : state.availability.length ? 'No quedan salidas con cupos reservables en este periodo.'
           : 'No hay días y horarios de operación en el periodo de venta vigente.');
       }
@@ -696,15 +731,16 @@
       const entry = (day.tours || []).find((item) => item.tourId === state.tourId);
       const available = dayHasSeats(day);
       const date = dateObj(day.date);
-      const dow = new Intl.DateTimeFormat('es-GT', { weekday: 'short' }).format(date).replace('.', '');
-      const month = new Intl.DateTimeFormat('es-GT', { month: 'short' }).format(date).replace('.', '');
+      const dow = new Intl.DateTimeFormat('es-GT', { weekday: 'short', timeZone: 'UTC' }).format(date).replace('.', '');
+      const month = new Intl.DateTimeFormat('es-GT', { month: 'short', timeZone: 'UTC' }).format(date).replace('.', '');
+      const dayNum = String(Number(day.date.split('-')[2]));
       const button = el('button', {
         className: `date-btn${state.date === day.date ? ' selected' : ''}${day.date === today ? ' today' : ''}`,
         attrs: { type: 'button', disabled: !available, 'aria-pressed': String(state.date === day.date) },
         dataset: { date: day.date }
       }, [
         el('span', { className: 'dow', text: dow }),
-        el('span', { className: 'day', text: String(date.getDate()) }),
+        el('span', { className: 'day', text: dayNum }),
         el('span', { className: 'month', text: month })
       ]);
       button.addEventListener('click', () => selectDate(day.date));
