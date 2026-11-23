@@ -2464,6 +2464,11 @@
   // --- Ventas y POS ---
   async function loadCafeSales() {
     setSync(true);
+    const newSaleBtn = $('#btnNewCafeSale');
+    if (newSaleBtn && !newSaleBtn.__posBound) {
+      newSaleBtn.__posBound = true;
+      newSaleBtn.addEventListener('click', openCafePosModal);
+    }
     const from = $('#cafeSalesFrom')?.value || '';
     const to = $('#cafeSalesTo')?.value || '';
     const paymentMethod = $('#cafeSalesPaymentFilter')?.value || '';
@@ -2658,31 +2663,14 @@
 
     const topGrid = el('div');
     topGrid.style.display = 'grid';
-    topGrid.style.gridTemplateColumns = '2fr 1fr 1fr auto';
-    topGrid.style.gap = '8px';
+    topGrid.style.gridTemplateColumns = '3fr 1fr auto';
+    topGrid.style.gap = '10px';
     topGrid.style.alignItems = 'end';
 
     const prodSelect = el('select');
     prodSelect.className = 'select-compact';
     prodSelect.innerHTML = '<option value="">Selecciona un producto…</option>' +
       products.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-category="${p.category}">${p.name} - ${money(p.price)} (Stock: ${p.stock})</option>`).join('');
-
-    const variantSelect = el('select');
-    variantSelect.className = 'select-compact';
-    variantSelect.innerHTML = '<option value="">Variante / Sabor</option>';
-
-    prodSelect.addEventListener('change', () => {
-      const selId = prodSelect.value;
-      const prod = products.find(p => p.id === selId);
-      variantSelect.innerHTML = '<option value="">Variante estándar</option>';
-      if (prod && Array.isArray(prod.variants) && prod.variants.length) {
-        for (const v of prod.variants) {
-          const opt = el('option', '', v);
-          opt.value = v;
-          variantSelect.append(opt);
-        }
-      }
-    });
 
     const qtyInput = el('input');
     qtyInput.type = 'number';
@@ -2694,13 +2682,21 @@
 
     const btnAdd = el('button', 'btn btn-outline', '+ Agregar');
     btnAdd.type = 'button';
+    btnAdd.style.height = '38px';
 
-    topGrid.append(
-      Object.assign(el('div'), { innerHTML: '<label style="font-size:11px;font-weight:700;">Producto</label>' }, { children: [prodSelect] }),
-      Object.assign(el('div'), { innerHTML: '<label style="font-size:11px;font-weight:700;">Variante</label>' }, { children: [variantSelect] }),
-      Object.assign(el('div'), { innerHTML: '<label style="font-size:11px;font-weight:700;">Cantidad</label>' }, { children: [qtyInput] }),
-      btnAdd
-    );
+    const prodCol = el('div');
+    const prodLabel = el('label');
+    prodLabel.style.cssText = 'font-size:11px;font-weight:700;display:block;margin-bottom:4px;';
+    prodLabel.textContent = 'Producto del menú';
+    prodCol.append(prodLabel, prodSelect);
+
+    const qtyCol = el('div');
+    const qtyLabel = el('label');
+    qtyLabel.style.cssText = 'font-size:11px;font-weight:700;display:block;margin-bottom:4px;';
+    qtyLabel.textContent = 'Cantidad';
+    qtyCol.append(qtyLabel, qtyInput);
+
+    topGrid.append(prodCol, qtyCol, btnAdd);
 
     const cartWrap = el('div', 'table-wrap');
     const cartTable = el('table', 'data-table');
@@ -2773,11 +2769,9 @@
         toast('La cantidad debe ser al menos 1.');
         return;
       }
-      const variant = variantSelect.value || null;
-      const displayName = variant ? `${prod.name} (${variant})` : prod.name;
       const subtotal = Math.round(prod.price * qty * 100) / 100;
 
-      const existing = cart.find(c => c.id === prod.id && c.variant === variant);
+      const existing = cart.find(c => c.id === prod.id);
       if (existing) {
         existing.quantity += qty;
         existing.subtotal = Math.round(prod.price * existing.quantity * 100) / 100;
@@ -2785,8 +2779,7 @@
         cart.push({
           id: prod.id,
           name: prod.name,
-          displayName,
-          variant,
+          displayName: prod.name,
           unitPrice: prod.price,
           quantity: qty,
           subtotal
@@ -2919,11 +2912,6 @@
             const tdName = el('td');
             const strongName = el('strong', '', p.name);
             tdName.append(strongName);
-            if (p.variants && p.variants.length) {
-              const sm = el('small', '', ` (${p.variants.join(', ')})`);
-              sm.style.color = 'var(--muted)';
-              tdName.append(sm);
-            }
 
             const tdCat = el('td', '', p.category);
             const tdPrice = el('td', '', money(p.price));
@@ -2998,11 +2986,10 @@
         </datalist>
       </label>
       <label class="field"><span>Unidad de medida</span><input type="text" id="cpfUnit" value="${product?.unit || 'unidad'}" required></label>
-      <label class="field"><span>Precio de venta (Q)</span><input type="number" step="0.5" min="0" id="cpfPrice" value="${product?.price ?? 10}" required></label>
-      <label class="field"><span>Costo unitario (Q)</span><input type="number" step="0.5" min="0" id="cpfCost" value="${product?.cost ?? 5}" required></label>
+      <label class="field"><span>PRECIO DE VENTA (Q)</span><input type="number" step="0.5" min="0" id="cpfPrice" value="${product?.price ?? 10}" required></label>
+      <label class="field"><span>COSTO UNITARIO (Q)</span><input type="number" step="0.5" min="0" id="cpfCost" value="${product?.cost ?? 5}" required></label>
       <label class="field"><span>Stock actual</span><input type="number" min="0" id="cpfStock" value="${product?.stock ?? 20}" required></label>
       <label class="field"><span>Stock mínimo (Alerta)</span><input type="number" min="0" id="cpfMinStock" value="${product?.minStock ?? 5}" required></label>
-      <label class="field field-full"><span>Variantes (separadas por coma)</span><input type="text" id="cpfVariants" value="${(product?.variants || []).join(', ')}" placeholder="Ej. Gallo Pequeña, Corona"></label>
       ${isEdit ? `
         <label class="field field-full" style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" id="cpfActive" ${product.active !== false ? 'checked' : ''} style="width:auto;">
@@ -3029,7 +3016,7 @@
         cost: Number($('#cpfCost', wrap).value),
         stock: parseInt($('#cpfStock', wrap).value, 10),
         minStock: parseInt($('#cpfMinStock', wrap).value, 10),
-        variants: $('#cpfVariants', wrap).value.split(',').map(v => v.trim()).filter(Boolean),
+        variants: [],
         ...(isEdit ? { active: $('#cpfActive', wrap)?.checked } : {})
       };
 

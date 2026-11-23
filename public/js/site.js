@@ -1716,12 +1716,12 @@
       return Number.isInteger(n) ? `${n} Q` : `${n.toFixed(2)} Q`;
     };
 
-    function cartKey(id, variant) {
-      return variant ? `${id}::${variant}` : id;
+    function cartKey(id) {
+      return id;
     }
 
-    function addItem({ id, name, price, category, variant = null }, delta = 1) {
-      const key = cartKey(id, variant);
+    function addItem({ id, name, price, category }, delta = 1) {
+      const key = id;
       const existing = cart.find((item) => item.key === key);
       if (existing) {
         existing.quantity += delta;
@@ -1733,8 +1733,7 @@
           key,
           id,
           name,
-          variant: variant || null,
-          displayName: variant ? `${name} (${variant})` : name,
+          displayName: name,
           price: Number(price),
           category: category || '',
           quantity: delta
@@ -2006,8 +2005,7 @@
         const payload = {
           items: cart.map((item) => ({
             id: item.id,
-            quantity: item.quantity,
-            variant: item.variant
+            quantity: item.quantity
           })),
           customer: {
             name: customerNameInput?.value.trim() || '',
@@ -2182,27 +2180,6 @@
             const nameWrap = document.createElement('div');
             nameWrap.className = 'hope-name-wrap';
             nameWrap.innerHTML = `<span class="hope-name">${p.name}: <strong class="hope-price">${p.price} Q</strong></span>`;
-
-            if (Array.isArray(p.variants) && p.variants.length) {
-              const varDiv = document.createElement('div');
-              varDiv.className = 'hope-variants';
-              varDiv.setAttribute('role', 'group');
-              if (!selectedVariants[p.id]) selectedVariants[p.id] = p.variants[0];
-
-              p.variants.forEach((v) => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = `hope-variant-chip ${v === selectedVariants[p.id] ? 'is-selected' : ''}`;
-                chip.dataset.variant = v;
-                chip.textContent = v;
-                chip.addEventListener('click', () => {
-                  selectedVariants[p.id] = v;
-                  $$('.hope-variant-chip', varDiv).forEach(c => c.classList.toggle('is-selected', c === chip));
-                });
-                varDiv.append(chip);
-              });
-              nameWrap.append(varDiv);
-            }
             main.append(nameWrap);
 
             const controls = document.createElement('div');
@@ -2217,14 +2194,11 @@
             const plusBtn = controls.querySelector('[data-action="plus"]');
 
             plusBtn?.addEventListener('click', () => {
-              const variant = selectedVariants[p.id] || null;
-              addItem({ id: p.id, name: p.name, price: p.price, category: p.category, variant }, 1);
+              addItem({ id: p.id, name: p.name, price: p.price, category: p.category }, 1);
             });
 
             minusBtn?.addEventListener('click', () => {
-              const preferredVariant = selectedVariants[p.id] || null;
-              const preferredKey = preferredVariant ? `${p.id}::${preferredVariant}` : p.id;
-              const match = cart.find(item => item.key === preferredKey) || [...cart].reverse().find(item => item.id === p.id);
+              const match = cart.find(item => item.id === p.id);
               if (match) addItem(match, -1);
             });
 

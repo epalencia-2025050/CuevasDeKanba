@@ -214,6 +214,7 @@ test('cafeteria: products CRUD and stock adjustment kardex', async () => {
   assert.equal(created.name, 'Pastel de Chocolate');
   assert.equal(created.price, 25);
   assert.equal(created.stock, 15);
+  assert.deepEqual(created.variants, []);
 
   // Update product stock and price
   const updateRes = await request(`/api/admin/cafe/products/${created.id}`, adminCookie, 'PUT', {
