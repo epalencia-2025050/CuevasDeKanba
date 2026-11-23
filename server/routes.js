@@ -780,7 +780,6 @@ async function handleApi(req, res, url) {
 
   if (method === 'POST' && p === '/api/reservations') {
     const session = requireUser(req);
-    requireGateway(config);
     await rateLimit(`reserve:${session.user.id}`, 10, 3600000);
     const body = await readJson(req);
     const reservation = createReservation(body, { user: session.user });

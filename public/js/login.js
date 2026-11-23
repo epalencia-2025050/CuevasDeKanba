@@ -102,9 +102,11 @@
   }
 
   function redirectAfterLogin(data) {
-    const target = data?.redirectTo;
-    if (typeof target === 'string' && target.startsWith('/') && !target.startsWith('//') &&
-        !target.includes('\\') && new URL(target, window.location.origin).origin === window.location.origin) {
+    const nextParam = new URLSearchParams(window.location.search).get('next');
+    const isSafe = (path) => typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') &&
+        !path.includes('\\') && new URL(path, window.location.origin).origin === window.location.origin;
+    const target = isSafe(nextParam) ? nextParam : data?.redirectTo;
+    if (isSafe(target)) {
       window.location.replace(target);
     }
   }
