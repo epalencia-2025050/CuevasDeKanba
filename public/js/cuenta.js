@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   const byId = id => document.getElementById(id);
   const status = byId('accountStatus');
   function element(tag, text) {
