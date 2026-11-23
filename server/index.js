@@ -17,7 +17,7 @@ export function createApp(services) {
     handlers.securityHeaders(reply);
     reply.end();
     for (const [key, value] of reply.response().headers) c.header(key, value);
-    if (services.network(c).secure) c.header('Strict-Transport-Security', 'max-age=15552000');
+    if (services.network(c).secure) c.header('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
     await next();
   }));
   app.onError((error, c) => {
