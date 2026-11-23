@@ -3669,7 +3669,6 @@
     $('#btnExportCafeExcel')?.addEventListener('click', exportCafeExcel);
     $('#btnExportCafePdf')?.addEventListener('click', exportCafePdf);
   }
-  }
 
   function init() {
     bind();
