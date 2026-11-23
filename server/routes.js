@@ -10,7 +10,8 @@ import {
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
   AppError, nextReceiptNumber, TZ,
-  CAFE_MENU, nextCafeOrderCode, prepareCafeOrder, chargeCafeCard,
+  nextCafeOrderCode, prepareCafeOrder, chargeCafeCard,
+  getCafeProducts, getCafeSupplies, nextCafeMovementCode, nextCafeExpenseId, deductCafeInventory,
   registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared,
   createUserSession, registerGoogleUser, linkGoogleAccount
 } from './store.js';
@@ -70,6 +71,16 @@ function sendJson(res, status, payload) {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Content-Length': Buffer.byteLength(body)
+  });
+  res.end(body);
+}
+
+function sendText(res, status, body, contentType = 'text/plain; charset=utf-8', customHeaders = {}) {
+  securityHeaders(res);
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store',
+    ...customHeaders
   });
   res.end(body);
 }
@@ -642,12 +653,14 @@ async function handleApi(req, res, url) {
 
   /* ---------- Cafetería · Café The Hope ---------- */
   if (method === 'GET' && p === '/api/cafe/menu') {
+    const products = getCafeProducts().filter(p => p.active !== false);
+    const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
     return sendJson(res, 200, {
       ok: true,
       brand: 'Café The Hope',
       currency: 'GTQ',
-      categories: ['Cervezas', 'Bebidas sin alcohol', 'Licores'],
-      items: CAFE_MENU
+      categories,
+      items: products
     });
   }
 
@@ -697,6 +710,7 @@ async function handleApi(req, res, url) {
       total: prepared.total,
       currency: prepared.currency,
       payment: {
+        method: 'card',
         provider: result.provider,
         status: 'paid',
         brand: result.brand || 'Tarjeta',
@@ -713,6 +727,7 @@ async function handleApi(req, res, url) {
     const d = getDb();
     d.cafeOrders = d.cafeOrders || [];
     d.cafeOrders.unshift(order);
+    deductCafeInventory(order, { user: session?.user || null, reason: `Venta web ${order.code} (${receiptNumber})` });
     saveDb();
 
     return sendJson(res, 201, {
@@ -1272,6 +1287,895 @@ async function handleApi(req, res, url) {
     const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
     await saveUploadToDb(filename, mime, buffer);
     return sendJson(res, 201, { ok: true, url: `/uploads/${filename}`, size: buffer.length });
+  }
+
+  /* ---------- Cafetería · Administración ---------- */
+
+  const csvEscape = (val) => {
+    const s = String(val ?? '').replace(/"/g, '""');
+    return /[",\n\r]/.test(s) ? `"${s}"` : s;
+  };
+
+  // 1. Catálogo de Productos
+  if (method === 'GET' && p === '/api/admin/cafe/products') {
+    return sendJson(res, 200, { ok: true, products: getCafeProducts() });
+  }
+
+  if (method === 'POST' && p === '/api/admin/cafe/products') {
+    const body = await readJson(req);
+    const name = String(body.name || '').trim();
+    const category = String(body.category || '').trim();
+    const price = Number(body.price);
+    const cost = Number(body.cost ?? 0);
+    const stock = Math.max(0, parseInt(body.stock ?? 0, 10) || 0);
+    const minStock = Math.max(0, parseInt(body.minStock ?? 5, 10) || 5);
+    const unit = String(body.unit || 'unidad').trim();
+    const variants = Array.isArray(body.variants) ? body.variants.map(v => String(v).trim()).filter(Boolean) : [];
+
+    if (name.length < 2) throw new AppError('El nombre del producto debe tener al menos 2 caracteres.', 422, 'validation');
+    if (category.length < 2) throw new AppError('La categoría es requerida.', 422, 'validation');
+    if (!Number.isFinite(price) || price < 0) throw new AppError('El precio debe ser un número mayor o igual a 0.', 422, 'validation');
+    if (!Number.isFinite(cost) || cost < 0) throw new AppError('El costo debe ser un número mayor o igual a 0.', 422, 'validation');
+
+    const baseSlug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const id = baseSlug || `prod-${randomToken(4)}`;
+
+    const products = getCafeProducts();
+    if (products.some(p => p.id === id)) {
+      throw new AppError('Ya existe un producto con un identificador o nombre similar.', 409, 'conflict');
+    }
+
+    const now = new Date().toISOString();
+    const product = {
+      id,
+      name,
+      category,
+      price: Math.round(price * 100) / 100,
+      cost: Math.round(cost * 100) / 100,
+      stock,
+      minStock,
+      unit,
+      variants,
+      active: body.active !== false,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    products.push(product);
+
+    if (stock > 0) {
+      const d = getDb();
+      d.cafeInventoryMovements = d.cafeInventoryMovements || [];
+      d.cafeInventoryMovements.unshift({
+        id: `mov_${randomToken(6)}`,
+        code: nextCafeMovementCode(),
+        itemType: 'product',
+        itemId: product.id,
+        itemName: product.name,
+        movementType: 'in',
+        quantity: stock,
+        unitCost: product.cost,
+        totalCost: Math.round(product.cost * stock * 100) / 100,
+        reason: 'Inventario inicial',
+        reference: product.id,
+        createdBy: getSessionUser(req)?.user?.name || 'Administrador',
+        createdAt: now
+      });
+    }
+
+    saveDb();
+    return sendJson(res, 201, { ok: true, product });
+  }
+
+  const cafeProdMatch = p.match(/^\/api\/admin\/cafe\/products\/([A-Za-z0-9-_]+)$/);
+  if (cafeProdMatch) {
+    const id = cafeProdMatch[1];
+    const products = getCafeProducts();
+    const product = products.find(prod => prod.id === id);
+    if (!product) throw new AppError('Producto no encontrado.', 404, 'not_found');
+
+    if (method === 'PUT') {
+      const body = await readJson(req);
+      if (body.name !== undefined) {
+        const name = String(body.name).trim();
+        if (name.length < 2) throw new AppError('Nombre inválido.', 422, 'validation');
+        product.name = name;
+      }
+      if (body.category !== undefined) product.category = String(body.category).trim() || product.category;
+      if (body.price !== undefined) {
+        const price = Number(body.price);
+        if (!Number.isFinite(price) || price < 0) throw new AppError('Precio inválido.', 422, 'validation');
+        product.price = Math.round(price * 100) / 100;
+      }
+      if (body.cost !== undefined) {
+        const cost = Number(body.cost);
+        if (!Number.isFinite(cost) || cost < 0) throw new AppError('Costo inválido.', 422, 'validation');
+        product.cost = Math.round(cost * 100) / 100;
+      }
+      if (body.minStock !== undefined) product.minStock = Math.max(0, parseInt(body.minStock, 10) || 0);
+      if (body.unit !== undefined) product.unit = String(body.unit).trim() || product.unit;
+      if (Array.isArray(body.variants)) product.variants = body.variants.map(v => String(v).trim()).filter(Boolean);
+      if (body.active !== undefined) product.active = Boolean(body.active);
+
+      if (body.stock !== undefined) {
+        const newStock = Math.max(0, parseInt(body.stock, 10) || 0);
+        const oldStock = Number(product.stock) || 0;
+        if (newStock !== oldStock) {
+          const diff = newStock - oldStock;
+          product.stock = newStock;
+          const d = getDb();
+          d.cafeInventoryMovements = d.cafeInventoryMovements || [];
+          d.cafeInventoryMovements.unshift({
+            id: `mov_${randomToken(6)}`,
+            code: nextCafeMovementCode(),
+            itemType: 'product',
+            itemId: product.id,
+            itemName: product.name,
+            movementType: 'adjustment',
+            quantity: diff,
+            unitCost: product.cost,
+            totalCost: Math.round(product.cost * Math.abs(diff) * 100) / 100,
+            reason: body.reason || 'Ajuste manual desde edición de producto',
+            reference: product.id,
+            createdBy: getSessionUser(req)?.user?.name || 'Administrador',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
+      product.updatedAt = new Date().toISOString();
+      saveDb();
+      return sendJson(res, 200, { ok: true, product });
+    }
+
+    if (method === 'DELETE') {
+      const d = getDb();
+      const hasSales = (d.cafeOrders || []).some(o => (o.items || []).some(i => i.id === id));
+      const hasMovements = (d.cafeInventoryMovements || []).some(m => m.itemId === id);
+
+      if (hasSales || hasMovements) {
+        product.active = false;
+        product.updatedAt = new Date().toISOString();
+        saveDb();
+        return sendJson(res, 200, { ok: true, archived: true, message: 'Producto archivado (desactivado) para conservar el historial de ventas e inventario.' });
+      }
+
+      const idx = products.findIndex(p => p.id === id);
+      if (idx !== -1) products.splice(idx, 1);
+      saveDb();
+      return sendJson(res, 200, { ok: true, deleted: true });
+    }
+  }
+
+  // 2. Insumos (Supplies)
+  if (method === 'GET' && p === '/api/admin/cafe/supplies') {
+    return sendJson(res, 200, { ok: true, supplies: getCafeSupplies() });
+  }
+
+  if (method === 'POST' && p === '/api/admin/cafe/supplies') {
+    const body = await readJson(req);
+    const name = String(body.name || '').trim();
+    const category = String(body.category || 'Insumos').trim();
+    const stock = Math.max(0, Number(body.stock ?? 0) || 0);
+    const minStock = Math.max(0, Number(body.minStock ?? 5) || 5);
+    const unit = String(body.unit || 'unidad').trim();
+    const cost = Math.max(0, Number(body.cost ?? 0) || 0);
+
+    if (name.length < 2) throw new AppError('El nombre del insumo es requerido.', 422, 'validation');
+
+    const supplies = getCafeSupplies();
+    const id = `sup_${randomToken(6)}`;
+    const now = new Date().toISOString();
+    const supply = {
+      id,
+      name,
+      category,
+      stock,
+      minStock,
+      unit,
+      cost: Math.round(cost * 100) / 100,
+      active: true,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    supplies.push(supply);
+
+    if (stock > 0) {
+      const d = getDb();
+      d.cafeInventoryMovements = d.cafeInventoryMovements || [];
+      d.cafeInventoryMovements.unshift({
+        id: `mov_${randomToken(6)}`,
+        code: nextCafeMovementCode(),
+        itemType: 'supply',
+        itemId: supply.id,
+        itemName: supply.name,
+        movementType: 'in',
+        quantity: stock,
+        unitCost: supply.cost,
+        totalCost: Math.round(supply.cost * stock * 100) / 100,
+        reason: 'Inventario inicial de insumo',
+        reference: supply.id,
+        createdBy: getSessionUser(req)?.user?.name || 'Administrador',
+        createdAt: now
+      });
+    }
+
+    saveDb();
+    return sendJson(res, 201, { ok: true, supply });
+  }
+
+  const cafeSupMatch = p.match(/^\/api\/admin\/cafe\/supplies\/([A-Za-z0-9-_]+)$/);
+  if (cafeSupMatch) {
+    const id = cafeSupMatch[1];
+    const supplies = getCafeSupplies();
+    const supply = supplies.find(s => s.id === id);
+    if (!supply) throw new AppError('Insumo no encontrado.', 404, 'not_found');
+
+    if (method === 'PUT') {
+      const body = await readJson(req);
+      if (body.name !== undefined) supply.name = String(body.name).trim();
+      if (body.category !== undefined) supply.category = String(body.category).trim() || supply.category;
+      if (body.cost !== undefined) supply.cost = Math.max(0, Number(body.cost) || 0);
+      if (body.minStock !== undefined) supply.minStock = Math.max(0, Number(body.minStock) || 0);
+      if (body.unit !== undefined) supply.unit = String(body.unit).trim() || supply.unit;
+      if (body.active !== undefined) supply.active = Boolean(body.active);
+      supply.updatedAt = new Date().toISOString();
+      saveDb();
+      return sendJson(res, 200, { ok: true, supply });
+    }
+
+    if (method === 'DELETE') {
+      supply.active = false;
+      supply.updatedAt = new Date().toISOString();
+      saveDb();
+      return sendJson(res, 200, { ok: true, archived: true });
+    }
+  }
+
+  // 3. Inventario y Kardex
+  if (method === 'GET' && p === '/api/admin/cafe/inventory') {
+    const products = getCafeProducts();
+    const supplies = getCafeSupplies();
+    const lowStockProducts = products.filter(p => p.active !== false && (Number(p.stock) || 0) <= (Number(p.minStock) || 0));
+    const lowStockSupplies = supplies.filter(s => s.active !== false && (Number(s.stock) || 0) <= (Number(s.minStock) || 0));
+
+    return sendJson(res, 200, {
+      ok: true,
+      products,
+      supplies,
+      alerts: {
+        products: lowStockProducts,
+        supplies: lowStockSupplies,
+        totalLowStock: lowStockProducts.length + lowStockSupplies.length
+      }
+    });
+  }
+
+  if (method === 'POST' && p === '/api/admin/cafe/inventory/movements') {
+    const body = await readJson(req);
+    const itemType = body.itemType === 'supply' ? 'supply' : 'product';
+    const itemId = String(body.itemId || '').trim();
+    const movementType = ['in', 'out', 'adjustment'].includes(body.movementType) ? body.movementType : 'in';
+    const quantity = Number(body.quantity);
+    const reason = String(body.reason || '').trim();
+    const reference = String(body.reference || '').trim();
+
+    if (!itemId) throw new AppError('Identificador del ítem requerido.', 422, 'validation');
+    if (!Number.isFinite(quantity) || (movementType !== 'adjustment' && quantity <= 0) || (movementType === 'adjustment' && quantity < 0)) {
+      throw new AppError('Cantidad inválida.', 422, 'validation');
+    }
+    if (!reason) throw new AppError('Indica el motivo del movimiento.', 422, 'validation');
+
+    const item = itemType === 'supply'
+      ? getCafeSupplies().find(s => s.id === itemId)
+      : getCafeProducts().find(p => p.id === itemId);
+
+    if (!item) throw new AppError('Ítem no encontrado en el catálogo de cafetería.', 404, 'not_found');
+
+    const currentStock = Number(item.stock) || 0;
+    let qtyEffect = 0;
+
+    if (movementType === 'in') {
+      item.stock = currentStock + quantity;
+      qtyEffect = quantity;
+    } else if (movementType === 'out') {
+      if (currentStock < quantity) {
+        throw new AppError(`Stock insuficiente. Disponible: ${currentStock} ${item.unit || 'uds.'}`, 422, 'insufficient_stock');
+      }
+      item.stock = currentStock - quantity;
+      qtyEffect = -quantity;
+    } else if (movementType === 'adjustment') {
+      qtyEffect = quantity - currentStock;
+      item.stock = quantity;
+    }
+
+    item.updatedAt = new Date().toISOString();
+
+    const unitCost = Number(body.unitCost ?? item.cost) || 0;
+    const totalCost = Math.round(unitCost * Math.abs(qtyEffect) * 100) / 100;
+
+    const movement = {
+      id: `mov_${randomToken(6)}`,
+      code: nextCafeMovementCode(),
+      itemType,
+      itemId: item.id,
+      itemName: item.name,
+      movementType,
+      quantity: qtyEffect,
+      unitCost,
+      totalCost,
+      reason,
+      reference,
+      createdBy: getSessionUser(req)?.user?.name || 'Administrador',
+      createdAt: new Date().toISOString()
+    };
+
+    const d = getDb();
+    d.cafeInventoryMovements = d.cafeInventoryMovements || [];
+    d.cafeInventoryMovements.unshift(movement);
+    saveDb();
+
+    return sendJson(res, 201, { ok: true, movement, currentStock: item.stock });
+  }
+
+  if (method === 'GET' && p === '/api/admin/cafe/inventory/movements') {
+    const from = url.searchParams.get('from') || '';
+    const to = url.searchParams.get('to') || '';
+    const type = url.searchParams.get('type') || '';
+    const itemId = url.searchParams.get('itemId') || '';
+    const itemType = url.searchParams.get('itemType') || '';
+
+    let movements = getDb().cafeInventoryMovements || [];
+    if (from) movements = movements.filter(m => m.createdAt.slice(0, 10) >= from);
+    if (to) movements = movements.filter(m => m.createdAt.slice(0, 10) <= to);
+    if (type) movements = movements.filter(m => m.movementType === type);
+    if (itemId) movements = movements.filter(m => m.itemId === itemId);
+    if (itemType) movements = movements.filter(m => m.itemType === itemType);
+
+    return sendJson(res, 200, { ok: true, movements });
+  }
+
+  // 4. Ventas y Comprobantes (POS)
+  if (method === 'GET' && p === '/api/admin/cafe/sales') {
+    const from = url.searchParams.get('from') || '';
+    const to = url.searchParams.get('to') || '';
+    const paymentMethod = url.searchParams.get('paymentMethod') || '';
+    const search = (url.searchParams.get('search') || '').trim().toLowerCase();
+
+    let sales = getDb().cafeOrders || [];
+    if (from) sales = sales.filter(s => s.createdAt.slice(0, 10) >= from);
+    if (to) sales = sales.filter(s => s.createdAt.slice(0, 10) <= to);
+    if (paymentMethod) sales = sales.filter(s => (s.payment?.method || 'card') === paymentMethod);
+    if (search) {
+      sales = sales.filter(s =>
+        (s.code && s.code.toLowerCase().includes(search)) ||
+        (s.receipt?.number && s.receipt.number.toLowerCase().includes(search)) ||
+        (s.customer?.name && s.customer.name.toLowerCase().includes(search))
+      );
+    }
+
+    return sendJson(res, 200, { ok: true, sales });
+  }
+
+  if (method === 'POST' && p === '/api/admin/cafe/sales') {
+    const body = await readJson(req);
+    const rawItems = Array.isArray(body.items) ? body.items : [];
+    if (!rawItems.length) throw new AppError('Agrega al menos un producto a la venta.', 422, 'empty_cart');
+
+    const products = getCafeProducts();
+    const lines = [];
+    let total = 0;
+
+    for (const raw of rawItems) {
+      const prodId = String(raw.id || '').trim();
+      const prod = products.find(p => p.id === prodId);
+      if (!prod) throw new AppError(`Producto no encontrado: ${prodId}`, 422, 'invalid_item');
+      if (prod.active === false) throw new AppError(`El producto ${prod.name} se encuentra inactivo.`, 422, 'inactive_item');
+
+      const qty = parseInt(raw.quantity ?? raw.qty ?? 1, 10);
+      if (!Number.isInteger(qty) || qty < 1) throw new AppError(`Cantidad inválida para ${prod.name}.`, 422, 'invalid_quantity');
+
+      const variant = String(raw.variant || '').trim();
+      const displayName = variant ? `${prod.name} (${variant})` : prod.name;
+      const unitPrice = Number(raw.unitPrice ?? prod.price) || 0;
+      const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+      total = Math.round((total + lineTotal) * 100) / 100;
+
+      lines.push({
+        id: prod.id,
+        name: prod.name,
+        displayName,
+        variant: variant || null,
+        category: prod.category,
+        unitPrice,
+        unitCost: Number(prod.cost) || 0,
+        quantity: qty,
+        subtotal: lineTotal
+      });
+    }
+
+    const now = new Date().toISOString();
+    const code = nextCafeOrderCode();
+    const receiptNumber = nextReceiptNumber();
+    const paymentMethod = ['cash', 'card', 'transfer', 'other'].includes(body.paymentMethod) ? body.paymentMethod : 'cash';
+    const net = Math.round((total / 1.12) * 100) / 100;
+    const tax = Math.round((total - net) * 100) / 100;
+    const adminUser = getSessionUser(req)?.user;
+
+    const order = {
+      id: `cfo_${randomToken(6)}`,
+      code,
+      status: 'paid',
+      brand: 'Café The Hope',
+      createdAt: now,
+      paidAt: now,
+      createdByRole: 'admin',
+      createdBy: adminUser?.name || 'Administración',
+      customer: {
+        name: String(body.customer?.name || body.name || 'Cliente en barra').trim().slice(0, 100),
+        email: String(body.customer?.email || body.email || '').trim().toLowerCase().slice(0, 100),
+        phone: String(body.customer?.phone || body.phone || '').trim().slice(0, 30),
+        serviceType: String(body.customer?.serviceType || body.serviceType || 'En mesa · Cafetería').trim().slice(0, 80),
+        notes: String(body.customer?.notes || body.notes || '').trim().slice(0, 300)
+      },
+      items: lines,
+      subtotal: net,
+      tax,
+      total,
+      currency: 'GTQ',
+      payment: {
+        method: paymentMethod,
+        provider: paymentMethod === 'cash' ? 'Efectivo en Caja' : paymentMethod === 'transfer' ? 'Transferencia Bancaria' : paymentMethod === 'card' ? 'Terminal POS' : 'Otro',
+        status: 'paid',
+        brand: paymentMethod === 'cash' ? 'Efectivo' : paymentMethod === 'transfer' ? 'Transferencia' : 'Tarjeta',
+        last4: String(body.payment?.last4 || body.last4 || '—').slice(0, 4),
+        reference: String(body.payment?.reference || body.reference || code).slice(0, 60),
+        paidAt: now
+      },
+      receipt: {
+        number: receiptNumber,
+        issuedAt: now
+      }
+    };
+
+    const d = getDb();
+    d.cafeOrders = d.cafeOrders || [];
+    d.cafeOrders.unshift(order);
+    deductCafeInventory(order, { user: adminUser, reason: `Venta POS ${code} (${receiptNumber})` });
+    saveDb();
+
+    return sendJson(res, 201, { ok: true, order });
+  }
+
+  const cafeSaleMatch = p.match(/^\/api\/admin\/cafe\/sales\/([A-Za-z0-9-]+)$/);
+  if (method === 'GET' && cafeSaleMatch) {
+    const code = cafeSaleMatch[1].toUpperCase();
+    const order = (getDb().cafeOrders || []).find(o => o.code === code || o.id === cafeSaleMatch[1]);
+    if (!order) throw new AppError('Venta no encontrada.', 404, 'not_found');
+    return sendJson(res, 200, { ok: true, order });
+  }
+
+  // 5. Control de Gastos
+  if (method === 'GET' && p === '/api/admin/cafe/expenses') {
+    const from = url.searchParams.get('from') || '';
+    const to = url.searchParams.get('to') || '';
+    const category = url.searchParams.get('category') || '';
+
+    let expenses = getDb().cafeExpenses || [];
+    if (from) expenses = expenses.filter(e => e.expenseDate >= from);
+    if (to) expenses = expenses.filter(e => e.expenseDate <= to);
+    if (category) expenses = expenses.filter(e => e.category === category);
+
+    return sendJson(res, 200, { ok: true, expenses });
+  }
+
+  if (method === 'POST' && p === '/api/admin/cafe/expenses') {
+    const body = await readJson(req);
+    const concept = String(body.concept || '').trim();
+    const category = String(body.category || 'otros').trim();
+    const amount = Number(body.amount);
+    const expenseDate = String(body.expenseDate || body.date || todayISO()).trim();
+    const notes = String(body.notes || '').trim();
+
+    if (concept.length < 2) throw new AppError('El concepto del gasto es requerido.', 422, 'validation');
+    if (!['insumos', 'servicios', 'mantenimiento', 'personal', 'otros'].includes(category)) {
+      throw new AppError('Categoría de gasto no válida. Usa: insumos, servicios, mantenimiento, personal u otros.', 422, 'validation');
+    }
+    if (!Number.isFinite(amount) || amount <= 0) throw new AppError('El monto debe ser mayor a 0.', 422, 'validation');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) throw new AppError('Fecha inválida (YYYY-MM-DD).', 422, 'validation');
+
+    const id = nextCafeExpenseId();
+    const now = new Date().toISOString();
+    const expense = {
+      id,
+      concept,
+      category,
+      amount: Math.round(amount * 100) / 100,
+      expenseDate,
+      notes,
+      createdBy: getSessionUser(req)?.user?.name || 'Administrador',
+      createdAt: now
+    };
+
+    const d = getDb();
+    d.cafeExpenses = d.cafeExpenses || [];
+    d.cafeExpenses.unshift(expense);
+    saveDb();
+
+    return sendJson(res, 201, { ok: true, expense });
+  }
+
+  const cafeExpMatch = p.match(/^\/api\/admin\/cafe\/expenses\/([A-Za-z0-9-_]+)$/);
+  if (method === 'DELETE' && cafeExpMatch) {
+    const id = cafeExpMatch[1];
+    const d = getDb();
+    d.cafeExpenses = d.cafeExpenses || [];
+    const idx = d.cafeExpenses.findIndex(e => e.id === id);
+    if (idx === -1) throw new AppError('Gasto no encontrado.', 404, 'not_found');
+    d.cafeExpenses.splice(idx, 1);
+    saveDb();
+    return sendJson(res, 200, { ok: true, deleted: true });
+  }
+
+  // 6. Estadísticas y Reportes
+  if (method === 'GET' && p === '/api/admin/cafe/reports') {
+    const d = getDb();
+    const from = url.searchParams.get('from') || `${todayISO().slice(0, 7)}-01`;
+    const to = url.searchParams.get('to') || todayISO();
+
+    const sales = (d.cafeOrders || []).filter(s => {
+      const day = s.createdAt.slice(0, 10);
+      return day >= from && day <= to && s.status === 'paid';
+    });
+
+    const expenses = (d.cafeExpenses || []).filter(e => {
+      const day = e.expenseDate || e.createdAt.slice(0, 10);
+      return day >= from && day <= to;
+    });
+
+    let totalIncome = 0;
+    const paymentCounts = { cash: 0, card: 0, transfer: 0, other: 0 };
+    const paymentTotals = { cash: 0, card: 0, transfer: 0, other: 0 };
+    const productStats = {};
+
+    for (const s of sales) {
+      const amt = Number(s.total) || 0;
+      totalIncome = Math.round((totalIncome + amt) * 100) / 100;
+
+      const m = s.payment?.method || 'card';
+      const pmKey = ['cash', 'card', 'transfer', 'other'].includes(m) ? m : 'other';
+      paymentCounts[pmKey] += 1;
+      paymentTotals[pmKey] = Math.round((paymentTotals[pmKey] + amt) * 100) / 100;
+
+      for (const item of (s.items || [])) {
+        const id = item.id;
+        if (!productStats[id]) {
+          productStats[id] = { id, name: item.name, category: item.category, unitsSold: 0, totalRevenue: 0 };
+        }
+        productStats[id].unitsSold += (Number(item.quantity) || 1);
+        productStats[id].totalRevenue = Math.round((productStats[id].totalRevenue + (Number(item.subtotal) || 0)) * 100) / 100;
+      }
+    }
+
+    const topProducts = Object.values(productStats).sort((a, b) => b.unitsSold - a.unitsSold);
+
+    let totalExpenses = 0;
+    const expensesByCategory = { insumos: 0, servicios: 0, mantenimiento: 0, personal: 0, otros: 0 };
+    for (const e of expenses) {
+      const amt = Number(e.amount) || 0;
+      totalExpenses = Math.round((totalExpenses + amt) * 100) / 100;
+      const cat = expensesByCategory[e.category] !== undefined ? e.category : 'otros';
+      expensesByCategory[cat] = Math.round((expensesByCategory[cat] + amt) * 100) / 100;
+    }
+
+    const netProfit = Math.round((totalIncome - totalExpenses) * 100) / 100;
+    const profitMargin = totalIncome > 0 ? Math.round(((totalIncome - totalExpenses) / totalIncome) * 1000) / 10 : 0;
+
+    const products = getCafeProducts();
+    const supplies = getCafeSupplies();
+    const lowStockProducts = products.filter(p => p.active !== false && (Number(p.stock) || 0) <= (Number(p.minStock) || 0));
+    const lowStockSupplies = supplies.filter(s => s.active !== false && (Number(s.stock) || 0) <= (Number(s.minStock) || 0));
+
+    return sendJson(res, 200, {
+      ok: true,
+      period: { from, to },
+      summary: {
+        totalIncome,
+        totalExpenses,
+        netProfit,
+        profitMargin,
+        salesCount: sales.length,
+        averageTicket: sales.length > 0 ? Math.round((totalIncome / sales.length) * 100) / 100 : 0
+      },
+      topProducts,
+      payments: { counts: paymentCounts, totals: paymentTotals },
+      expensesByCategory,
+      inventorySummary: {
+        totalProducts: products.length,
+        totalSupplies: supplies.length,
+        lowStockAlerts: lowStockProducts.length + lowStockSupplies.length
+      }
+    });
+  }
+
+  // 7. Exportación a Excel (CSV con UTF-8 BOM) y PDF (HTML Imprimible)
+  if (method === 'GET' && p === '/api/admin/cafe/reports/export') {
+    const d = getDb();
+    const format = url.searchParams.get('format') === 'html' || url.searchParams.get('format') === 'pdf' ? 'html' : 'csv';
+    const typeParam = url.searchParams.get('type') || 'summary';
+    const type = ['sales', 'expenses', 'inventory', 'summary'].includes(typeParam) ? typeParam : 'summary';
+    const from = url.searchParams.get('from') || `${todayISO().slice(0, 7)}-01`;
+    const to = url.searchParams.get('to') || todayISO();
+
+    const sales = (d.cafeOrders || []).filter(s => {
+      const day = s.createdAt.slice(0, 10);
+      return day >= from && day <= to && s.status === 'paid';
+    });
+
+    const expenses = (d.cafeExpenses || []).filter(e => {
+      const day = e.expenseDate || e.createdAt.slice(0, 10);
+      return day >= from && day <= to;
+    });
+
+    if (format === 'csv') {
+      let csv = '\uFEFF'; // UTF-8 BOM para apertura nativa en Microsoft Excel
+
+      if (type === 'sales') {
+        csv += 'Código,Comprobante,Fecha y Hora,Cliente,Teléfono,Tipo de Servicio,Forma de Pago,Subtotal (Q),Total (Q)\r\n';
+        for (const s of sales) {
+          csv += [
+            csvEscape(s.code),
+            csvEscape(s.receipt?.number || '—'),
+            csvEscape(s.createdAt),
+            csvEscape(s.customer?.name || 'Cliente en barra'),
+            csvEscape(s.customer?.phone || ''),
+            csvEscape(s.customer?.serviceType || 'En mesa'),
+            csvEscape(s.payment?.method || 'card'),
+            csvEscape(s.subtotal || 0),
+            csvEscape(s.total || 0)
+          ].join(',') + '\r\n';
+        }
+      } else if (type === 'expenses') {
+        csv += 'ID,Fecha,Concepto,Categoría,Monto (Q),Notas,Registrado Por\r\n';
+        for (const e of expenses) {
+          csv += [
+            csvEscape(e.id),
+            csvEscape(e.expenseDate),
+            csvEscape(e.concept),
+            csvEscape(e.category),
+            csvEscape(e.amount),
+            csvEscape(e.notes || ''),
+            csvEscape(e.createdBy || 'Administrador')
+          ].join(',') + '\r\n';
+        }
+      } else if (type === 'inventory') {
+        csv += 'Tipo,ID,Nombre,Categoría,Stock Actual,Stock Mínimo,Unidad,Costo Unitario (Q),Precio Venta (Q),Estado\r\n';
+        for (const prod of getCafeProducts()) {
+          csv += [
+            'Producto',
+            csvEscape(prod.id),
+            csvEscape(prod.name),
+            csvEscape(prod.category),
+            csvEscape(prod.stock),
+            csvEscape(prod.minStock),
+            csvEscape(prod.unit || 'unidad'),
+            csvEscape(prod.cost || 0),
+            csvEscape(prod.price || 0),
+            prod.active !== false ? 'Activo' : 'Inactivo'
+          ].join(',') + '\r\n';
+        }
+        for (const sup of getCafeSupplies()) {
+          csv += [
+            'Insumo',
+            csvEscape(sup.id),
+            csvEscape(sup.name),
+            csvEscape(sup.category),
+            csvEscape(sup.stock),
+            csvEscape(sup.minStock),
+            csvEscape(sup.unit || 'unidad'),
+            csvEscape(sup.cost || 0),
+            '—',
+            sup.active !== false ? 'Activo' : 'Inactivo'
+          ].join(',') + '\r\n';
+        }
+      } else {
+        // Summary report
+        let inc = 0; for (const s of sales) inc += (Number(s.total) || 0);
+        let exp = 0; for (const e of expenses) exp += (Number(e.amount) || 0);
+        const net = inc - exp;
+
+        csv += 'REPORTE FINANCIERO Y OPERATIVO · CAFÉ THE HOPE\r\n';
+        csv += `Período,${from} al ${to}\r\n`;
+        csv += `Total Ingresos por Ventas (Q),${inc.toFixed(2)}\r\n`;
+        csv += `Total Gastos Operativos (Q),${exp.toFixed(2)}\r\n`;
+        csv += `Utilidad Neta (Q),${net.toFixed(2)}\r\n`;
+        csv += `Total de Ventas Realizadas,${sales.length}\r\n\r\n`;
+
+        csv += 'LISTADO DE VENTAS DEL PERÍODO\r\n';
+        csv += 'Código,Comprobante,Fecha,Cliente,Forma de Pago,Total (Q)\r\n';
+        for (const s of sales) {
+          csv += [csvEscape(s.code), csvEscape(s.receipt?.number || '—'), csvEscape(s.createdAt.slice(0, 10)), csvEscape(s.customer?.name || ''), csvEscape(s.payment?.method || ''), csvEscape(s.total || 0)].join(',') + '\r\n';
+        }
+        csv += '\r\nLISTADO DE GASTOS DEL PERÍODO\r\n';
+        csv += 'ID,Fecha,Concepto,Categoría,Monto (Q)\r\n';
+        for (const e of expenses) {
+          csv += [csvEscape(e.id), csvEscape(e.expenseDate), csvEscape(e.concept), csvEscape(e.category), csvEscape(e.amount)].join(',') + '\r\n';
+        }
+      }
+
+      return sendText(res, 200, csv, 'text/csv; charset=utf-8', {
+        'Content-Disposition': `attachment; filename="reporte-cafeteria-${type}-${from}-${to}.csv"`
+      });
+    }
+
+    // PDF / HTML Print format
+    let totalInc = 0; for (const s of sales) totalInc += (Number(s.total) || 0);
+    let totalExp = 0; for (const e of expenses) totalExp += (Number(e.amount) || 0);
+    const netProf = totalInc - totalExp;
+
+    const html = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Reporte Ejecutivo · Café The Hope</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1e293b; margin: 30px; font-size: 13px; line-height: 1.5; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px; }
+    .brand h1 { margin: 0; font-size: 22px; color: #0b1a16; }
+    .brand p { margin: 2px 0 0; color: #64748b; font-size: 13px; }
+    .meta { text-align: right; font-size: 12px; color: #475569; }
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px; }
+    .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
+    .kpi .label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600; }
+    .kpi .val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px; }
+    .kpi.profit { border-color: #10b981; background: #ecfdf5; }
+    .kpi.profit .val { color: #047857; }
+    h2 { font-size: 15px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; margin: 24px 0 12px; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+    th { text-align: left; background: #f1f5f9; padding: 8px 10px; border-bottom: 2px solid #cbd5e1; font-weight: 600; color: #334155; }
+    td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .text-right { text-align: right; }
+    .no-print { margin-bottom: 20px; }
+    .btn-print { background: #0f172a; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    @media print {
+      .no-print { display: none !important; }
+      body { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  </div>
+  <div class="header">
+    <div class="brand">
+      <h1>Café The Hope · K’anba Cuevas Vivas</h1>
+      <p>Reporte Oficial de Operación, Ventas y Gastos</p>
+    </div>
+    <div class="meta">
+      <div><strong>Período:</strong> ${from} al ${to}</div>
+      <div><strong>Generado:</strong> ${new Date().toLocaleDateString('es-GT', { timeZone: TZ })} ${new Date().toLocaleTimeString('es-GT', { timeZone: TZ })}</div>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="label">Ingresos (Ventas)</div>
+      <div class="val">Q ${totalInc.toFixed(2)}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Gastos Operativos</div>
+      <div class="val">Q ${totalExp.toFixed(2)}</div>
+    </div>
+    <div class="kpi profit">
+      <div class="label">Utilidad Neta</div>
+      <div class="val">Q ${netProf.toFixed(2)}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Transacciones</div>
+      <div class="val">${sales.length}</div>
+    </div>
+  </div>
+
+  <h2>Ventas del Período</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Comprobante</th>
+        <th>Fecha</th>
+        <th>Cliente</th>
+        <th>Forma de Pago</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${sales.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:#94a3b8;">No se registraron ventas en este período.</td></tr>' : sales.map(s => `
+        <tr>
+          <td><strong>${s.code}</strong></td>
+          <td>${s.receipt?.number || '—'}</td>
+          <td>${s.createdAt.slice(0, 10)}</td>
+          <td>${s.customer?.name || 'Cliente en barra'}</td>
+          <td>${s.payment?.method === 'cash' ? 'Efectivo' : s.payment?.method === 'card' ? 'Tarjeta' : s.payment?.method === 'transfer' ? 'Transferencia' : 'Otro'}</td>
+          <td class="text-right">Q ${(Number(s.total) || 0).toFixed(2)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h2>Gastos Operativos del Período</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Fecha</th>
+        <th>Concepto</th>
+        <th>Categoría</th>
+        <th>Notas</th>
+        <th class="text-right">Monto</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${expenses.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:#94a3b8;">No se registraron gastos en este período.</td></tr>' : expenses.map(e => `
+        <tr>
+          <td>${e.id}</td>
+          <td>${e.expenseDate}</td>
+          <td><strong>${e.concept}</strong></td>
+          <td style="text-transform:capitalize;">${e.category}</td>
+          <td>${e.notes || '—'}</td>
+          <td class="text-right">Q ${(Number(e.amount) || 0).toFixed(2)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h2>Estado Actual de Inventario</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo</th>
+        <th>Nombre</th>
+        <th>Categoría</th>
+        <th class="text-right">Stock</th>
+        <th class="text-right">Mínimo</th>
+        <th>Unidad</th>
+        <th class="text-right">Costo U.</th>
+        <th class="text-right">Precio</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${getCafeProducts().map(prod => `
+        <tr>
+          <td>Producto</td>
+          <td><strong>${prod.name}</strong></td>
+          <td>${prod.category}</td>
+          <td class="text-right" style="${(Number(prod.stock) || 0) <= (Number(prod.minStock) || 0) ? 'color:#ef4444;font-weight:bold;' : ''}">${prod.stock}</td>
+          <td class="text-right">${prod.minStock}</td>
+          <td>${prod.unit || 'unidad'}</td>
+          <td class="text-right">Q ${(Number(prod.cost) || 0).toFixed(2)}</td>
+          <td class="text-right">Q ${(Number(prod.price) || 0).toFixed(2)}</td>
+        </tr>
+      `).join('')}
+      ${getCafeSupplies().map(sup => `
+        <tr>
+          <td>Insumo</td>
+          <td><strong>${sup.name}</strong></td>
+          <td>${sup.category}</td>
+          <td class="text-right" style="${(Number(sup.stock) || 0) <= (Number(sup.minStock) || 0) ? 'color:#ef4444;font-weight:bold;' : ''}">${sup.stock}</td>
+          <td class="text-right">${sup.minStock}</td>
+          <td>${sup.unit || 'unidad'}</td>
+          <td class="text-right">Q ${(Number(sup.cost) || 0).toFixed(2)}</td>
+          <td class="text-right">—</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+    return sendText(res, 200, html, 'text/html; charset=utf-8');
   }
 
   throw new AppError('Ruta no encontrada.', 404, 'not_found');

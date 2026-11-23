@@ -46,6 +46,27 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17 9 7l4 6 3-4 5 8H3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7" cy="6" r="1.6" fill="currentColor"/></svg></span>
           Tours
         </button>
+        <p class="nav-label">Cafetería</p>
+        <button type="button" class="nav-item" data-view="cafe-sales">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Ventas y POS
+        </button>
+        <button type="button" class="nav-item" data-view="cafe-products">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Menú y Precios
+        </button>
+        <button type="button" class="nav-item" data-view="cafe-inventory">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Inventario
+        </button>
+        <button type="button" class="nav-item" data-view="cafe-expenses">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><line x1="2" y1="10" x2="22" y2="10" stroke="currentColor" stroke-width="1.7"/><circle cx="7" cy="15" r="1.5" fill="currentColor"/><circle cx="12" cy="15" r="1.5" fill="currentColor"/></svg></span>
+          Gastos
+        </button>
+        <button type="button" class="nav-item" data-view="cafe-reports">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          Reportes Cafetería
+        </button>
         <p class="nav-label">Sitio</p>
         <button type="button" class="nav-item" data-view="content">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h10M4 19h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
@@ -336,6 +357,282 @@
               <div class="form-error field-full" id="passwordError" role="alert" hidden></div>
               <button class="btn btn-primary field-full" type="submit" id="savePassword">Actualizar contraseña</button>
             </form>
+          </div>
+        </section>
+
+        <!-- Cafetería: Ventas y POS -->
+        <section class="admin-view" id="view-cafe-sales" data-view-panel="cafe-sales" hidden>
+          <div class="view-header-actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="date" id="cafeSalesFrom" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+              <span>al</span>
+              <input type="date" id="cafeSalesTo" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+              <select id="cafeSalesPaymentFilter" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+                <option value="">Todas las formas de pago</option>
+                <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
+                <option value="transfer">Transferencia</option>
+                <option value="other">Otro</option>
+              </select>
+              <input type="text" id="cafeSalesSearch" placeholder="Buscar por código, comprobante o cliente…" style="padding:7px 12px;border-radius:6px;border:1px solid #cbd5e1;min-width:240px;">
+              <button class="btn btn-outline btn-sm" type="button" id="btnFilterCafeSales">Filtrar</button>
+            </div>
+            <button class="btn btn-primary" type="button" id="btnNewCafeSale">+ Nueva venta (POS)</button>
+          </div>
+          <div class="kpi-grid" id="cafeSalesKpis" style="margin-bottom:18px;"></div>
+          <div class="admin-card">
+            <div class="card-head">
+              <div><span class="card-kicker">Historial</span><h2>Ventas y Comprobantes</h2></div>
+              <span class="card-meta" id="cafeSalesCount">0 ventas</span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="cafeSalesTable">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Comprobante</th>
+                    <th>Fecha y hora</th>
+                    <th>Cliente</th>
+                    <th>Servicio</th>
+                    <th>Pago</th>
+                    <th style="text-align:right;">Total</th>
+                    <th style="text-align:center;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="cafeSalesTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Menú y Precios -->
+        <section class="admin-view" id="view-cafe-products" data-view-panel="cafe-products" hidden>
+          <div class="view-header-actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <select id="cafeProductCatFilter" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+                <option value="">Todas las categorías</option>
+              </select>
+              <input type="text" id="cafeProductSearch" placeholder="Buscar producto…" style="padding:7px 12px;border-radius:6px;border:1px solid #cbd5e1;min-width:200px;">
+            </div>
+            <button class="btn btn-primary" type="button" id="btnNewCafeProduct">+ Nuevo producto</button>
+          </div>
+          <div class="admin-card">
+            <div class="card-head">
+              <div><span class="card-kicker">Catálogo</span><h2>Productos y Precios del Menú</h2></div>
+              <span class="card-meta" id="cafeProductsCount">0 productos</span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="cafeProductsTable">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Categoría</th>
+                    <th style="text-align:right;">Precio Venta</th>
+                    <th style="text-align:right;">Costo</th>
+                    <th style="text-align:right;">Margen</th>
+                    <th style="text-align:center;">Stock Actual</th>
+                    <th style="text-align:center;">Mínimo</th>
+                    <th>Unidad</th>
+                    <th>Estado</th>
+                    <th style="text-align:center;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="cafeProductsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Inventario y Kardex -->
+        <section class="admin-view" id="view-cafe-inventory" data-view-panel="cafe-inventory" hidden>
+          <div class="view-header-actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+            <div class="tabs-nav" style="display:flex;gap:8px;">
+              <button class="btn btn-sm btn-outline is-active" type="button" id="tabInvStock">Existencias de Inventario</button>
+              <button class="btn btn-sm btn-outline" type="button" id="tabInvKardex">Kardex de Movimientos</button>
+              <button class="btn btn-sm btn-outline" type="button" id="tabInvSupplies">Insumos de Operación</button>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-outline btn-sm" type="button" id="btnNewCafeSupply">+ Nuevo insumo</button>
+              <button class="btn btn-primary btn-sm" type="button" id="btnNewCafeMovement">+ Registrar movimiento</button>
+            </div>
+          </div>
+          <div class="kpi-grid" id="cafeInvKpis" style="margin-bottom:18px;"></div>
+          
+          <!-- Panel Existencias -->
+          <div id="panelInvStock" class="admin-card">
+            <div class="card-head">
+              <div><span class="card-kicker">Control de Stock</span><h2>Existencias de Productos e Insumos</h2></div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Nombre</th>
+                    <th>Categoría</th>
+                    <th style="text-align:center;">Stock Actual</th>
+                    <th style="text-align:center;">Stock Mínimo</th>
+                    <th>Unidad</th>
+                    <th style="text-align:right;">Costo Unitario</th>
+                    <th style="text-align:right;">Valor en Inventario</th>
+                    <th>Estado Stock</th>
+                    <th style="text-align:center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="cafeInvStockTbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Panel Kardex Movimientos -->
+          <div id="panelInvKardex" class="admin-card" hidden>
+            <div class="card-head">
+              <div><span class="card-kicker">Kardex</span><h2>Historial de Movimientos de Inventario</h2></div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="kardexTypeFilter" style="padding:5px 8px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px;">
+                  <option value="">Todos los tipos</option>
+                  <option value="in">Entradas</option>
+                  <option value="out">Salidas</option>
+                  <option value="sale">Ventas</option>
+                  <option value="adjustment">Ajustes</option>
+                </select>
+                <button class="btn btn-outline btn-sm" type="button" id="btnExportKardexCsv">Exportar Kardex (Excel)</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Fecha y hora</th>
+                    <th>Tipo Ítem</th>
+                    <th>Nombre Ítem</th>
+                    <th>Tipo Movimiento</th>
+                    <th style="text-align:right;">Cantidad</th>
+                    <th style="text-align:right;">Costo Total</th>
+                    <th>Motivo / Referencia</th>
+                    <th>Responsable</th>
+                  </tr>
+                </thead>
+                <tbody id="cafeKardexTbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Panel Insumos -->
+          <div id="panelInvSupplies" class="admin-card" hidden>
+            <div class="card-head">
+              <div><span class="card-kicker">Insumos</span><h2>Catálogo de Insumos y Materias Primas</h2></div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Categoría</th>
+                    <th style="text-align:center;">Stock Actual</th>
+                    <th style="text-align:center;">Mínimo</th>
+                    <th>Unidad</th>
+                    <th style="text-align:right;">Costo U.</th>
+                    <th>Estado</th>
+                    <th style="text-align:center;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="cafeSuppliesTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Gastos -->
+        <section class="admin-view" id="view-cafe-expenses" data-view-panel="cafe-expenses" hidden>
+          <div class="view-header-actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="date" id="cafeExpensesFrom" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+              <span>al</span>
+              <input type="date" id="cafeExpensesTo" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+              <select id="cafeExpensesCategoryFilter" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+                <option value="">Todas las categorías</option>
+                <option value="insumos">Insumos</option>
+                <option value="servicios">Servicios</option>
+                <option value="mantenimiento">Mantenimiento</option>
+                <option value="personal">Personal</option>
+                <option value="otros">Otros</option>
+              </select>
+              <button class="btn btn-outline btn-sm" type="button" id="btnFilterCafeExpenses">Filtrar</button>
+            </div>
+            <button class="btn btn-primary" type="button" id="btnNewCafeExpense">+ Registrar gasto</button>
+          </div>
+          <div class="kpi-grid" id="cafeExpensesKpis" style="margin-bottom:18px;"></div>
+          <div class="admin-card">
+            <div class="card-head">
+              <div><span class="card-kicker">Egresos</span><h2>Gastos de Operación</h2></div>
+              <span class="card-meta" id="cafeExpensesTotal">Total: Q 0.00</span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Categoría</th>
+                    <th style="text-align:right;">Monto</th>
+                    <th>Notas</th>
+                    <th>Registrado por</th>
+                    <th style="text-align:center;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="cafeExpensesTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Estadísticas y Reportes -->
+        <section class="admin-view" id="view-cafe-reports" data-view-panel="cafe-reports" hidden>
+          <div class="view-header-actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <label style="font-size:12px;font-weight:600;">Período:</label>
+              <input type="date" id="cafeReportFrom" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+              <span>al</span>
+              <input type="date" id="cafeReportTo" style="padding:7px 10px;border-radius:6px;border:1px solid #cbd5e1;">
+              <button class="btn btn-outline btn-sm" type="button" id="btnUpdateCafeReport">Consultar</button>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-outline" type="button" id="btnExportCafeExcel">📊 Exportar a Excel</button>
+              <button class="btn btn-primary" type="button" id="btnExportCafePdf">🖨️ Imprimir / PDF</button>
+            </div>
+          </div>
+          
+          <div class="kpi-grid" id="cafeReportKpis" style="margin-bottom:18px;"></div>
+          
+          <div class="admin-grid two" style="margin-bottom:18px;">
+            <div class="admin-card">
+              <div class="card-head">
+                <div><span class="card-kicker">Ventas</span><h2>Productos Más Vendidos</h2></div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Producto</th>
+                      <th>Categoría</th>
+                      <th style="text-align:center;">Uds. Vendidas</th>
+                      <th style="text-align:right;">Ingreso Total</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cafeTopProductsTbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="admin-card">
+              <div class="card-head">
+                <div><span class="card-kicker">Finanzas</span><h2>Desglose Operativo</h2></div>
+              </div>
+              <div id="cafeFinancialBreakdown" style="padding:14px;display:flex;flex-direction:column;gap:14px;"></div>
+            </div>
           </div>
         </section>
       </main>

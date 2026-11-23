@@ -1,13 +1,13 @@
 -- K'anba: modelo relacional objetivo, PostgreSQL 14+ / Neon.
 -- NO sustituye automaticamente el repositorio JSONB actual de server/db.js.
--- Ejecutar UNA VEZ en la rama/base seleccionada del SQL Editor de Neon.
+-- Ejecutar en la rama/base seleccionada del SQL Editor de Neon.
 -- Crea un esquema independiente; no borra ni migra datos de kanba/public.
--- Si kanba_rel ya existe, falla y revierte: no ocultar diferencias de versiones.
+-- Script idempotente con IF NOT EXISTS: seguro para aplicar o reejecutar sobre la base de Neon.
 -- Sin PAN, CVV, vencimientos, cuentas bancarias, tokens de tarjeta ni payloads de pasarela.
 BEGIN;
-CREATE SCHEMA kanba_rel;
+CREATE SCHEMA IF NOT EXISTS kanba_rel;
 
-CREATE TABLE kanba_rel.users (
+CREATE TABLE IF NOT EXISTS kanba_rel.users (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name VARCHAR(120) NOT NULL,
   email VARCHAR(254) NOT NULL CHECK (email = lower(btrim(email)) AND position('@' IN email) > 1),
@@ -25,10 +25,10 @@ CREATE TABLE kanba_rel.users (
   CHECK ((password_salt IS NULL AND password_hash IS NULL) OR
          (password_salt IS NOT NULL AND password_hash IS NOT NULL AND length(password_salt)>0 AND length(password_hash)>0))
 );
-CREATE UNIQUE INDEX users_email_unique ON kanba_rel.users (lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON kanba_rel.users (lower(email));
 COMMENT ON TABLE kanba_rel.users IS 'Clientes y administradores nominales; password nullable para cuentas Google. No guarda contrasenas en claro.';
 
-CREATE TABLE kanba_rel.oauth_accounts (
+CREATE TABLE IF NOT EXISTS kanba_rel.oauth_accounts (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES kanba_rel.users(id) ON DELETE CASCADE,
   provider VARCHAR(40) NOT NULL CHECK (provider = 'google'),
@@ -39,7 +39,7 @@ CREATE TABLE kanba_rel.oauth_accounts (
 );
 COMMENT ON TABLE kanba_rel.oauth_accounts IS 'Identidad externa verificada de Google; no almacena access_token ni refresh_token.';
 
-CREATE TABLE kanba_rel.sessions (
+CREATE TABLE IF NOT EXISTS kanba_rel.sessions (
   token_hash VARCHAR(64) PRIMARY KEY CHECK (token_hash ~ '^[a-f0-9]{64}$'),
   user_id TEXT NOT NULL REFERENCES kanba_rel.users(id) ON DELETE CASCADE,
   kind VARCHAR(20) NOT NULL CHECK (kind IN ('user','admin')),
@@ -50,11 +50,11 @@ CREATE TABLE kanba_rel.sessions (
   revoked_at TIMESTAMPTZ,
   CHECK (expires_at > created_at)
 );
-CREATE INDEX sessions_user_idx ON kanba_rel.sessions(user_id);
-CREATE INDEX sessions_expiry_idx ON kanba_rel.sessions(expires_at);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON kanba_rel.sessions(user_id);
+CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON kanba_rel.sessions(expires_at);
 COMMENT ON TABLE kanba_rel.sessions IS 'Sesiones de usuario y administrador; guardar SHA-256 del token aleatorio, no la cookie original.';
 
-CREATE TABLE kanba_rel.oauth_states (
+CREATE TABLE IF NOT EXISTS kanba_rel.oauth_states (
   state_hash VARCHAR(64) PRIMARY KEY CHECK (state_hash ~ '^[a-f0-9]{64}$'),
   browser_hash VARCHAR(64) NOT NULL CHECK (browser_hash ~ '^[a-f0-9]{64}$'),
   next_path TEXT NOT NULL DEFAULT '/' CHECK (left(next_path,1)='/' AND left(next_path,2)<>'//'),
@@ -62,10 +62,10 @@ CREATE TABLE kanba_rel.oauth_states (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (expires_at > created_at)
 );
-CREATE INDEX oauth_states_expiry_idx ON kanba_rel.oauth_states(expires_at);
+CREATE INDEX IF NOT EXISTS oauth_states_expiry_idx ON kanba_rel.oauth_states(expires_at);
 COMMENT ON TABLE kanba_rel.oauth_states IS 'Desafio de OAuth temporal y de un solo uso; consumir con DELETE RETURNING.';
 
-CREATE TABLE kanba_rel.tours (
+CREATE TABLE IF NOT EXISTS kanba_rel.tours (
   id TEXT PRIMARY KEY,
   name VARCHAR(160) NOT NULL,
   badge VARCHAR(40),
@@ -92,7 +92,7 @@ CREATE TABLE kanba_rel.tours (
 );
 COMMENT ON TABLE kanba_rel.tours IS 'Catalogo de experiencias; precio por participante. Archivar con active=false si tiene reservas.';
 
-CREATE TABLE kanba_rel.tour_schedules (
+CREATE TABLE IF NOT EXISTS kanba_rel.tour_schedules (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tour_id TEXT NOT NULL REFERENCES kanba_rel.tours(id) ON DELETE CASCADE,
   weekday SMALLINT NOT NULL CHECK (weekday BETWEEN 0 AND 6),
@@ -102,7 +102,7 @@ CREATE TABLE kanba_rel.tour_schedules (
 );
 COMMENT ON TABLE kanba_rel.tour_schedules IS 'Horarios semanales: 0 domingo, 6 sabado; horas locales America/Guatemala. Expande tours.days x tours.times.';
 
-CREATE TABLE kanba_rel.departures (
+CREATE TABLE IF NOT EXISTS kanba_rel.departures (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tour_id TEXT NOT NULL REFERENCES kanba_rel.tours(id) ON DELETE RESTRICT,
   local_date DATE NOT NULL,
@@ -116,7 +116,7 @@ CREATE TABLE kanba_rel.departures (
 );
 COMMENT ON TABLE kanba_rel.departures IS 'Salida concreta por fecha/hora. Fila de bloqueo para evitar sobreventa entre reservas concurrentes.';
 
-CREATE TABLE kanba_rel.closures (
+CREATE TABLE IF NOT EXISTS kanba_rel.closures (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   tour_id TEXT REFERENCES kanba_rel.tours(id) ON DELETE RESTRICT,
   local_date DATE NOT NULL,
@@ -124,11 +124,11 @@ CREATE TABLE kanba_rel.closures (
   created_by TEXT REFERENCES kanba_rel.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX closures_tour_date_unique ON kanba_rel.closures(tour_id,local_date) WHERE tour_id IS NOT NULL;
-CREATE UNIQUE INDEX closures_all_date_unique ON kanba_rel.closures(local_date) WHERE tour_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS closures_tour_date_unique ON kanba_rel.closures(tour_id,local_date) WHERE tour_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS closures_all_date_unique ON kanba_rel.closures(local_date) WHERE tour_id IS NULL;
 COMMENT ON TABLE kanba_rel.closures IS 'Cierre por mantenimiento/clima; tour_id NULL equivale al valor actual all: cierra todos los tours ese dia.';
 
-CREATE TABLE kanba_rel.reservations (
+CREATE TABLE IF NOT EXISTS kanba_rel.reservations (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   code VARCHAR(40) NOT NULL UNIQUE,
   user_id TEXT NOT NULL REFERENCES kanba_rel.users(id) ON DELETE RESTRICT,
@@ -166,16 +166,16 @@ CREATE TABLE kanba_rel.reservations (
   CHECK (status <> 'confirmed' OR paid_at IS NOT NULL),
   CHECK (status <> 'cancelled' OR cancelled_at IS NOT NULL)
 );
-CREATE INDEX reservations_departure_status_idx ON kanba_rel.reservations(departure_id,status,hold_expires_at);
-CREATE INDEX reservations_user_created_idx ON kanba_rel.reservations(user_id,created_at DESC);
-CREATE INDEX reservations_pending_expiry_idx ON kanba_rel.reservations(hold_expires_at) WHERE status='pending_payment';
-CREATE INDEX reservations_customer_email_idx ON kanba_rel.reservations(lower(customer_email));
+CREATE INDEX IF NOT EXISTS reservations_departure_status_idx ON kanba_rel.reservations(departure_id,status,hold_expires_at);
+CREATE INDEX IF NOT EXISTS reservations_user_created_idx ON kanba_rel.reservations(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS reservations_pending_expiry_idx ON kanba_rel.reservations(hold_expires_at) WHERE status='pending_payment';
+CREATE INDEX IF NOT EXISTS reservations_customer_email_idx ON kanba_rel.reservations(lower(customer_email));
 COMMENT ON TABLE kanba_rel.reservations IS 'Compra de un tour para N participantes; conserva precio/contacto al reservar y deduplica reintentos del navegador.';
 COMMENT ON COLUMN kanba_rel.reservations.customer_document IS 'Campo opcional heredado del formulario; no recopilar identificacion si el negocio no la necesita.';
 COMMENT ON COLUMN kanba_rel.reservations.access_token_hash IS 'SHA-256 del enlace privado; requiere adaptar el repositorio actual, que guarda el token original.';
 COMMENT ON COLUMN kanba_rel.reservations.accepted_at IS 'Evidencia nueva: el codigo actual valida casillas pero no persiste fecha/version. No inventar valores al importar historicos.';
 
-CREATE TABLE kanba_rel.payments (
+CREATE TABLE IF NOT EXISTS kanba_rel.payments (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   reservation_id TEXT NOT NULL,
   provider VARCHAR(80) NOT NULL,
@@ -202,11 +202,11 @@ CREATE TABLE kanba_rel.payments (
   UNIQUE (id,reservation_id,amount,currency),
   CHECK (status NOT IN ('paid','refund_pending','refunded') OR paid_at IS NOT NULL)
 );
-CREATE INDEX payments_reservation_idx ON kanba_rel.payments(reservation_id);
-CREATE UNIQUE INDEX payments_one_settled_per_reservation ON kanba_rel.payments(reservation_id) WHERE status IN ('paid','refund_pending','refunded');
+CREATE INDEX IF NOT EXISTS payments_reservation_idx ON kanba_rel.payments(reservation_id);
+CREATE UNIQUE INDEX IF NOT EXISTS payments_one_settled_per_reservation ON kanba_rel.payments(reservation_id) WHERE status IN ('paid','refund_pending','refunded');
 COMMENT ON TABLE kanba_rel.payments IS 'Intentos/ordenes del procesador, importe y estado. Un cobro completo confirmado por reserva; no guarda datos de tarjeta ni tokens de cargo.';
 
-CREATE TABLE kanba_rel.payment_events (
+CREATE TABLE IF NOT EXISTS kanba_rel.payment_events (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   payment_id TEXT,
   provider VARCHAR(80) NOT NULL,
@@ -223,11 +223,11 @@ CREATE TABLE kanba_rel.payment_events (
   UNIQUE (provider,environment,merchant_id,provider_event_id),
   FOREIGN KEY (payment_id,provider,environment,merchant_id) REFERENCES kanba_rel.payments(id,provider,environment,merchant_id) ON DELETE RESTRICT
 );
-CREATE INDEX payment_events_pending_idx ON kanba_rel.payment_events(status,received_at);
-CREATE INDEX payment_events_payment_idx ON kanba_rel.payment_events(payment_id);
+CREATE INDEX IF NOT EXISTS payment_events_pending_idx ON kanba_rel.payment_events(status,received_at);
+CREATE INDEX IF NOT EXISTS payment_events_payment_idx ON kanba_rel.payment_events(payment_id);
 COMMENT ON TABLE kanba_rel.payment_events IS 'Deduplicacion de webhooks autenticados. Solo resumen permitido; nunca guardar cuerpo completo, firma secreta o datos bancarios.';
 
-CREATE TABLE kanba_rel.receipts (
+CREATE TABLE IF NOT EXISTS kanba_rel.receipts (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   number VARCHAR(40) NOT NULL UNIQUE,
   reservation_id TEXT NOT NULL UNIQUE,
@@ -249,7 +249,7 @@ CREATE TABLE kanba_rel.receipts (
 );
 COMMENT ON TABLE kanba_rel.receipts IS 'Comprobante comercial del pago; conserva datos de emision. No supone integracion de factura fiscal. No borrar al cancelar.';
 
-CREATE TABLE kanba_rel.cancellations (
+CREATE TABLE IF NOT EXISTS kanba_rel.cancellations (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   reservation_id TEXT NOT NULL UNIQUE,
   actor_user_id TEXT REFERENCES kanba_rel.users(id) ON DELETE SET NULL,
@@ -267,7 +267,7 @@ CREATE TABLE kanba_rel.cancellations (
 );
 COMMENT ON TABLE kanba_rel.cancellations IS 'Motivo y politica aplicada al cancelar; cancelar no significa que el procesador ya haya devuelto dinero.';
 
-CREATE TABLE kanba_rel.refunds (
+CREATE TABLE IF NOT EXISTS kanba_rel.refunds (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   payment_id TEXT NOT NULL,
   reservation_id TEXT NOT NULL,
@@ -289,13 +289,13 @@ CREATE TABLE kanba_rel.refunds (
   UNIQUE (payment_id,provider_refund_id),
   CHECK (status <> 'processed' OR processed_at IS NOT NULL)
 );
-CREATE INDEX refunds_payment_status_idx ON kanba_rel.refunds(payment_id,status);
-CREATE INDEX refunds_reservation_idx ON kanba_rel.refunds(reservation_id);
-CREATE INDEX refunds_cancellation_idx ON kanba_rel.refunds(cancellation_id);
-CREATE INDEX refunds_pending_idx ON kanba_rel.refunds(status,requested_at);
+CREATE INDEX IF NOT EXISTS refunds_payment_status_idx ON kanba_rel.refunds(payment_id,status);
+CREATE INDEX IF NOT EXISTS refunds_reservation_idx ON kanba_rel.refunds(reservation_id);
+CREATE INDEX IF NOT EXISTS refunds_cancellation_idx ON kanba_rel.refunds(cancellation_id);
+CREATE INDEX IF NOT EXISTS refunds_pending_idx ON kanba_rel.refunds(status,requested_at);
 COMMENT ON TABLE kanba_rel.refunds IS 'Devoluciones al procesador original: referencia e importe, sin datos de destino bancario. Limite agregado requiere transaccion de negocio.';
 
-CREATE TABLE kanba_rel.reservation_events (
+CREATE TABLE IF NOT EXISTS kanba_rel.reservation_events (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   reservation_id TEXT NOT NULL REFERENCES kanba_rel.reservations(id) ON DELETE RESTRICT,
   actor_user_id TEXT REFERENCES kanba_rel.users(id) ON DELETE SET NULL,
@@ -303,10 +303,10 @@ CREATE TABLE kanba_rel.reservation_events (
   label TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX reservation_events_timeline_idx ON kanba_rel.reservation_events(reservation_id,created_at,id);
+CREATE INDEX IF NOT EXISTS reservation_events_timeline_idx ON kanba_rel.reservation_events(reservation_id,created_at,id);
 COMMENT ON TABLE kanba_rel.reservation_events IS 'Historial de creacion, pago, expiracion, cancelacion y devolucion; no incluir secretos en label.';
 
-CREATE TABLE kanba_rel.email_outbox (
+CREATE TABLE IF NOT EXISTS kanba_rel.email_outbox (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   reservation_id TEXT NOT NULL REFERENCES kanba_rel.reservations(id) ON DELETE RESTRICT,
   receipt_id TEXT,
@@ -332,11 +332,11 @@ CREATE TABLE kanba_rel.email_outbox (
   CHECK (status <> 'sending' OR (claim_id IS NOT NULL AND lease_expires_at IS NOT NULL)),
   CHECK (status <> 'sent' OR sent_at IS NOT NULL)
 );
-CREATE INDEX email_outbox_queue_idx ON kanba_rel.email_outbox(status,next_attempt_at,lease_expires_at) WHERE status IN ('queued','sending');
-CREATE INDEX email_outbox_reservation_idx ON kanba_rel.email_outbox(reservation_id);
+CREATE INDEX IF NOT EXISTS email_outbox_queue_idx ON kanba_rel.email_outbox(status,next_attempt_at,lease_expires_at) WHERE status IN ('queued','sending');
+CREATE INDEX IF NOT EXISTS email_outbox_reservation_idx ON kanba_rel.email_outbox(reservation_id);
 COMMENT ON TABLE kanba_rel.email_outbox IS 'Cola durable de correos creada en la transaccion de negocio; envio despues del commit y reintentos con lease.';
 
-CREATE TABLE kanba_rel.site_content (
+CREATE TABLE IF NOT EXISTS kanba_rel.site_content (
   section VARCHAR(80) PRIMARY KEY,
   data JSONB NOT NULL,
   updated_by TEXT REFERENCES kanba_rel.users(id) ON DELETE SET NULL,
@@ -345,7 +345,7 @@ CREATE TABLE kanba_rel.site_content (
 );
 COMMENT ON TABLE kanba_rel.site_content IS 'Contenido editorial por seccion: portada, contacto, galeria, videos, cafeteria. JSONB deliberado para estructura variable.';
 
-CREATE TABLE kanba_rel.settings (
+CREATE TABLE IF NOT EXISTS kanba_rel.settings (
   section VARCHAR(40) PRIMARY KEY CHECK (section IN ('business','booking','payments','smtp')),
   data JSONB NOT NULL CHECK (jsonb_typeof(data)='object'),
   updated_by TEXT REFERENCES kanba_rel.users(id) ON DELETE SET NULL,
@@ -354,7 +354,7 @@ CREATE TABLE kanba_rel.settings (
 );
 COMMENT ON TABLE kanba_rel.settings IS 'Configuracion no secreta; el backend debe aplicar whitelist tambien a claves anidadas. Credenciales en gestor de secretos.';
 
-CREATE TABLE kanba_rel.media (
+CREATE TABLE IF NOT EXISTS kanba_rel.media (
   name TEXT PRIMARY KEY,
   mime VARCHAR(100) NOT NULL CHECK (mime IN ('image/jpeg','image/png','image/webp','image/gif')),
   size INTEGER NOT NULL CHECK (size BETWEEN 1 AND 8388608),
@@ -365,29 +365,109 @@ CREATE TABLE kanba_rel.media (
 );
 COMMENT ON TABLE kanba_rel.media IS 'Imagenes del administrador, como kanba_media actual. No comprobantes bancarios ni documentos de identidad.';
 
-CREATE TABLE kanba_rel.rate_limits (
+CREATE TABLE IF NOT EXISTS kanba_rel.rate_limits (
   key TEXT PRIMARY KEY,
   window_start TIMESTAMPTZ NOT NULL,
   count INTEGER NOT NULL CHECK (count >= 0)
 );
-CREATE INDEX rate_limits_window_idx ON kanba_rel.rate_limits(window_start);
+CREATE INDEX IF NOT EXISTS rate_limits_window_idx ON kanba_rel.rate_limits(window_start);
 COMMENT ON TABLE kanba_rel.rate_limits IS 'Limitacion distribuida de intentos por accion/cuenta/IP; aplicar retencion corta.';
 
-CREATE TABLE kanba_rel.counters (
-  name VARCHAR(30) PRIMARY KEY CHECK (name IN ('reservation','receipt')),
+CREATE TABLE IF NOT EXISTS kanba_rel.counters (
+  name VARCHAR(30) PRIMARY KEY CHECK (name IN ('reservation','receipt','cafeOrder','cafeMovement','cafeExpense')),
   value BIGINT NOT NULL DEFAULT 0 CHECK (value >= 0)
 );
-INSERT INTO kanba_rel.counters(name,value) VALUES ('reservation',0),('receipt',0);
+INSERT INTO kanba_rel.counters(name,value) VALUES ('reservation',0),('receipt',0),('cafeOrder',100),('cafeMovement',0),('cafeExpense',0)
+ON CONFLICT (name) DO NOTHING;
 COMMENT ON TABLE kanba_rel.counters IS 'Folios correlativos comerciales. Incrementar con UPDATE RETURNING, nunca SELECT + UPDATE separado; no reiniciar al migrar.';
 
+-- Cafetería: Productos del menú
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_cafe_products (
+  id TEXT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  category VARCHAR(80) NOT NULL,
+  price NUMERIC(10,2) NOT NULL CHECK (price >= 0),
+  cost NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (cost >= 0),
+  stock INTEGER NOT NULL DEFAULT 0,
+  min_stock INTEGER NOT NULL DEFAULT 5,
+  unit VARCHAR(40) NOT NULL DEFAULT 'unidad',
+  variants TEXT[] NOT NULL DEFAULT '{}',
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cafetería: Insumos de operación
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_cafe_supplies (
+  id TEXT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  category VARCHAR(80) NOT NULL DEFAULT 'Insumos',
+  stock NUMERIC(10,2) NOT NULL DEFAULT 0,
+  min_stock NUMERIC(10,2) NOT NULL DEFAULT 5,
+  unit VARCHAR(40) NOT NULL DEFAULT 'unidad',
+  cost NUMERIC(10,2) NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cafetería: Kardex / Movimientos de inventario
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_cafe_inventory_movements (
+  id TEXT PRIMARY KEY,
+  code VARCHAR(40) NOT NULL,
+  item_type VARCHAR(20) NOT NULL CHECK (item_type IN ('product','supply')),
+  item_id TEXT NOT NULL,
+  item_name VARCHAR(120) NOT NULL,
+  movement_type VARCHAR(20) NOT NULL CHECK (movement_type IN ('in','out','adjustment','sale')),
+  quantity NUMERIC(10,2) NOT NULL,
+  unit_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL DEFAULT '',
+  reference TEXT DEFAULT '',
+  created_by TEXT DEFAULT 'admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cafetería: Ventas y comandas
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_cafe_sales (
+  id TEXT PRIMARY KEY,
+  code VARCHAR(40) NOT NULL UNIQUE,
+  receipt_number VARCHAR(40),
+  customer_name VARCHAR(120) NOT NULL,
+  customer_email VARCHAR(254) DEFAULT '',
+  customer_phone VARCHAR(40) DEFAULT '',
+  service_type VARCHAR(80) NOT NULL DEFAULT 'En mesa · Cafetería',
+  payment_method VARCHAR(20) NOT NULL DEFAULT 'cash' CHECK (payment_method IN ('cash','card','transfer','other')),
+  subtotal NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total NUMERIC(10,2) NOT NULL CHECK (total >= 0),
+  status VARCHAR(20) NOT NULL DEFAULT 'paid' CHECK (status IN ('paid','cancelled')),
+  items JSONB NOT NULL DEFAULT '[]',
+  notes TEXT DEFAULT '',
+  created_by TEXT DEFAULT 'admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cafetería: Gastos operativos
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_cafe_expenses (
+  id TEXT PRIMARY KEY,
+  concept VARCHAR(200) NOT NULL,
+  category VARCHAR(40) NOT NULL CHECK (category IN ('insumos','servicios','mantenimiento','personal','otros')),
+  amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  expense_date DATE NOT NULL,
+  notes TEXT DEFAULT '',
+  created_by TEXT DEFAULT 'admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- updated_at es responsabilidad del motor para las tablas que lo incluyen.
-CREATE FUNCTION kanba_rel.touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION kanba_rel.touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at := now(); RETURN NEW; END;
 $$;
 DO $$
 DECLARE table_name TEXT;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY['users','tours','departures','reservations','payments','site_content','settings'] LOOP
+  FOREACH table_name IN ARRAY ARRAY['users','tours','departures','reservations','payments','site_content','settings','kanba_cafe_products','kanba_cafe_supplies'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS touch_updated_at ON kanba_rel.%I', table_name);
     EXECUTE format('CREATE TRIGGER touch_updated_at BEFORE UPDATE ON kanba_rel.%I FOR EACH ROW EXECUTE FUNCTION kanba_rel.touch_updated_at()', table_name);
   END LOOP;
 END;

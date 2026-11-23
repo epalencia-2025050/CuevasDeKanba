@@ -120,6 +120,84 @@ export const RELATIONAL_SCHEMA = `
     data jsonb NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
   );
+
+  -- 8. Cafetería · Productos del Menú
+  CREATE TABLE IF NOT EXISTS kanba_cafe_products (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    category text NOT NULL,
+    price numeric(10, 2) NOT NULL CHECK (price >= 0),
+    cost numeric(10, 2) NOT NULL DEFAULT 0 CHECK (cost >= 0),
+    stock integer NOT NULL DEFAULT 0,
+    min_stock integer NOT NULL DEFAULT 5,
+    unit text NOT NULL DEFAULT 'unidad',
+    variants text[] NOT NULL DEFAULT '{}',
+    active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  -- 9. Cafetería · Insumos de Operación
+  CREATE TABLE IF NOT EXISTS kanba_cafe_supplies (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    category text NOT NULL DEFAULT 'Insumos',
+    stock numeric(10, 2) NOT NULL DEFAULT 0,
+    min_stock numeric(10, 2) NOT NULL DEFAULT 5,
+    unit text NOT NULL DEFAULT 'unidad',
+    cost numeric(10, 2) NOT NULL DEFAULT 0,
+    active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  -- 10. Cafetería · Kardex / Movimientos de Inventario
+  CREATE TABLE IF NOT EXISTS kanba_cafe_inventory_movements (
+    id text PRIMARY KEY,
+    code text NOT NULL,
+    item_type text NOT NULL CHECK (item_type IN ('product', 'supply')),
+    item_id text NOT NULL,
+    item_name text NOT NULL,
+    movement_type text NOT NULL CHECK (movement_type IN ('in', 'out', 'adjustment', 'sale')),
+    quantity numeric(10, 2) NOT NULL,
+    unit_cost numeric(10, 2) NOT NULL DEFAULT 0,
+    total_cost numeric(10, 2) NOT NULL DEFAULT 0,
+    reason text NOT NULL DEFAULT '',
+    reference text DEFAULT '',
+    created_by text DEFAULT 'admin',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  -- 11. Cafetería · Ventas y Pedidos
+  CREATE TABLE IF NOT EXISTS kanba_cafe_sales (
+    id text PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    receipt_number text,
+    customer_name text NOT NULL,
+    customer_email text DEFAULT '',
+    customer_phone text DEFAULT '',
+    service_type text NOT NULL DEFAULT 'En mesa · Cafetería',
+    payment_method text NOT NULL DEFAULT 'cash',
+    subtotal numeric(10, 2) NOT NULL DEFAULT 0,
+    total numeric(10, 2) NOT NULL CHECK (total >= 0),
+    status text NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'cancelled')),
+    items jsonb NOT NULL DEFAULT '[]',
+    notes text DEFAULT '',
+    created_by text DEFAULT 'admin',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  -- 12. Cafetería · Gastos Operativos
+  CREATE TABLE IF NOT EXISTS kanba_cafe_expenses (
+    id text PRIMARY KEY,
+    concept text NOT NULL,
+    category text NOT NULL CHECK (category IN ('insumos', 'servicios', 'mantenimiento', 'personal', 'otros')),
+    amount numeric(10, 2) NOT NULL CHECK (amount > 0),
+    expense_date date NOT NULL,
+    notes text DEFAULT '',
+    created_by text DEFAULT 'admin',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
 `;
 
 /**
@@ -249,6 +327,95 @@ async function importDocument(client, d) {
          VALUES ($1, $2::jsonb, now())
          ON CONFLICT (section) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
         [section, JSON.stringify(data)]
+      );
+    }
+  }
+
+  // 6. Cafetería · Productos
+  if (Array.isArray(d.cafeProducts)) {
+    for (const p of d.cafeProducts) {
+      await client.query(
+        `INSERT INTO kanba_cafe_products (id, name, category, price, cost, stock, min_stock, unit, variants, active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name, category = EXCLUDED.category, price = EXCLUDED.price,
+           cost = EXCLUDED.cost, stock = EXCLUDED.stock, min_stock = EXCLUDED.min_stock,
+           active = EXCLUDED.active, updated_at = now()`,
+        [
+          p.id, p.name, p.category, p.price || 0, p.cost || 0, p.stock || 0, p.minStock || 5,
+          p.unit || 'unidad', p.variants || [], p.active !== false,
+          p.createdAt || new Date().toISOString(), p.updatedAt || new Date().toISOString()
+        ]
+      );
+    }
+  }
+
+  // 7. Cafetería · Insumos
+  if (Array.isArray(d.cafeSupplies)) {
+    for (const s of d.cafeSupplies) {
+      await client.query(
+        `INSERT INTO kanba_cafe_supplies (id, name, category, stock, min_stock, unit, cost, active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name, category = EXCLUDED.category, stock = EXCLUDED.stock,
+           min_stock = EXCLUDED.min_stock, cost = EXCLUDED.cost, active = EXCLUDED.active, updated_at = now()`,
+        [
+          s.id, s.name, s.category || 'Insumos', s.stock || 0, s.minStock || 5,
+          s.unit || 'unidad', s.cost || 0, s.active !== false,
+          s.createdAt || new Date().toISOString(), s.updatedAt || new Date().toISOString()
+        ]
+      );
+    }
+  }
+
+  // 8. Cafetería · Ventas / Pedidos
+  if (Array.isArray(d.cafeOrders)) {
+    for (const o of d.cafeOrders) {
+      await client.query(
+        `INSERT INTO kanba_cafe_sales (id, code, receipt_number, customer_name, customer_email, customer_phone, service_type, payment_method, subtotal, total, status, items, notes, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15)
+         ON CONFLICT (code) DO NOTHING`,
+        [
+          o.id, o.code, o.receipt?.number || o.receiptNumber || null,
+          o.customer?.name || 'Cliente', o.customer?.email || '', o.customer?.phone || '',
+          o.customer?.serviceType || 'En mesa · Cafetería', o.payment?.method || 'card',
+          o.subtotal || 0, o.total || 0, o.status || 'paid',
+          JSON.stringify(o.items || []), o.customer?.notes || '', o.createdByRole || 'web',
+          o.createdAt || new Date().toISOString()
+        ]
+      );
+    }
+  }
+
+  // 9. Cafetería · Movimientos de Inventario
+  if (Array.isArray(d.cafeInventoryMovements)) {
+    for (const m of d.cafeInventoryMovements) {
+      await client.query(
+        `INSERT INTO kanba_cafe_inventory_movements (id, code, item_type, item_id, item_name, movement_type, quantity, unit_cost, total_cost, reason, reference, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          m.id, m.code, m.itemType || 'product', m.itemId, m.itemName,
+          m.movementType, m.quantity, m.unitCost || 0, m.totalCost || 0,
+          m.reason || '', m.reference || '', m.createdBy || 'admin',
+          m.createdAt || new Date().toISOString()
+        ]
+      );
+    }
+  }
+
+  // 10. Cafetería · Gastos Operativos
+  if (Array.isArray(d.cafeExpenses)) {
+    for (const g of d.cafeExpenses) {
+      await client.query(
+        `INSERT INTO kanba_cafe_expenses (id, concept, category, amount, expense_date, notes, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          g.id, g.concept, g.category || 'otros', g.amount || 0,
+          g.expenseDate || g.date || new Date().toISOString().slice(0, 10),
+          g.notes || '', g.createdBy || 'admin', g.createdAt || new Date().toISOString()
+        ]
       );
     }
   }

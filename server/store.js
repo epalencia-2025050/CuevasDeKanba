@@ -135,7 +135,13 @@ export function createInitialStore() {
     admin: { password: initialAdminPassword(), passwordPolicyVersion: 2 },
     users: [], sessions: {}, userSessions: {}, tours: [], content: { brand: {}, hero: {}, intro: {}, contact: {} },
     settings: { business: {}, booking: { ...DEFAULT_BOOKING_POLICY }, payments: {}, smtp: {} },
-    reservations: [], emails: [], closures: [], refunds: [], counters: { reservation: 0, receipt: 0 }
+    reservations: [], emails: [], closures: [], refunds: [],
+    cafeProducts: [],
+    cafeSupplies: [],
+    cafeInventoryMovements: [],
+    cafeExpenses: [],
+    cafeOrders: [],
+    counters: { reservation: 0, receipt: 0, cafeOrder: 100, cafeMovement: 0, cafeExpense: 0, cafeSupply: 0, cafeProduct: 0 }
   };
 }
 
@@ -503,28 +509,72 @@ export function nextReceiptNumber() {
   return `REC-${new Date().getFullYear()}-${String(d.counters.receipt).padStart(5, '0')}`;
 }
 
-export const CAFE_MENU = [
-  { id: 'gallo-grande', name: 'Gallo Grande', category: 'Cervezas', price: 25 },
-  { id: 'gallo-pequena-corona', name: 'Gallo Pequeña y Corona', category: 'Cervezas', price: 20, variants: ['Gallo Pequeña', 'Corona'] },
-  { id: 'gaseosas', name: 'Gaseosas', category: 'Bebidas sin alcohol', price: 10 },
-  { id: 'agua-pura', name: 'Agua pura', category: 'Bebidas sin alcohol', price: 10 },
-  { id: 'ice-te', name: 'Ice Té', category: 'Bebidas sin alcohol', price: 15 },
-  { id: 'cafe', name: 'Café', category: 'Bebidas sin alcohol', price: 10 },
-  { id: 'te', name: 'Té', category: 'Bebidas sin alcohol', price: 10 },
-  { id: 'tequila', name: 'Tequila', category: 'Licores', price: 10 },
-  { id: 'ron', name: 'Ron', category: 'Licores', price: 15 },
-  { id: 'cuba-libre', name: 'Cuba libre', category: 'Licores', price: 20 }
-];
+export const CAFE_MENU = [];
 
-const CAFE_ITEM_ALIASES = {
-  'gallo-pequena': { itemId: 'gallo-pequena-corona', defaultVariant: 'Gallo Pequeña' },
-  'corona': { itemId: 'gallo-pequena-corona', defaultVariant: 'Corona' }
-};
+export function getCafeProducts() {
+  const d = getDb();
+  if (!Array.isArray(d.cafeProducts)) {
+    d.cafeProducts = [];
+  }
+  return d.cafeProducts;
+}
+
+export function getCafeSupplies() {
+  const d = getDb();
+  if (!Array.isArray(d.cafeSupplies)) {
+    d.cafeSupplies = [];
+  }
+  return d.cafeSupplies;
+}
 
 export function nextCafeOrderCode() {
   const d = getDb();
   d.counters.cafeOrder = (Number(d.counters.cafeOrder) || 100) + 1;
   return `CAFE-${new Date().getFullYear()}-${String(d.counters.cafeOrder).padStart(4, '0')}`;
+}
+
+export function nextCafeMovementCode() {
+  const d = getDb();
+  d.counters.cafeMovement = (Number(d.counters.cafeMovement) || 0) + 1;
+  return `MOV-${new Date().getFullYear()}-${String(d.counters.cafeMovement).padStart(5, '0')}`;
+}
+
+export function nextCafeExpenseId() {
+  const d = getDb();
+  d.counters.cafeExpense = (Number(d.counters.cafeExpense) || 0) + 1;
+  return `EXP-${new Date().getFullYear()}-${String(d.counters.cafeExpense).padStart(5, '0')}`;
+}
+
+export function deductCafeInventory(order, { user = null, reason = '' } = {}) {
+  const d = getDb();
+  d.cafeInventoryMovements = d.cafeInventoryMovements || [];
+  const products = getCafeProducts();
+
+  for (const item of (order.items || [])) {
+    const prod = products.find(p => p.id === item.id);
+    if (prod) {
+      const qty = Number(item.quantity) || 1;
+      prod.stock = Math.max(0, (Number(prod.stock) || 0) - qty);
+      prod.updatedAt = new Date().toISOString();
+
+      const mov = {
+        id: `mov_${randomToken(6)}`,
+        code: nextCafeMovementCode(),
+        itemType: 'product',
+        itemId: prod.id,
+        itemName: prod.name,
+        movementType: 'sale',
+        quantity: -qty,
+        unitCost: Number(prod.cost) || 0,
+        totalCost: Math.round((Number(prod.cost) || 0) * qty * 100) / 100,
+        reason: reason || `Venta ${order.code} (${order.receipt?.number || order.receiptNumber || 'Comprobante interno'})`,
+        reference: order.code,
+        createdBy: user?.name || user?.email || (order.createdByRole === 'admin' ? 'Administración' : 'Venta en línea'),
+        createdAt: new Date().toISOString()
+      };
+      d.cafeInventoryMovements.unshift(mov);
+    }
+  }
 }
 
 export function prepareCafeOrder(input = {}) {
@@ -535,12 +585,11 @@ export function prepareCafeOrder(input = {}) {
 
   const lines = [];
   let total = 0;
+  const products = getCafeProducts();
 
   for (const raw of rawItems) {
     const rawId = String(raw?.id || '').trim();
-    const alias = CAFE_ITEM_ALIASES[rawId];
-    const lookupId = alias ? alias.itemId : rawId;
-    const menuItem = CAFE_MENU.find((m) => m.id === lookupId);
+    const menuItem = products.find((m) => m.id === rawId && m.active !== false);
     if (!menuItem) {
       throw new AppError(`Producto no válido en el pedido: ${rawId || 'desconocido'}.`, 422, 'invalid_item');
     }
@@ -548,7 +597,7 @@ export function prepareCafeOrder(input = {}) {
     if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
       throw new AppError(`Cantidad inválida para ${menuItem.name}.`, 422, 'invalid_quantity');
     }
-    const variant = String(raw?.variant || alias?.defaultVariant || '').trim();
+    const variant = String(raw?.variant || '').trim();
     const displayName = variant && menuItem.variants?.includes(variant)
       ? `${menuItem.name} (${variant})`
       : menuItem.name;
@@ -562,6 +611,7 @@ export function prepareCafeOrder(input = {}) {
       variant: variant || null,
       category: menuItem.category,
       unitPrice: menuItem.price,
+      unitCost: Number(menuItem.cost) || 0,
       quantity: qty,
       subtotal: lineTotal
     });

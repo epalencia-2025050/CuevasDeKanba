@@ -20,6 +20,7 @@
     "test:p0": "node --experimental-vm-modules --test tests/p0-security.test.mjs",
     "release:source": "node scripts/package-release.mjs",
     "db:init": "node --env-file=.env scripts/initialize-database.mjs",
+    "db:relational": "node --env-file=.env scripts/apply-neon-relational.mjs",
     "db:rotate-admin": "node --env-file=.env scripts/rotate-admin.mjs"
   },
   "engines": {

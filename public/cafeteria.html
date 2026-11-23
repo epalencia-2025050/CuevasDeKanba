@@ -75,10 +75,10 @@
           <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Café The Hope · Cafetería de K’anba</p>
           <h1 class="cafe-title">Pide en línea.<br><em>Disfruta al salir.</em></h1>
           <p class="cafe-lead">Bienvenido a <strong>Café The Hope</strong>. Elige tus cervezas, bebidas sin alcohol o licores directamente desde nuestro menú, realiza tu pago seguro en quetzales y recoge tu orden en barra o recíbela en tu mesa.</p>
-          <div class="cafe-badges" aria-label="Categorías del menú">
-            <span>Cervezas · 20 Q – 25 Q</span>
-            <span>Bebidas sin alcohol · 10 Q – 15 Q</span>
-            <span>Licores · 10 Q – 20 Q</span>
+          <div class="cafe-badges" aria-label="Beneficios del servicio">
+            <span>Bebidas y café</span>
+            <span>Consumo en barra y mesa</span>
+            <span>Pago seguro en línea</span>
           </div>
           <div class="cafe-hero-actions">
             <a class="btn btn-primary btn-lg" href="#menu">Ver menú y pedir <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
@@ -119,9 +119,6 @@
         <!-- Filtros rápidos de categoría -->
         <div class="cafe-cat-tabs" id="cafeCategoryTabs" role="tablist" aria-label="Filtrar categorías del menú">
           <button class="cafe-cat-tab is-active" type="button" role="tab" aria-selected="true" data-cafe-tab="all">Todo el menú</button>
-          <button class="cafe-cat-tab" type="button" role="tab" aria-selected="false" data-cafe-tab="Cervezas">Cervezas</button>
-          <button class="cafe-cat-tab" type="button" role="tab" aria-selected="false" data-cafe-tab="Bebidas sin alcohol">Bebidas sin alcohol</button>
-          <button class="cafe-cat-tab" type="button" role="tab" aria-selected="false" data-cafe-tab="Licores">Licores</button>
         </div>
 
         <div class="cafe-layout">
@@ -133,149 +130,9 @@
             </header>
 
             <div class="hope-menu-body" id="hopeMenuBody">
-              <!-- Cervezas -->
-              <section class="hope-category" data-category-section="Cervezas" aria-labelledby="cat-cervezas">
-                <h3 id="cat-cervezas">Cervezas</h3>
-                <ul class="hope-list">
-                  <li class="hope-item" data-item-id="gallo-grande" data-item-name="Gallo Grande" data-item-price="25" data-item-category="Cervezas">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Gallo Grande: <strong class="hope-price">25 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Gallo Grande" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="gallo-grande">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Gallo Grande">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="gallo-pequena-corona" data-item-name="Gallo Pequeña y Corona" data-item-price="20" data-item-category="Cervezas">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <div class="hope-name-wrap">
-                        <span class="hope-name">Gallo Pequeña y Corona: <strong class="hope-price">20 Q</strong></span>
-                        <div class="hope-variants" role="group" aria-label="Elegir entre Gallo Pequeña o Corona">
-                          <button type="button" class="hope-variant-chip is-selected" data-variant="Gallo Pequeña">Gallo Pequeña</button>
-                          <button type="button" class="hope-variant-chip" data-variant="Corona">Corona</button>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Gallo Pequeña y Corona" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="gallo-pequena-corona">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Gallo Pequeña y Corona">+ Pedir</button>
-                    </div>
-                  </li>
-                </ul>
-              </section>
-
-              <!-- Bebidas sin alcohol -->
-              <section class="hope-category" data-category-section="Bebidas sin alcohol" aria-labelledby="cat-sin-alcohol">
-                <h3 id="cat-sin-alcohol">Bebidas sin alcohol</h3>
-                <ul class="hope-list">
-                  <li class="hope-item" data-item-id="gaseosas" data-item-name="Gaseosas" data-item-price="10" data-item-category="Bebidas sin alcohol">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Gaseosas: <strong class="hope-price">10 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Gaseosas" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="gaseosas">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Gaseosas">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="agua-pura" data-item-name="Agua pura" data-item-price="10" data-item-category="Bebidas sin alcohol">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Agua pura: <strong class="hope-price">10 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Agua pura" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="agua-pura">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Agua pura">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="ice-te" data-item-name="Ice Té" data-item-price="15" data-item-category="Bebidas sin alcohol">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Ice Té: <strong class="hope-price">15 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Ice Té" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="ice-te">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Ice Té">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="cafe" data-item-name="Café" data-item-price="10" data-item-category="Bebidas sin alcohol">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Café: <strong class="hope-price">10 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Café" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="cafe">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Café">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="te" data-item-name="Té" data-item-price="10" data-item-category="Bebidas sin alcohol">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Té: <strong class="hope-price">10 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Té" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="te">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Té">+ Pedir</button>
-                    </div>
-                  </li>
-                </ul>
-              </section>
-
-              <!-- Licores -->
-              <section class="hope-category" data-category-section="Licores" aria-labelledby="cat-licores">
-                <h3 id="cat-licores">Licores</h3>
-                <ul class="hope-list">
-                  <li class="hope-item" data-item-id="tequila" data-item-name="Tequila" data-item-price="10" data-item-category="Licores">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Tequila: <strong class="hope-price">10 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Tequila" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="tequila">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Tequila">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="ron" data-item-name="Ron" data-item-price="15" data-item-category="Licores">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Ron: <strong class="hope-price">15 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Ron" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="ron">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Ron">+ Pedir</button>
-                    </div>
-                  </li>
-
-                  <li class="hope-item" data-item-id="cuba-libre" data-item-name="Cuba libre" data-item-price="20" data-item-category="Licores">
-                    <div class="hope-item-main">
-                      <span class="hope-bullet" aria-hidden="true">•</span>
-                      <span class="hope-name">Cuba libre: <strong class="hope-price">20 Q</strong></span>
-                    </div>
-                    <div class="hope-item-controls">
-                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Cuba libre" disabled>−</button>
-                      <span class="hope-qty-val" data-qty-for="cuba-libre">0</span>
-                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Cuba libre">+ Pedir</button>
-                    </div>
-                  </li>
-                </ul>
-              </section>
+              <div class="cafe-empty-state" id="cafeMenuLoading" style="padding: 2.5rem 1rem; text-align: center; color: var(--muted, #666);">
+                <p>Cargando menú de Cafetería...</p>
+              </div>
             </div>
 
             <footer class="hope-menu-footer">

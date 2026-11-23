@@ -1694,9 +1694,7 @@
 
     const STORAGE_KEY = 'kanba:cafe_cart_v1';
     let cart = [];
-    const selectedVariants = {
-      'gallo-pequena-corona': 'Gallo Pequeña'
-    };
+    const selectedVariants = {};
 
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -1784,7 +1782,7 @@
           if (mobileBtn) mobileBtn.textContent = 'Pagar pedido';
         } else {
           mobileLabel.textContent = 'Café The Hope';
-          mobileTotal.textContent = 'Desde 10 Q';
+          mobileTotal.textContent = 'Menú K\'anba';
           if (mobileBtn) mobileBtn.textContent = 'Ver mi pedido';
         }
       }
@@ -1837,58 +1835,6 @@
       setText('cafeTotal', formatQ(totalAmount));
       setText('cafePayBtnText', `Pedir y pagar · ${formatQ(totalAmount)}`);
     }
-
-    // Tabs de categorías
-    const tabsWrap = document.getElementById('cafeCategoryTabs');
-    if (tabsWrap) {
-      $$('[data-cafe-tab]', tabsWrap).forEach((tabBtn) => {
-        tabBtn.addEventListener('click', () => {
-          const targetCat = tabBtn.dataset.cafeTab || 'all';
-          $$('[data-cafe-tab]', tabsWrap).forEach((b) => {
-            const active = b === tabBtn;
-            b.classList.toggle('is-active', active);
-            b.setAttribute('aria-selected', String(active));
-          });
-          $$('[data-category-section]', menuCard).forEach((sec) => {
-            sec.hidden = targetCat !== 'all' && sec.dataset.categorySection !== targetCat;
-          });
-        });
-      });
-    }
-
-    // Selección de variante (Gallo Pequeña / Corona)
-    $$('.hope-variant-chip', menuCard).forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const row = chip.closest('.hope-item');
-        if (!row) return;
-        const itemId = row.dataset.itemId;
-        const variant = chip.dataset.variant;
-        selectedVariants[itemId] = variant;
-        $$('.hope-variant-chip', row).forEach((c) => c.classList.toggle('is-selected', c === chip));
-      });
-    });
-
-    // Botones + y - en cada producto del menú
-    $$('.hope-item', menuCard).forEach((row) => {
-      const id = row.dataset.itemId;
-      const name = row.dataset.itemName;
-      const price = Number(row.dataset.itemPrice);
-      const category = row.dataset.itemCategory;
-      const minusBtn = row.querySelector('[data-action="minus"]');
-      const plusBtn = row.querySelector('[data-action="plus"]');
-
-      plusBtn?.addEventListener('click', () => {
-        const variant = selectedVariants[id] || null;
-        addItem({ id, name, price, category, variant }, 1);
-      });
-
-      minusBtn?.addEventListener('click', () => {
-        const preferredVariant = selectedVariants[id] || null;
-        const preferredKey = cartKey(id, preferredVariant);
-        const match = cart.find((item) => item.key === preferredKey) || [...cart].reverse().find((item) => item.id === id);
-        if (match) addItem(match, -1);
-      });
-    });
 
     // Vaciar carrito
     document.getElementById('cafeClearCart')?.addEventListener('click', () => {
@@ -2141,6 +2087,164 @@
       renderCafeCart();
     });
 
+    async function loadDynamicMenu() {
+      const menuBody = document.getElementById('hopeMenuBody');
+      const tabsWrap = document.getElementById('cafeCategoryTabs');
+      try {
+        const res = await api('/api/cafe/menu');
+        const items = res?.items;
+        if (!Array.isArray(items) || !items.length) {
+          if (menuBody) {
+            menuBody.innerHTML = '<div class="cafe-empty-state" style="padding: 2.5rem 1rem; text-align: center; color: var(--muted, #666);"><p>Por el momento no hay productos registrados en el menú de cafetería.</p></div>';
+          }
+          if (tabsWrap) {
+            tabsWrap.replaceChildren();
+            const allBtn = document.createElement('button');
+            allBtn.className = 'cafe-cat-tab is-active';
+            allBtn.type = 'button';
+            allBtn.role = 'tab';
+            allBtn.setAttribute('aria-selected', 'true');
+            allBtn.dataset.cafeTab = 'all';
+            allBtn.textContent = 'Todo el menú';
+            tabsWrap.append(allBtn);
+          }
+          renderCafeCart();
+          return;
+        }
+        if (!menuBody) return;
+
+        const categories = {};
+        for (const it of items) {
+          const cat = it.category || 'Otros';
+          if (!categories[cat]) categories[cat] = [];
+          categories[cat].push(it);
+        }
+
+        if (tabsWrap) {
+          tabsWrap.replaceChildren();
+          const allBtn = document.createElement('button');
+          allBtn.className = 'cafe-cat-tab is-active';
+          allBtn.type = 'button';
+          allBtn.role = 'tab';
+          allBtn.setAttribute('aria-selected', 'true');
+          allBtn.dataset.cafeTab = 'all';
+          allBtn.textContent = 'Todo el menú';
+          tabsWrap.append(allBtn);
+
+          for (const cat of Object.keys(categories)) {
+            const btn = document.createElement('button');
+            btn.className = 'cafe-cat-tab';
+            btn.type = 'button';
+            btn.role = 'tab';
+            btn.setAttribute('aria-selected', 'false');
+            btn.dataset.cafeTab = cat;
+            btn.textContent = cat;
+            tabsWrap.append(btn);
+          }
+
+          $$('[data-cafe-tab]', tabsWrap).forEach((tabBtn) => {
+            tabBtn.addEventListener('click', () => {
+              const targetCat = tabBtn.dataset.cafeTab || 'all';
+              $$('[data-cafe-tab]', tabsWrap).forEach((b) => {
+                const active = b === tabBtn;
+                b.classList.toggle('is-active', active);
+                b.setAttribute('aria-selected', String(active));
+              });
+              $$('[data-category-section]', menuCard).forEach((sec) => {
+                sec.hidden = targetCat !== 'all' && sec.dataset.categorySection !== targetCat;
+              });
+            });
+          });
+        }
+
+        menuBody.replaceChildren();
+        for (const [catName, prodList] of Object.entries(categories)) {
+          const sec = document.createElement('section');
+          sec.className = 'hope-category';
+          sec.dataset.categorySection = catName;
+          const h3 = document.createElement('h3');
+          h3.textContent = catName;
+          const ul = document.createElement('ul');
+          ul.className = 'hope-list';
+
+          for (const p of prodList) {
+            const li = document.createElement('li');
+            li.className = 'hope-item';
+            li.dataset.itemId = p.id;
+            li.dataset.itemName = p.name;
+            li.dataset.itemPrice = String(p.price);
+            li.dataset.itemCategory = p.category;
+
+            const main = document.createElement('div');
+            main.className = 'hope-item-main';
+            main.innerHTML = `<span class="hope-bullet" aria-hidden="true">•</span>`;
+
+            const nameWrap = document.createElement('div');
+            nameWrap.className = 'hope-name-wrap';
+            nameWrap.innerHTML = `<span class="hope-name">${p.name}: <strong class="hope-price">${p.price} Q</strong></span>`;
+
+            if (Array.isArray(p.variants) && p.variants.length) {
+              const varDiv = document.createElement('div');
+              varDiv.className = 'hope-variants';
+              varDiv.setAttribute('role', 'group');
+              if (!selectedVariants[p.id]) selectedVariants[p.id] = p.variants[0];
+
+              p.variants.forEach((v) => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = `hope-variant-chip ${v === selectedVariants[p.id] ? 'is-selected' : ''}`;
+                chip.dataset.variant = v;
+                chip.textContent = v;
+                chip.addEventListener('click', () => {
+                  selectedVariants[p.id] = v;
+                  $$('.hope-variant-chip', varDiv).forEach(c => c.classList.toggle('is-selected', c === chip));
+                });
+                varDiv.append(chip);
+              });
+              nameWrap.append(varDiv);
+            }
+            main.append(nameWrap);
+
+            const controls = document.createElement('div');
+            controls.className = 'hope-item-controls';
+            controls.innerHTML = `
+              <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar ${p.name}" disabled>−</button>
+              <span class="hope-qty-val" data-qty-for="${p.id}">0</span>
+              <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar ${p.name}">+ Pedir</button>
+            `;
+
+            const minusBtn = controls.querySelector('[data-action="minus"]');
+            const plusBtn = controls.querySelector('[data-action="plus"]');
+
+            plusBtn?.addEventListener('click', () => {
+              const variant = selectedVariants[p.id] || null;
+              addItem({ id: p.id, name: p.name, price: p.price, category: p.category, variant }, 1);
+            });
+
+            minusBtn?.addEventListener('click', () => {
+              const preferredVariant = selectedVariants[p.id] || null;
+              const preferredKey = preferredVariant ? `${p.id}::${preferredVariant}` : p.id;
+              const match = cart.find(item => item.key === preferredKey) || [...cart].reverse().find(item => item.id === p.id);
+              if (match) addItem(match, -1);
+            });
+
+            li.append(main, controls);
+            ul.append(li);
+          }
+
+          sec.append(h3, ul);
+          menuBody.append(sec);
+        }
+
+        renderCafeCart();
+      } catch {
+        if (menuBody) {
+          menuBody.innerHTML = '<div class="cafe-empty-state" style="padding: 2.5rem 1rem; text-align: center; color: var(--muted, #666);"><p>No se pudo cargar el menú de cafetería en este momento.</p></div>';
+        }
+      }
+    }
+
+    loadDynamicMenu();
     renderCafeCart();
   }
 

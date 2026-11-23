@@ -28,6 +28,11 @@
     reservations: ['Operación', 'Reservas'],
     availability: ['Operación', 'Disponibilidad'],
     tours: ['Operación', 'Tours'],
+    'cafe-sales': ['Cafetería', 'Ventas y POS'],
+    'cafe-products': ['Cafetería', 'Menú y Precios'],
+    'cafe-inventory': ['Cafetería', 'Inventario y Kardex'],
+    'cafe-expenses': ['Cafetería', 'Control de Gastos'],
+    'cafe-reports': ['Cafetería', 'Estadísticas y Reportes'],
     content: ['Sitio', 'Contenido'],
     gallery: ['Sitio', 'Galería'],
     videos: ['Sitio', 'Videos'],
@@ -261,6 +266,11 @@
       reservations: loadReservations,
       availability: loadAvailability,
       tours: loadTours,
+      'cafe-sales': loadCafeSales,
+      'cafe-products': loadCafeProducts,
+      'cafe-inventory': loadCafeInventory,
+      'cafe-expenses': loadCafeExpenses,
+      'cafe-reports': loadCafeReports,
       content: loadContent,
       gallery: loadGallery,
       videos: loadVideos,
@@ -2443,6 +2453,1222 @@
         busy(button, false);
       }
     });
+
+    bindCafeEvents();
+  }
+
+  /* ====================================================================
+     Cafetería · Ventas, Productos, Inventario, Gastos y Reportes
+     ==================================================================== */
+
+  // --- Ventas y POS ---
+  async function loadCafeSales() {
+    setSync(true);
+    const from = $('#cafeSalesFrom')?.value || '';
+    const to = $('#cafeSalesTo')?.value || '';
+    const paymentMethod = $('#cafeSalesPaymentFilter')?.value || '';
+    const search = $('#cafeSalesSearch')?.value || '';
+
+    try {
+      const params = new URLSearchParams();
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      if (paymentMethod) params.set('paymentMethod', paymentMethod);
+      if (search) params.set('search', search);
+
+      const res = await api(`/api/admin/cafe/sales?${params.toString()}`);
+      const sales = res.sales || [];
+      state.cafeSales = sales;
+
+      let totalAmount = 0;
+      for (const s of sales) totalAmount += (Number(s.total) || 0);
+      const avg = sales.length ? totalAmount / sales.length : 0;
+
+      const kpis = $('#cafeSalesKpis');
+      if (kpis) {
+        kpis.replaceChildren(
+          kpiCard('Total Ventas', money(totalAmount), 'Ingresos por comandas y ventas en caja', 'lime'),
+          kpiCard('Cantidad de Ventas', String(sales.length), 'Comprobantes y comandas emitidas'),
+          kpiCard('Ticket Promedio', money(avg), 'Consumo medio por orden', 'amber')
+        );
+      }
+
+      const countNode = $('#cafeSalesCount');
+      if (countNode) countNode.textContent = `${sales.length} ventas`;
+
+      const tbody = $('#cafeSalesTbody');
+      if (tbody) {
+        tbody.replaceChildren();
+        if (!sales.length) {
+          const tr = el('tr');
+          const td = el('td', '', 'No se encontraron ventas con los filtros aplicados.');
+          td.colSpan = 8;
+          td.style.textAlign = 'center';
+          td.style.color = 'var(--muted)';
+          tr.append(td);
+          tbody.append(tr);
+        } else {
+          for (const s of sales) {
+            const tr = el('tr');
+            const tdCode = el('td');
+            const strongCode = el('strong', '', s.code);
+            tdCode.append(strongCode);
+
+            const tdRec = el('td', '', s.receipt?.number || '—');
+            const tdDate = el('td', '', s.createdAt ? new Date(s.createdAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+            const tdCust = el('td', '', s.customer?.name || 'Cliente en barra');
+            const tdServ = el('td', '', s.customer?.serviceType || 'En mesa');
+
+            const tdPay = el('td');
+            const pMethod = s.payment?.method === 'cash' ? 'Efectivo' : s.payment?.method === 'card' ? 'Tarjeta' : s.payment?.method === 'transfer' ? 'Transferencia' : 'Otro';
+            tdPay.append(statusBadge(s.payment?.status || 'paid', pMethod));
+
+            const tdTot = el('td', '', money(s.total));
+            tdTot.style.textAlign = 'right';
+            tdTot.style.fontWeight = 'bold';
+
+            const tdActions = el('td');
+            tdActions.style.textAlign = 'center';
+            const btnRec = el('button', 'btn btn-outline btn-sm', 'Ver comprobante');
+            btnRec.type = 'button';
+            btnRec.addEventListener('click', () => openCafeReceiptModal(s));
+            tdActions.append(btnRec);
+
+            tr.append(tdCode, tdRec, tdDate, tdCust, tdServ, tdPay, tdTot, tdActions);
+            tbody.append(tr);
+          }
+        }
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function openCafeReceiptModal(order) {
+    const wrap = el('div');
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '14px';
+
+    const header = el('div');
+    header.style.textAlign = 'center';
+    header.style.borderBottom = '1px solid var(--line)';
+    header.style.paddingBottom = '10px';
+    const h2 = el('h3', '', 'Café The Hope · K’anba Cuevas Vivas');
+    h2.style.margin = '0 0 4px';
+    const sub = el('p', '', `Comprobante Interno: ${order.receipt?.number || '—'} · Código: ${order.code}`);
+    sub.style.margin = '0';
+    sub.style.fontSize = '12px';
+    sub.style.color = 'var(--muted)';
+    header.append(h2, sub);
+
+    const meta = el('div');
+    meta.style.fontSize = '12px';
+    meta.style.lineHeight = '1.6';
+    meta.innerHTML = `
+      <div><strong>Fecha:</strong> ${new Date(order.createdAt).toLocaleString('es-GT')}</div>
+      <div><strong>Cliente:</strong> ${order.customer?.name || 'Cliente en barra'}</div>
+      ${order.customer?.phone ? `<div><strong>Teléfono:</strong> ${order.customer.phone}</div>` : ''}
+      <div><strong>Servicio:</strong> ${order.customer?.serviceType || 'En mesa · Cafetería'}</div>
+      ${order.customer?.notes ? `<div><strong>Notas/Mesa:</strong> ${order.customer.notes}</div>` : ''}
+      <div><strong>Forma de Pago:</strong> ${order.payment?.brand || order.payment?.method || 'Tarjeta'} (${order.payment?.provider || ''})</div>
+    `;
+
+    const tableWrap = el('div', 'table-wrap');
+    const table = el('table', 'data-table');
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Cant.</th>
+          <th>Producto</th>
+          <th style="text-align:right;">Precio</th>
+          <th style="text-align:right;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${(order.items || []).map(item => `
+          <tr>
+            <td style="text-align:center;">${item.quantity}</td>
+            <td>${item.displayName || item.name}</td>
+            <td style="text-align:right;">${money(item.unitPrice)}</td>
+            <td style="text-align:right;">${money(item.subtotal)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+      <tfoot>
+        ${order.tax ? `<tr><td colspan="3" style="text-align:right;color:var(--muted);">IVA 12% (incluido):</td><td style="text-align:right;color:var(--muted);">${money(order.tax)}</td></tr>` : ''}
+        <tr>
+          <td colspan="3" style="text-align:right;font-weight:bold;font-size:14px;">Total Pagado:</td>
+          <td style="text-align:right;font-weight:bold;font-size:14px;color:var(--deep);">${money(order.total)}</td>
+        </tr>
+      </tfoot>
+    `;
+    tableWrap.append(table);
+
+    const foot = el('div');
+    foot.style.display = 'flex';
+    foot.style.justifyContent = 'space-between';
+    foot.style.marginTop = '10px';
+
+    const btnPrint = el('button', 'btn btn-primary', '🖨️ Imprimir Comprobante');
+    btnPrint.type = 'button';
+    btnPrint.addEventListener('click', () => {
+      const w = window.open('', '_blank', 'width=450,height=600');
+      w.document.write(`<!doctype html><html><head><title>${order.code}</title><style>body{font-family:monospace;padding:20px;font-size:13px;line-height:1.4;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{padding:4px 0;text-align:left;}th{border-bottom:1px solid #000;}.r{text-align:right;}.c{text-align:center;}</style></head><body><div class="c"><h2>CAFÉ THE HOPE</h2><p>K’anba Cuevas Vivas</p><p>Comprobante: ${order.receipt?.number || '—'}<br>Código: ${order.code}</p><hr></div><p>Fecha: ${new Date(order.createdAt).toLocaleString('es-GT')}<br>Cliente: ${order.customer?.name || 'Cliente'}<br>Servicio: ${order.customer?.serviceType || 'Mesa'}</p><table><thead><tr><th>Cant</th><th>Item</th><th class="r">Total</th></tr></thead><tbody>${(order.items || []).map(i => `<tr><td>${i.quantity}</td><td>${i.displayName || i.name}</td><td class="r">Q${Number(i.subtotal).toFixed(2)}</td></tr>`).join('')}</tbody></table><hr><div class="r"><p><strong>TOTAL: Q${Number(order.total).toFixed(2)}</strong></p><p>Pago: ${order.payment?.method || 'Efectivo'}</p></div><div class="c" style="margin-top:20px;"><p>¡Gracias por su visita!</p></div></body></html>`);
+      w.document.close();
+      w.focus();
+      w.print();
+    });
+
+    const btnClose = el('button', 'btn btn-outline', 'Cerrar');
+    btnClose.type = 'button';
+    btnClose.addEventListener('click', closeModal);
+
+    foot.append(btnPrint, btnClose);
+    wrap.append(header, meta, tableWrap, foot);
+
+    openModal(`Comprobante ${order.receipt?.number || order.code}`, wrap, { kicker: 'Cafetería' });
+  }
+
+  async function openCafePosModal() {
+    setSync(true);
+    let products = [];
+    try {
+      const res = await api('/api/admin/cafe/products');
+      products = (res.products || []).filter(p => p.active !== false);
+    } catch (err) {
+      handleError(err);
+      return;
+    } finally {
+      setSync(false);
+    }
+
+    if (!products.length) {
+      toast('No hay productos activos en el menú. Agrega productos primero.');
+      return;
+    }
+
+    const cart = [];
+    const wrap = el('div');
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '16px';
+
+    const topGrid = el('div');
+    topGrid.style.display = 'grid';
+    topGrid.style.gridTemplateColumns = '2fr 1fr 1fr auto';
+    topGrid.style.gap = '8px';
+    topGrid.style.alignItems = 'end';
+
+    const prodSelect = el('select');
+    prodSelect.className = 'select-compact';
+    prodSelect.innerHTML = '<option value="">Selecciona un producto…</option>' +
+      products.map(p => `<option value="${p.id}" data-price="${p.price}" data-name="${p.name}" data-category="${p.category}">${p.name} - ${money(p.price)} (Stock: ${p.stock})</option>`).join('');
+
+    const variantSelect = el('select');
+    variantSelect.className = 'select-compact';
+    variantSelect.innerHTML = '<option value="">Variante / Sabor</option>';
+
+    prodSelect.addEventListener('change', () => {
+      const selId = prodSelect.value;
+      const prod = products.find(p => p.id === selId);
+      variantSelect.innerHTML = '<option value="">Variante estándar</option>';
+      if (prod && Array.isArray(prod.variants) && prod.variants.length) {
+        for (const v of prod.variants) {
+          const opt = el('option', '', v);
+          opt.value = v;
+          variantSelect.append(opt);
+        }
+      }
+    });
+
+    const qtyInput = el('input');
+    qtyInput.type = 'number';
+    qtyInput.min = '1';
+    qtyInput.value = '1';
+    qtyInput.style.padding = '8px 10px';
+    qtyInput.style.borderRadius = '9px';
+    qtyInput.style.border = '1px solid var(--line)';
+
+    const btnAdd = el('button', 'btn btn-outline', '+ Agregar');
+    btnAdd.type = 'button';
+
+    topGrid.append(
+      Object.assign(el('div'), { innerHTML: '<label style="font-size:11px;font-weight:700;">Producto</label>' }, { children: [prodSelect] }),
+      Object.assign(el('div'), { innerHTML: '<label style="font-size:11px;font-weight:700;">Variante</label>' }, { children: [variantSelect] }),
+      Object.assign(el('div'), { innerHTML: '<label style="font-size:11px;font-weight:700;">Cantidad</label>' }, { children: [qtyInput] }),
+      btnAdd
+    );
+
+    const cartWrap = el('div', 'table-wrap');
+    const cartTable = el('table', 'data-table');
+    cartTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>Cant.</th>
+          <th>Ítem</th>
+          <th style="text-align:right;">Precio</th>
+          <th style="text-align:right;">Total</th>
+          <th style="text-align:center;">Quitar</th>
+        </tr>
+      </thead>
+      <tbody id="posCartTbody">
+        <tr><td colspan="5" style="text-align:center;color:var(--muted);">El carrito está vacío. Agrega productos arriba.</td></tr>
+      </tbody>
+    `;
+    cartWrap.append(cartTable);
+
+    const totalBar = el('div');
+    totalBar.style.display = 'flex';
+    totalBar.style.justifyContent = 'flex-end';
+    totalBar.style.fontSize = '16px';
+    totalBar.style.fontWeight = 'bold';
+    totalBar.innerHTML = '<span>Total a cobrar: <strong id="posCartTotal">Q 0.00</strong></span>';
+
+    function renderPosCart() {
+      const tbody = $('#posCartTbody', cartTable);
+      const totalNode = $('#posCartTotal', totalBar);
+      tbody.replaceChildren();
+
+      if (!cart.length) {
+        const tr = el('tr');
+        tr.innerHTML = '<td colspan="5" style="text-align:center;color:var(--muted);">El carrito está vacío. Agrega productos arriba.</td>';
+        tbody.append(tr);
+        if (totalNode) totalNode.textContent = 'Q 0.00';
+        return;
+      }
+
+      let grandTotal = 0;
+      cart.forEach((item, index) => {
+        grandTotal += item.subtotal;
+        const tr = el('tr');
+        tr.innerHTML = `
+          <td style="text-align:center;">${item.quantity}</td>
+          <td>${item.displayName}</td>
+          <td style="text-align:right;">${money(item.unitPrice)}</td>
+          <td style="text-align:right;font-weight:bold;">${money(item.subtotal)}</td>
+          <td style="text-align:center;"><button type="button" class="icon-button" style="color:var(--rust);font-size:14px;" data-remove="${index}">✕</button></td>
+        `;
+        $('button[data-remove]', tr).addEventListener('click', () => {
+          cart.splice(index, 1);
+          renderPosCart();
+        });
+        tbody.append(tr);
+      });
+
+      if (totalNode) totalNode.textContent = money(grandTotal);
+    }
+
+    btnAdd.addEventListener('click', () => {
+      const prodId = prodSelect.value;
+      const prod = products.find(p => p.id === prodId);
+      if (!prod) {
+        toast('Selecciona un producto del menú.');
+        return;
+      }
+      const qty = parseInt(qtyInput.value, 10) || 1;
+      if (qty < 1) {
+        toast('La cantidad debe ser al menos 1.');
+        return;
+      }
+      const variant = variantSelect.value || null;
+      const displayName = variant ? `${prod.name} (${variant})` : prod.name;
+      const subtotal = Math.round(prod.price * qty * 100) / 100;
+
+      const existing = cart.find(c => c.id === prod.id && c.variant === variant);
+      if (existing) {
+        existing.quantity += qty;
+        existing.subtotal = Math.round(prod.price * existing.quantity * 100) / 100;
+      } else {
+        cart.push({
+          id: prod.id,
+          name: prod.name,
+          displayName,
+          variant,
+          unitPrice: prod.price,
+          quantity: qty,
+          subtotal
+        });
+      }
+
+      qtyInput.value = '1';
+      renderPosCart();
+    });
+
+    const formMeta = el('div');
+    formMeta.style.display = 'grid';
+    formMeta.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
+    formMeta.style.gap = '10px';
+    formMeta.innerHTML = `
+      <label class="field"><span>Nombre del cliente</span><input type="text" id="posCustName" value="Cliente en barra" required></label>
+      <label class="field"><span>Teléfono (opcional)</span><input type="text" id="posCustPhone" placeholder="+502 ..."></label>
+      <label class="field"><span>Tipo de servicio</span>
+        <select id="posServiceType" class="select-compact">
+          <option value="En mesa · Cafetería">En mesa · Cafetería</option>
+          <option value="Para llevar">Para llevar</option>
+          <option value="En barra">En barra</option>
+        </select>
+      </label>
+      <label class="field"><span>Forma de pago</span>
+        <select id="posPaymentMethod" class="select-compact">
+          <option value="cash">Efectivo en caja</option>
+          <option value="card">Tarjeta (POS)</option>
+          <option value="transfer">Transferencia bancaria</option>
+          <option value="other">Otro</option>
+        </select>
+      </label>
+    `;
+
+    const notesField = el('label', 'field');
+    notesField.innerHTML = '<span>Notas del pedido o número de mesa</span><input type="text" id="posNotes" placeholder="Ej. Mesa 4, sin azúcar…">';
+
+    const footBar = el('div');
+    footBar.style.display = 'flex';
+    footBar.style.justifyContent = 'flex-end';
+    footBar.style.gap = '10px';
+    footBar.style.marginTop = '12px';
+
+    const btnCancel = el('button', 'btn btn-outline', 'Cancelar');
+    btnCancel.type = 'button';
+    btnCancel.addEventListener('click', closeModal);
+
+    const btnSubmit = el('button', 'btn btn-primary', 'Emitir Venta y Comprobante');
+    btnSubmit.type = 'button';
+    btnSubmit.addEventListener('click', async () => {
+      if (!cart.length) {
+        toast('El pedido no tiene productos.');
+        return;
+      }
+      const customerName = $('#posCustName', formMeta)?.value.trim() || 'Cliente en barra';
+      const customerPhone = $('#posCustPhone', formMeta)?.value.trim() || '';
+      const serviceType = $('#posServiceType', formMeta)?.value || 'En mesa · Cafetería';
+      const paymentMethod = $('#posPaymentMethod', formMeta)?.value || 'cash';
+      const notes = $('#posNotes', notesField)?.value.trim() || '';
+
+      busy(btnSubmit, true);
+      try {
+        const res = await api('/api/admin/cafe/sales', {
+          method: 'POST',
+          body: JSON.stringify({
+            items: cart,
+            paymentMethod,
+            customer: { name: customerName, phone: customerPhone, serviceType, notes }
+          })
+        });
+
+        toast(`Venta registrada exitosamente: ${res.order.code}`);
+        closeModal();
+        openCafeReceiptModal(res.order);
+        loadCafeSales();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(btnSubmit, false);
+      }
+    });
+
+    footBar.append(btnCancel, btnSubmit);
+    wrap.append(topGrid, cartWrap, totalBar, formMeta, notesField, footBar);
+
+    openModal('Nueva Venta · Caja y POS', wrap, { kicker: 'Café The Hope', wide: true });
+  }
+
+  // --- Catálogo de Productos y Precios ---
+  async function loadCafeProducts() {
+    setSync(true);
+    const catFilter = $('#cafeProductCatFilter')?.value || '';
+    const search = ($('#cafeProductSearch')?.value || '').toLowerCase().trim();
+
+    try {
+      const res = await api('/api/admin/cafe/products');
+      let products = res.products || [];
+      state.cafeProducts = products;
+
+      const select = $('#cafeProductCatFilter');
+      if (select && select.children.length <= 1) {
+        const cats = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+        for (const c of cats) {
+          const opt = el('option', '', c);
+          opt.value = c;
+          select.append(opt);
+        }
+      }
+
+      if (catFilter) products = products.filter(p => p.category === catFilter);
+      if (search) products = products.filter(p => p.name.toLowerCase().includes(search) || p.category.toLowerCase().includes(search));
+
+      const countNode = $('#cafeProductsCount');
+      if (countNode) countNode.textContent = `${products.length} productos`;
+
+      const tbody = $('#cafeProductsTbody');
+      if (tbody) {
+        tbody.replaceChildren();
+        if (!products.length) {
+          const tr = el('tr');
+          const td = el('td', '', 'No hay productos registrados.');
+          td.colSpan = 10;
+          td.style.textAlign = 'center';
+          td.style.color = 'var(--muted)';
+          tr.append(td);
+          tbody.append(tr);
+        } else {
+          for (const p of products) {
+            const tr = el('tr');
+            const tdName = el('td');
+            const strongName = el('strong', '', p.name);
+            tdName.append(strongName);
+            if (p.variants && p.variants.length) {
+              const sm = el('small', '', ` (${p.variants.join(', ')})`);
+              sm.style.color = 'var(--muted)';
+              tdName.append(sm);
+            }
+
+            const tdCat = el('td', '', p.category);
+            const tdPrice = el('td', '', money(p.price));
+            tdPrice.style.textAlign = 'right';
+            tdPrice.style.fontWeight = 'bold';
+
+            const tdCost = el('td', '', money(p.cost || 0));
+            tdCost.style.textAlign = 'right';
+
+            const margin = p.price > 0 ? Math.round(((p.price - (p.cost || 0)) / p.price) * 100) : 0;
+            const tdMargin = el('td', '', `${margin}%`);
+            tdMargin.style.textAlign = 'right';
+            tdMargin.style.color = margin > 30 ? '#27604e' : '#8a5e20';
+
+            const tdStock = el('td', '', String(p.stock));
+            tdStock.style.textAlign = 'center';
+            if ((Number(p.stock) || 0) <= (Number(p.minStock) || 0)) {
+              tdStock.style.color = 'var(--rust)';
+              tdStock.style.fontWeight = 'bold';
+            }
+
+            const tdMin = el('td', '', String(p.minStock));
+            tdMin.style.textAlign = 'center';
+            tdMin.style.color = 'var(--muted)';
+
+            const tdUnit = el('td', '', p.unit || 'unidad');
+            const tdStatus = el('td');
+            tdStatus.append(statusBadge(p.active !== false ? 'confirmed' : 'cancelled', p.active !== false ? 'Activo' : 'Inactivo'));
+
+            const tdActions = el('td');
+            tdActions.style.textAlign = 'center';
+            tdActions.style.display = 'flex';
+            tdActions.style.gap = '6px';
+            tdActions.style.justifyContent = 'center';
+
+            const btnEdit = el('button', 'btn btn-outline btn-sm', 'Editar');
+            btnEdit.type = 'button';
+            btnEdit.addEventListener('click', () => openCafeProductModal(p));
+
+            const btnDel = el('button', 'btn btn-outline btn-sm danger', p.active !== false ? 'Archivar' : 'Eliminar');
+            btnDel.type = 'button';
+            btnDel.addEventListener('click', () => deleteCafeProduct(p));
+
+            tdActions.append(btnEdit, btnDel);
+            tr.append(tdName, tdCat, tdPrice, tdCost, tdMargin, tdStock, tdMin, tdUnit, tdStatus, tdActions);
+            tbody.append(tr);
+          }
+        }
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function openCafeProductModal(product = null) {
+    const isEdit = Boolean(product);
+    const wrap = el('form');
+    wrap.className = 'form-grid two';
+
+    wrap.innerHTML = `
+      <label class="field field-full"><span>Nombre del producto</span><input type="text" id="cpfName" value="${product?.name || ''}" required></label>
+      <label class="field"><span>Categoría</span>
+        <input type="text" id="cpfCategory" list="cpfCatList" value="${product?.category || 'Bebidas sin alcohol'}" required>
+        <datalist id="cpfCatList">
+          <option value="Cervezas">
+          <option value="Bebidas sin alcohol">
+          <option value="Licores">
+          <option value="Comida y Snacks">
+          <option value="Café y Calientes">
+        </datalist>
+      </label>
+      <label class="field"><span>Unidad de medida</span><input type="text" id="cpfUnit" value="${product?.unit || 'unidad'}" required></label>
+      <label class="field"><span>Precio de venta (Q)</span><input type="number" step="0.5" min="0" id="cpfPrice" value="${product?.price ?? 10}" required></label>
+      <label class="field"><span>Costo unitario (Q)</span><input type="number" step="0.5" min="0" id="cpfCost" value="${product?.cost ?? 5}" required></label>
+      <label class="field"><span>Stock actual</span><input type="number" min="0" id="cpfStock" value="${product?.stock ?? 20}" required></label>
+      <label class="field"><span>Stock mínimo (Alerta)</span><input type="number" min="0" id="cpfMinStock" value="${product?.minStock ?? 5}" required></label>
+      <label class="field field-full"><span>Variantes (separadas por coma)</span><input type="text" id="cpfVariants" value="${(product?.variants || []).join(', ')}" placeholder="Ej. Gallo Pequeña, Corona"></label>
+      ${isEdit ? `
+        <label class="field field-full" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="cpfActive" ${product.active !== false ? 'checked' : ''} style="width:auto;">
+          <span>Producto disponible / activo para venta</span>
+        </label>
+      ` : ''}
+      <div class="field-full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+        <button class="btn btn-outline" type="button" id="cpfCancel">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="cpfSubmit">${isEdit ? 'Guardar Cambios' : 'Crear Producto'}</button>
+      </div>
+    `;
+
+    $('#cpfCancel', wrap).addEventListener('click', closeModal);
+    wrap.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = $('#cpfSubmit', wrap);
+      busy(submitBtn, true);
+
+      const payload = {
+        name: $('#cpfName', wrap).value.trim(),
+        category: $('#cpfCategory', wrap).value.trim(),
+        unit: $('#cpfUnit', wrap).value.trim(),
+        price: Number($('#cpfPrice', wrap).value),
+        cost: Number($('#cpfCost', wrap).value),
+        stock: parseInt($('#cpfStock', wrap).value, 10),
+        minStock: parseInt($('#cpfMinStock', wrap).value, 10),
+        variants: $('#cpfVariants', wrap).value.split(',').map(v => v.trim()).filter(Boolean),
+        ...(isEdit ? { active: $('#cpfActive', wrap)?.checked } : {})
+      };
+
+      try {
+        if (isEdit) {
+          await api(`/api/admin/cafe/products/${product.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          toast('Producto actualizado correctamente.');
+        } else {
+          await api('/api/admin/cafe/products', { method: 'POST', body: JSON.stringify(payload) });
+          toast('Producto creado con éxito.');
+        }
+        closeModal();
+        loadCafeProducts();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal(isEdit ? `Editar ${product.name}` : 'Nuevo Producto del Menú', wrap, { kicker: 'Cafetería' });
+  }
+
+  async function deleteCafeProduct(product) {
+    if (!confirm(`¿Estás seguro de archivar o eliminar "${product.name}"?`)) return;
+    try {
+      const res = await api(`/api/admin/cafe/products/${product.id}`, { method: 'DELETE' });
+      toast(res.message || 'Producto actualizado.');
+      loadCafeProducts();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  // --- Inventario y Kardex ---
+  let activeInvTab = 'stock';
+  async function loadCafeInventory() {
+    setSync(true);
+    try {
+      const res = await api('/api/admin/cafe/inventory');
+      const products = res.products || [];
+      const supplies = res.supplies || [];
+      const alerts = res.alerts || { totalLowStock: 0 };
+
+      const kpis = $('#cafeInvKpis');
+      if (kpis) {
+        kpis.replaceChildren(
+          kpiCard('Productos en Menú', String(products.length), `${products.filter(p => p.active !== false).length} activos`),
+          kpiCard('Insumos de Cocina', String(supplies.length), `${supplies.filter(s => s.active !== false).length} activos`),
+          kpiCard('Alertas Stock Bajo', String(alerts.totalLowStock || 0), alerts.totalLowStock ? 'Requieren abastecimiento urgente' : 'Niveles de inventario óptimos', alerts.totalLowStock ? 'rust' : 'lime')
+        );
+      }
+
+      // Render Stock Panel
+      const stockTbody = $('#cafeInvStockTbody');
+      if (stockTbody) {
+        stockTbody.replaceChildren();
+        const allItems = [
+          ...products.map(p => ({ ...p, itemType: 'product' })),
+          ...supplies.map(s => ({ ...s, itemType: 'supply' }))
+        ];
+
+        for (const it of allItems) {
+          const tr = el('tr');
+          const tdType = el('td', '', it.itemType === 'product' ? 'Producto' : 'Insumo');
+          const tdName = el('td');
+          const strongName = el('strong', '', it.name);
+          tdName.append(strongName);
+
+          const tdCat = el('td', '', it.category);
+          const tdStock = el('td', '', String(it.stock));
+          tdStock.style.textAlign = 'center';
+          tdStock.style.fontWeight = 'bold';
+
+          const isLow = (Number(it.stock) || 0) <= (Number(it.minStock) || 0);
+          if (isLow) tdStock.style.color = 'var(--rust)';
+
+          const tdMin = el('td', '', String(it.minStock));
+          tdMin.style.textAlign = 'center';
+
+          const tdUnit = el('td', '', it.unit || 'unidad');
+          const tdCost = el('td', '', money(it.cost || 0));
+          tdCost.style.textAlign = 'right';
+
+          const invValue = (Number(it.stock) || 0) * (Number(it.cost) || 0);
+          const tdVal = el('td', '', money(invValue));
+          tdVal.style.textAlign = 'right';
+
+          const tdStatus = el('td');
+          tdStatus.append(statusBadge(isLow ? 'cancelled' : 'confirmed', isLow ? 'Stock Bajo' : 'Normal'));
+
+          const tdAction = el('td');
+          tdAction.style.textAlign = 'center';
+          const btnAdj = el('button', 'btn btn-outline btn-sm', 'Movimiento');
+          btnAdj.type = 'button';
+          btnAdj.addEventListener('click', () => openCafeMovementModal(it));
+          tdAction.append(btnAdj);
+
+          tr.append(tdType, tdName, tdCat, tdStock, tdMin, tdUnit, tdCost, tdVal, tdStatus, tdAction);
+          stockTbody.append(tr);
+        }
+      }
+
+      // Render Supplies Panel
+      const supTbody = $('#cafeSuppliesTbody');
+      if (supTbody) {
+        supTbody.replaceChildren();
+        for (const s of supplies) {
+          const tr = el('tr');
+          tr.innerHTML = `
+            <td><strong>${s.name}</strong></td>
+            <td>${s.category}</td>
+            <td style="text-align:center;font-weight:bold;${(Number(s.stock) || 0) <= (Number(s.minStock) || 0) ? 'color:var(--rust);' : ''}">${s.stock}</td>
+            <td style="text-align:center;">${s.minStock}</td>
+            <td>${s.unit || 'unidad'}</td>
+            <td style="text-align:right;">${money(s.cost || 0)}</td>
+            <td><span class="status-badge ${s.active !== false ? 'confirmed' : 'cancelled'}">${s.active !== false ? 'Activo' : 'Inactivo'}</span></td>
+            <td style="text-align:center;">
+              <button class="btn btn-outline btn-sm" type="button" data-edit-sup="${s.id}">Editar</button>
+            </td>
+          `;
+          $('button[data-edit-sup]', tr)?.addEventListener('click', () => openCafeSupplyModal(s));
+          supTbody.append(tr);
+        }
+      }
+
+      // If active tab is Kardex, load movements
+      if (activeInvTab === 'kardex') {
+        loadCafeKardex();
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  async function loadCafeKardex() {
+    const type = $('#kardexTypeFilter')?.value || '';
+    const params = new URLSearchParams();
+    if (type) params.set('type', type);
+
+    try {
+      const res = await api(`/api/admin/cafe/inventory/movements?${params.toString()}`);
+      const movements = res.movements || [];
+      const tbody = $('#cafeKardexTbody');
+      if (tbody) {
+        tbody.replaceChildren();
+        if (!movements.length) {
+          const tr = el('tr');
+          tr.innerHTML = '<td colspan="9" style="text-align:center;color:var(--muted);">No hay movimientos de inventario registrados.</td>';
+          tbody.append(tr);
+        } else {
+          for (const m of movements) {
+            const tr = el('tr');
+            const mTypeLabel = m.movementType === 'in' ? 'Entrada (+)' : m.movementType === 'out' ? 'Salida (-)' : m.movementType === 'sale' ? 'Venta (-)' : 'Ajuste';
+            const mBadge = m.movementType === 'in' ? 'confirmed' : m.movementType === 'sale' ? 'pending_payment' : m.movementType === 'out' ? 'cancelled' : 'processed';
+            tr.innerHTML = `
+              <td><strong>${m.code}</strong></td>
+              <td>${new Date(m.createdAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })}</td>
+              <td>${m.itemType === 'product' ? 'Producto' : 'Insumo'}</td>
+              <td>${m.itemName}</td>
+              <td><span class="status-badge ${mBadge}">${mTypeLabel}</span></td>
+              <td style="text-align:right;font-weight:bold;${m.quantity < 0 ? 'color:var(--rust);' : 'color:#27604e;'}">${m.quantity > 0 ? '+' : ''}${m.quantity}</td>
+              <td style="text-align:right;">${money(m.totalCost || 0)}</td>
+              <td>${m.reason || '—'} ${m.reference ? `<small style="color:var(--muted);">(${m.reference})</small>` : ''}</td>
+              <td>${m.createdBy || 'Sistema'}</td>
+            `;
+            tbody.append(tr);
+          }
+        }
+      }
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  async function openCafeMovementModal(preselectedItem = null) {
+    let products = [], supplies = [];
+    try {
+      const res = await api('/api/admin/cafe/inventory');
+      products = res.products || [];
+      supplies = res.supplies || [];
+    } catch (err) {
+      handleError(err);
+      return;
+    }
+
+    const wrap = el('form');
+    wrap.className = 'form-grid two';
+
+    const itemTypeVal = preselectedItem ? preselectedItem.itemType : 'product';
+
+    wrap.innerHTML = `
+      <label class="field"><span>Tipo de ítem</span>
+        <select id="cmfItemType" class="select-compact">
+          <option value="product" ${itemTypeVal === 'product' ? 'selected' : ''}>Producto del menú</option>
+          <option value="supply" ${itemTypeVal === 'supply' ? 'selected' : ''}>Insumo de operación</option>
+        </select>
+      </label>
+      <label class="field"><span>Ítem</span>
+        <select id="cmfItemId" class="select-compact" required></select>
+      </label>
+      <label class="field"><span>Tipo de movimiento</span>
+        <select id="cmfMovType" class="select-compact">
+          <option value="in">Entrada (+) [Compra, Reposición]</option>
+          <option value="out">Salida (-) [Merma, Consumo interno]</option>
+          <option value="adjustment">Ajuste físico [Fijar conteo exacto]</option>
+        </select>
+      </label>
+      <label class="field"><span>Cantidad</span><input type="number" step="any" min="0.01" id="cmfQty" value="1" required></label>
+      <label class="field"><span>Costo unitario (Q) (opcional)</span><input type="number" step="0.01" min="0" id="cmfUnitCost" placeholder="Por defecto el costo actual"></label>
+      <label class="field"><span>Referencia (opcional)</span><input type="text" id="cmfReference" placeholder="Factura, orden, etc."></label>
+      <label class="field field-full"><span>Motivo del movimiento</span><input type="text" id="cmfReason" placeholder="Ej. Compra de inventario semanal" required></label>
+      <div class="field-full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+        <button class="btn btn-outline" type="button" id="cmfCancel">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="cmfSubmit">Registrar Movimiento</button>
+      </div>
+    `;
+
+    const itemSelect = $('#cmfItemId', wrap);
+    const typeSelect = $('#cmfItemType', wrap);
+
+    function populateItems() {
+      const type = typeSelect.value;
+      const list = type === 'product' ? products : supplies;
+      itemSelect.replaceChildren();
+      for (const it of list) {
+        const opt = el('option', '', `${it.name} (Stock: ${it.stock} ${it.unit || ''})`);
+        opt.value = it.id;
+        if (preselectedItem && preselectedItem.id === it.id) opt.selected = true;
+        itemSelect.append(opt);
+      }
+    }
+
+    typeSelect.addEventListener('change', populateItems);
+    populateItems();
+
+    $('#cmfCancel', wrap).addEventListener('click', closeModal);
+    wrap.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = $('#cmfSubmit', wrap);
+      busy(submitBtn, true);
+
+      const payload = {
+        itemType: typeSelect.value,
+        itemId: itemSelect.value,
+        movementType: $('#cmfMovType', wrap).value,
+        quantity: Number($('#cmfQty', wrap).value),
+        unitCost: $('#cmfUnitCost', wrap).value ? Number($('#cmfUnitCost', wrap).value) : undefined,
+        reason: $('#cmfReason', wrap).value.trim(),
+        reference: $('#cmfReference', wrap).value.trim()
+      };
+
+      try {
+        await api('/api/admin/cafe/inventory/movements', { method: 'POST', body: JSON.stringify(payload) });
+        toast('Movimiento registrado correctamente en Kardex.');
+        closeModal();
+        loadCafeInventory();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal('Registrar Movimiento de Inventario', wrap, { kicker: 'Kardex' });
+  }
+
+  function openCafeSupplyModal(supply = null) {
+    const isEdit = Boolean(supply);
+    const wrap = el('form');
+    wrap.className = 'form-grid two';
+
+    wrap.innerHTML = `
+      <label class="field field-full"><span>Nombre del insumo</span><input type="text" id="csfName" value="${supply?.name || ''}" required></label>
+      <label class="field"><span>Categoría</span>
+        <input type="text" id="csfCategory" list="csfCatList" value="${supply?.category || 'Insumos de cocina'}" required>
+        <datalist id="csfCatList">
+          <option value="Insumos de cocina">
+          <option value="Empaques y desechables">
+          <option value="Limpieza y bar">
+          <option value="Otros insumos">
+        </datalist>
+      </label>
+      <label class="field"><span>Unidad de medida</span><input type="text" id="csfUnit" value="${supply?.unit || 'lb'}" placeholder="lb, kg, unidad, paquete" required></label>
+      <label class="field"><span>Costo unitario (Q)</span><input type="number" step="0.01" min="0" id="csfCost" value="${supply?.cost ?? 10}" required></label>
+      <label class="field"><span>Stock actual</span><input type="number" step="any" min="0" id="csfStock" value="${supply?.stock ?? 10}" required></label>
+      <label class="field"><span>Stock mínimo</span><input type="number" step="any" min="0" id="csfMinStock" value="${supply?.minStock ?? 5}" required></label>
+      <div class="field-full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+        <button class="btn btn-outline" type="button" id="csfCancel">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="csfSubmit">${isEdit ? 'Guardar Cambios' : 'Crear Insumo'}</button>
+      </div>
+    `;
+
+    $('#csfCancel', wrap).addEventListener('click', closeModal);
+    wrap.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = $('#csfSubmit', wrap);
+      busy(submitBtn, true);
+
+      const payload = {
+        name: $('#csfName', wrap).value.trim(),
+        category: $('#csfCategory', wrap).value.trim(),
+        unit: $('#csfUnit', wrap).value.trim(),
+        cost: Number($('#csfCost', wrap).value),
+        stock: Number($('#csfStock', wrap).value),
+        minStock: Number($('#csfMinStock', wrap).value)
+      };
+
+      try {
+        if (isEdit) {
+          await api(`/api/admin/cafe/supplies/${supply.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          toast('Insumo actualizado.');
+        } else {
+          await api('/api/admin/cafe/supplies', { method: 'POST', body: JSON.stringify(payload) });
+          toast('Insumo registrado.');
+        }
+        closeModal();
+        loadCafeInventory();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal(isEdit ? `Editar ${supply.name}` : 'Nuevo Insumo de Operación', wrap, { kicker: 'Inventario' });
+  }
+
+  // --- Control de Gastos ---
+  async function loadCafeExpenses() {
+    setSync(true);
+    const from = $('#cafeExpensesFrom')?.value || '';
+    const to = $('#cafeExpensesTo')?.value || '';
+    const cat = $('#cafeExpensesCategoryFilter')?.value || '';
+
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (cat) params.set('category', cat);
+
+    try {
+      const res = await api(`/api/admin/cafe/expenses?${params.toString()}`);
+      const expenses = res.expenses || [];
+      state.cafeExpenses = expenses;
+
+      let totalExpenses = 0;
+      let insumosTotal = 0;
+      let otrosTotal = 0;
+
+      for (const e of expenses) {
+        const amt = Number(e.amount) || 0;
+        totalExpenses += amt;
+        if (e.category === 'insumos') insumosTotal += amt;
+        else otrosTotal += amt;
+      }
+
+      const kpis = $('#cafeExpensesKpis');
+      if (kpis) {
+        kpis.replaceChildren(
+          kpiCard('Total Gastos del Período', money(totalExpenses), 'Egresos operativos registrados', totalExpenses ? 'rust' : ''),
+          kpiCard('Compras de Insumos', money(insumosTotal), 'Materia prima y productos'),
+          kpiCard('Servicios y Otros', money(otrosTotal), 'Mantenimiento, energía y personal', 'amber')
+        );
+      }
+
+      const totNode = $('#cafeExpensesTotal');
+      if (totNode) totNode.textContent = `Total: ${money(totalExpenses)}`;
+
+      const tbody = $('#cafeExpensesTbody');
+      if (tbody) {
+        tbody.replaceChildren();
+        if (!expenses.length) {
+          const tr = el('tr');
+          tr.innerHTML = '<td colspan="8" style="text-align:center;color:var(--muted);">No se registraron gastos en este período.</td>';
+          tbody.append(tr);
+        } else {
+          for (const e of expenses) {
+            const tr = el('tr');
+            tr.innerHTML = `
+              <td><strong>${e.id}</strong></td>
+              <td>${e.expenseDate}</td>
+              <td>${e.concept}</td>
+              <td style="text-transform:capitalize;">${e.category}</td>
+              <td style="text-align:right;font-weight:bold;color:var(--rust);">${money(e.amount)}</td>
+              <td>${e.notes || '—'}</td>
+              <td>${e.createdBy || 'Administrador'}</td>
+              <td style="text-align:center;"><button type="button" class="btn btn-outline btn-sm danger" data-del-exp="${e.id}">Eliminar</button></td>
+            `;
+            $('button[data-del-exp]', tr)?.addEventListener('click', () => deleteCafeExpense(e.id, e.concept));
+            tbody.append(tr);
+          }
+        }
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function openCafeExpenseModal() {
+    const wrap = el('form');
+    wrap.className = 'form-grid two';
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    wrap.innerHTML = `
+      <label class="field field-full"><span>Concepto del gasto</span><input type="text" id="cefConcept" placeholder="Ej. Compra de 10 lbs de café en grano" required></label>
+      <label class="field"><span>Categoría</span>
+        <select id="cefCategory" class="select-compact">
+          <option value="insumos">Insumos (café, azúcar, leche, etc.)</option>
+          <option value="servicios">Servicios (luz, agua, gas)</option>
+          <option value="mantenimiento">Mantenimiento de equipo</option>
+          <option value="personal">Personal / Turnos</option>
+          <option value="otros">Otros egresos</option>
+        </select>
+      </label>
+      <label class="field"><span>Monto (Q)</span><input type="number" step="0.5" min="0.5" id="cefAmount" placeholder="0.00" required></label>
+      <label class="field"><span>Fecha del gasto</span><input type="date" id="cefDate" value="${todayStr}" required></label>
+      <label class="field field-full"><span>Notas / Proveedor (opcional)</span><textarea id="cefNotes" placeholder="Detalles de factura o proveedor…"></textarea></label>
+      <div class="field-full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+        <button class="btn btn-outline" type="button" id="cefCancel">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="cefSubmit">Guardar Gasto</button>
+      </div>
+    `;
+
+    $('#cefCancel', wrap).addEventListener('click', closeModal);
+    wrap.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const submitBtn = $('#cefSubmit', wrap);
+      busy(submitBtn, true);
+
+      const payload = {
+        concept: $('#cefConcept', wrap).value.trim(),
+        category: $('#cefCategory', wrap).value,
+        amount: Number($('#cefAmount', wrap).value),
+        expenseDate: $('#cefDate', wrap).value,
+        notes: $('#cefNotes', wrap).value.trim()
+      };
+
+      try {
+        await api('/api/admin/cafe/expenses', { method: 'POST', body: JSON.stringify(payload) });
+        toast('Gasto registrado con éxito.');
+        closeModal();
+        loadCafeExpenses();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal('Registrar Gasto de Operación', wrap, { kicker: 'Control de Gastos' });
+  }
+
+  async function deleteCafeExpense(id, concept) {
+    if (!confirm(`¿Eliminar el registro de gasto "${concept}"?`)) return;
+    try {
+      await api(`/api/admin/cafe/expenses/${id}`, { method: 'DELETE' });
+      toast('Gasto eliminado.');
+      loadCafeExpenses();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  // --- Estadísticas y Reportes ---
+  async function loadCafeReports() {
+    setSync(true);
+    let from = $('#cafeReportFrom')?.value || '';
+    let to = $('#cafeReportTo')?.value || '';
+
+    if (!from || !to) {
+      const now = new Date();
+      to = now.toISOString().slice(0, 10);
+      from = `${to.slice(0, 7)}-01`;
+      if ($('#cafeReportFrom')) $('#cafeReportFrom').value = from;
+      if ($('#cafeReportTo')) $('#cafeReportTo').value = to;
+    }
+
+    try {
+      const res = await api(`/api/admin/cafe/reports?from=${from}&to=${to}`);
+      state.cafeReports = res;
+
+      const sum = res.summary || {};
+      const kpis = $('#cafeReportKpis');
+      if (kpis) {
+        kpis.replaceChildren(
+          kpiCard('Ingresos por Ventas', money(sum.totalIncome), `${sum.salesCount} ventas · Promedio ${money(sum.averageTicket)}`, 'lime'),
+          kpiCard('Gastos Operativos', money(sum.totalExpenses), 'Egresos en insumos y servicios', 'rust'),
+          kpiCard('Utilidad Neta', money(sum.netProfit), `Margen operativo de ${sum.profitMargin}%`, sum.netProfit >= 0 ? 'lime' : 'rust'),
+          kpiCard('Alertas Inventario', String(res.inventorySummary?.lowStockAlerts || 0), `${res.inventorySummary?.totalProducts || 0} productos · ${res.inventorySummary?.totalSupplies || 0} insumos`, res.inventorySummary?.lowStockAlerts ? 'rust' : 'amber')
+        );
+      }
+
+      // Top Products Table
+      const topTbody = $('#cafeTopProductsTbody');
+      if (topTbody) {
+        topTbody.replaceChildren();
+        const top = res.topProducts || [];
+        if (!top.length) {
+          const tr = el('tr');
+          tr.innerHTML = '<td colspan="5" style="text-align:center;color:var(--muted);">No hay ventas en este período.</td>';
+          topTbody.append(tr);
+        } else {
+          top.slice(0, 10).forEach((p, idx) => {
+            const tr = el('tr');
+            tr.innerHTML = `
+              <td><strong>#${idx + 1}</strong></td>
+              <td><strong>${p.name}</strong></td>
+              <td>${p.category || '—'}</td>
+              <td style="text-align:center;font-weight:bold;">${p.unitsSold} uds.</td>
+              <td style="text-align:right;font-weight:bold;color:#27604e;">${money(p.totalRevenue)}</td>
+            `;
+            topTbody.append(tr);
+          });
+        }
+      }
+
+      // Financial breakdown
+      const breakdown = $('#cafeFinancialBreakdown');
+      if (breakdown) {
+        const pmTotals = res.payments?.totals || {};
+        const expCat = res.expensesByCategory || {};
+
+        breakdown.innerHTML = `
+          <div>
+            <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);">Ventas por Forma de Pago</span>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-top:6px;">
+              <div style="background:rgba(47,107,87,.08);padding:10px;border-radius:8px;">
+                <small style="color:var(--muted);">Efectivo</small><br><strong>${money(pmTotals.cash || 0)}</strong>
+              </div>
+              <div style="background:rgba(47,107,87,.08);padding:10px;border-radius:8px;">
+                <small style="color:var(--muted);">Tarjeta (POS/Web)</small><br><strong>${money(pmTotals.card || 0)}</strong>
+              </div>
+              <div style="background:rgba(47,107,87,.08);padding:10px;border-radius:8px;">
+                <small style="color:var(--muted);">Transferencia</small><br><strong>${money(pmTotals.transfer || 0)}</strong>
+              </div>
+            </div>
+          </div>
+          <div>
+            <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);">Gastos por Categoría</span>
+            <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-top:6px;">
+              <div style="background:rgba(189,96,65,.08);padding:10px;border-radius:8px;">
+                <small style="color:var(--muted);">Insumos</small><br><strong>${money(expCat.insumos || 0)}</strong>
+              </div>
+              <div style="background:rgba(189,96,65,.08);padding:10px;border-radius:8px;">
+                <small style="color:var(--muted);">Servicios y Otros</small><br><strong>${money((expCat.servicios || 0) + (expCat.mantenimiento || 0) + (expCat.personal || 0) + (expCat.otros || 0))}</strong>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function exportCafeExcel() {
+    const from = $('#cafeReportFrom')?.value || '';
+    const to = $('#cafeReportTo')?.value || '';
+    window.location.href = `/api/admin/cafe/reports/export?format=csv&type=summary&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  }
+
+  function exportCafePdf() {
+    const from = $('#cafeReportFrom')?.value || '';
+    const to = $('#cafeReportTo')?.value || '';
+    window.open(`/api/admin/cafe/reports/export?format=html&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, '_blank');
+  }
+
+  function bindCafeEvents() {
+    // Ventas
+    $('#btnFilterCafeSales')?.addEventListener('click', loadCafeSales);
+    $('#cafeSalesPaymentFilter')?.addEventListener('change', loadCafeSales);
+    $('#cafeSalesSearch')?.addEventListener('input', () => {
+      clearTimeout(bindCafeEvents.__salesTimer);
+      bindCafeEvents.__salesTimer = setTimeout(loadCafeSales, 300);
+    });
+    $('#btnNewCafeSale')?.addEventListener('click', openCafePosModal);
+
+    // Menú
+    $('#cafeProductCatFilter')?.addEventListener('change', loadCafeProducts);
+    $('#cafeProductSearch')?.addEventListener('input', () => {
+      clearTimeout(bindCafeEvents.__prodTimer);
+      bindCafeEvents.__prodTimer = setTimeout(loadCafeProducts, 300);
+    });
+    $('#btnNewCafeProduct')?.addEventListener('click', () => openCafeProductModal(null));
+
+    // Inventario Tabs & Buttons
+    $('#tabInvStock')?.addEventListener('click', () => {
+      activeInvTab = 'stock';
+      $('#tabInvStock').classList.add('is-active');
+      $('#tabInvKardex').classList.remove('is-active');
+      $('#tabInvSupplies').classList.remove('is-active');
+      $('#panelInvStock').hidden = false;
+      $('#panelInvKardex').hidden = true;
+      $('#panelInvSupplies').hidden = true;
+      loadCafeInventory();
+    });
+    $('#tabInvKardex')?.addEventListener('click', () => {
+      activeInvTab = 'kardex';
+      $('#tabInvStock').classList.remove('is-active');
+      $('#tabInvKardex').classList.add('is-active');
+      $('#tabInvSupplies').classList.remove('is-active');
+      $('#panelInvStock').hidden = true;
+      $('#panelInvKardex').hidden = false;
+      $('#panelInvSupplies').hidden = true;
+      loadCafeKardex();
+    });
+    $('#tabInvSupplies')?.addEventListener('click', () => {
+      activeInvTab = 'supplies';
+      $('#tabInvStock').classList.remove('is-active');
+      $('#tabInvKardex').classList.remove('is-active');
+      $('#tabInvSupplies').classList.add('is-active');
+      $('#panelInvStock').hidden = true;
+      $('#panelInvKardex').hidden = true;
+      $('#panelInvSupplies').hidden = false;
+      loadCafeInventory();
+    });
+    $('#kardexTypeFilter')?.addEventListener('change', loadCafeKardex);
+    $('#btnExportKardexCsv')?.addEventListener('click', () => {
+      window.location.href = '/api/admin/cafe/reports/export?format=csv&type=inventory';
+    });
+    $('#btnNewCafeSupply')?.addEventListener('click', () => openCafeSupplyModal(null));
+    $('#btnNewCafeMovement')?.addEventListener('click', () => openCafeMovementModal(null));
+
+    // Gastos
+    $('#btnFilterCafeExpenses')?.addEventListener('click', loadCafeExpenses);
+    $('#cafeExpensesCategoryFilter')?.addEventListener('change', loadCafeExpenses);
+    $('#btnNewCafeExpense')?.addEventListener('click', openCafeExpenseModal);
+
+    // Reportes
+    $('#btnUpdateCafeReport')?.addEventListener('click', loadCafeReports);
+    $('#btnExportCafeExcel')?.addEventListener('click', exportCafeExcel);
+    $('#btnExportCafePdf')?.addEventListener('click', exportCafePdf);
+  }
   }
 
   function init() {
