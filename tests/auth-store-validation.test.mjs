@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hashPassword, verifyPassword } from '../server/security.js';
+import { validateBookingPolicy } from '../server/store.js';
 import { createApp } from '../server/index.js';
 import { createConfig } from '../server/runtime.js';
 import { createRepository } from '../server/db.js';
@@ -86,4 +87,14 @@ test('repository rejects missing row and corrupted write before UPDATE', async (
   row = { doc: valid() };
   await assert.rejects(repository.transaction(unit => { unit.document.meta = null; unit.dirty = true; }), { code: 'store_invalid' });
   assert.equal(updates, 0);
+});
+
+test('validateBookingPolicy falls back to safe defaults when settings.booking is unconfigured or empty', () => {
+  const policy = validateBookingPolicy({});
+  assert.equal(policy.currency, 'GTQ');
+  assert.equal(policy.holdMinutes, 20);
+  assert.equal(policy.advanceDays, 120);
+  assert.equal(policy.cutoffHours, 2);
+  assert.equal(policy.pendingLimit, 3);
+  assert.equal(policy.lastSeatsPercent, 20);
 });

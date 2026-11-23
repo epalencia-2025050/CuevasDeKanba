@@ -117,13 +117,24 @@ export async function initStore() {
 }
 export async function flushDb() {}
 export async function closeStore() { await getRuntime().database.close(); }
+export const DEFAULT_BOOKING_POLICY = Object.freeze({
+  pendingLimit: 3,
+  lastSeatsPercent: 20,
+  holdMinutes: 20,
+  advanceDays: 120,
+  cutoffHours: 2,
+  currency: 'GTQ',
+  exchangeRate: 7.8,
+  maxSeatsPerOrder: 12
+});
+
 export function createInitialStore() {
   const now = new Date().toISOString();
   return {
     meta: { version: 1, createdAt: now, updatedAt: now },
     admin: { password: initialAdminPassword(), passwordPolicyVersion: 2 },
     users: [], sessions: {}, userSessions: {}, tours: [], content: { brand: {}, hero: {}, intro: {}, contact: {} },
-    settings: { business: {}, booking: {}, payments: {}, smtp: {} },
+    settings: { business: {}, booking: { ...DEFAULT_BOOKING_POLICY }, payments: {}, smtp: {} },
     reservations: [], emails: [], closures: [], refunds: [], counters: { reservation: 0, receipt: 0 }
   };
 }
@@ -370,23 +381,28 @@ export function seatsTaken(tourId, date, time) {
 }
 
 export function validateBookingPolicy(policy, status = 503) {
-  const valid = policy && /^[A-Z]{3}$/.test(policy.currency)
-    && Number.isInteger(policy.pendingLimit) && policy.pendingLimit > 0
-    && Number.isFinite(policy.lastSeatsPercent) && policy.lastSeatsPercent >= 0 && policy.lastSeatsPercent <= 100
-    && Number.isFinite(policy.cutoffHours) && policy.cutoffHours >= 0
-    && Number.isInteger(policy.advanceDays) && policy.advanceDays >= 0
-    && Number.isFinite(policy.holdMinutes) && policy.holdMinutes > 0;
+  const merged = status === 503
+    ? { ...DEFAULT_BOOKING_POLICY, ...(policy && typeof policy === 'object' ? policy : {}) }
+    : policy;
+  const valid = merged && /^[A-Z]{3}$/.test(merged.currency)
+    && Number.isInteger(merged.pendingLimit) && merged.pendingLimit > 0
+    && Number.isFinite(merged.lastSeatsPercent) && merged.lastSeatsPercent >= 0 && merged.lastSeatsPercent <= 100
+    && Number.isFinite(merged.cutoffHours) && merged.cutoffHours >= 0
+    && Number.isInteger(merged.advanceDays) && merged.advanceDays >= 0
+    && Number.isFinite(merged.holdMinutes) && merged.holdMinutes > 0;
   if (!valid) throw new AppError(status === 503 ? 'Las reservas no están disponibles en este momento. Inténtalo más tarde.' : 'Revisa la moneda, los límites y los plazos en Configuración comercial.', status, 'booking_policy_invalid');
-  return policy;
+  return merged;
 }
 
 export function departureStatus(tour, date, time, taken) {
   const d = getDb();
   const left = Math.max(0, tour.capacity - taken);
   if (isClosed(date, tour.id)) return { left: 0, status: 'closed' };
-  if (dateToEpoch(date, time) <= Date.now() + (d.settings.booking?.cutoffHours || 0) * 3600000) return { left: 0, status: 'past' };
+  const cutoffHours = Number.isFinite(d.settings.booking?.cutoffHours) ? d.settings.booking.cutoffHours : DEFAULT_BOOKING_POLICY.cutoffHours;
+  if (dateToEpoch(date, time) <= Date.now() + cutoffHours * 3600000) return { left: 0, status: 'past' };
   if (left <= 0) return { left: 0, status: 'soldout' };
-  if (left <= tour.capacity * d.settings.booking?.lastSeatsPercent / 100) return { left, status: 'last' };
+  const lastSeatsPercent = Number.isFinite(d.settings.booking?.lastSeatsPercent) ? d.settings.booking.lastSeatsPercent : DEFAULT_BOOKING_POLICY.lastSeatsPercent;
+  if (left <= tour.capacity * lastSeatsPercent / 100) return { left, status: 'last' };
   return { left, status: 'open' };
 }
 
@@ -545,6 +561,8 @@ export function createReservation(input, { user = null } = {}) {
     return previous;
   }
   const policy = validateBookingPolicy(d.settings.booking);
+  if (!d.settings.booking || typeof d.settings.booking !== 'object') d.settings.booking = {};
+  Object.assign(d.settings.booking, policy);
   if (d.reservations.filter(r => r.userId === user.id && r.status === 'pending_payment' && Date.parse(r.holdExpiresAt) > Date.now()).length >= policy.pendingLimit) throw new AppError('Alcanzaste el límite de reservas pendientes.', 429, 'pending_limit');
   const tour = findTour(input.tourId);
   const date = String(input.date || '');
@@ -563,7 +581,7 @@ export function createReservation(input, { user = null } = {}) {
   }
   if (!operatesOn(tour,date,time)) throw new AppError('El tour no opera en esa fecha.', 422, 'unavailable');
   if (isClosed(date, tour.id)) throw new AppError('La cueva está cerrada en esa fecha por mantenimiento o clima.', 409, 'closed');
-  if (dateToEpoch(date, time) <= Date.now() + d.settings.booking.cutoffHours * 3600000) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
+  if (dateToEpoch(date, time) <= Date.now() + policy.cutoffHours * 3600000) throw new AppError('Ese horario ya pasó. Elige otro.', 409, 'past');
 
   const maxAdvance = policy.advanceDays;
   if (date > isoAddDaysFrom(todayISO(), maxAdvance)) {

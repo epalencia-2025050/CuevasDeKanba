@@ -480,7 +480,7 @@ function adminOverview() {
     .map((r) => reservationView(r, { admin: true }));
 
   return {
-    currency: d.settings.booking.currency,
+    currency: d.settings.booking?.currency || 'GTQ',
     kpis: {
       revenue,
       confirmed: confirmed.length,

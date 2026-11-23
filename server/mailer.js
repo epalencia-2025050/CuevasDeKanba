@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { getDb, saveDb, withStoreTransaction, formatDateLong, dateToEpoch } from './store.js';
 const sendSmtpMail = message => getRuntime().sendMail(message);
 
-const money = (n, currency = getDb().settings.booking.currency) =>
+const money = (n, currency = getDb().settings?.booking?.currency || 'GTQ') =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(n || 0));
 
 function baseUrl() {
