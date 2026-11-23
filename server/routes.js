@@ -551,7 +551,20 @@ function cleanTour(input, existing = null) {
     if (endTime && time > endTime) reject('Hay una salida posterior a la hora final.');
   }
   const { longDescription, minParticipants, ...previous } = existing || {};
-  const normalizedDays = [...new Set(days)].sort((a, b) => a - b);
+  let normalizedDays = [...new Set(days)].sort((a, b) => a - b);
+  if (startDate && endDate && validDate(startDate) && validDate(endDate) && startDate <= endDate) {
+    const allowed = new Set();
+    const [y1, m1, d1] = startDate.split('-').map(Number);
+    const [y2, m2, d2] = endDate.split('-').map(Number);
+    let cur = Date.UTC(y1, m1 - 1, d1, 12);
+    const endMs = Date.UTC(y2, m2 - 1, d2, 12);
+    while (cur <= endMs && allowed.size < 7) {
+      allowed.add(new Date(cur).getUTCDay());
+      cur += 86400000;
+    }
+    const inRange = normalizedDays.filter(d => allowed.has(d));
+    if (inRange.length > 0) normalizedDays = inRange;
+  }
   return {
     ...previous,
     startDate,

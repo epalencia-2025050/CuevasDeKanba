@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
 import { operatesOn, normalizeWeekday } from '../server/store.js';
 import { createApp } from '../server/index.js';
 import { createConfig, withRuntime } from '../server/runtime.js';
@@ -242,4 +244,130 @@ test('Integration: Client and Admin availability strictly synchronize operating 
   const publicSlots = daysList.find((d) => d.date === '2026-11-24').tours.find((t) => t.tourId === 'cueva-mar-jue').departures;
   const adminSlots = grid.find((d) => d.date === '2026-11-24').occupancy.find((o) => o.tourId === 'cueva-mar-jue').times;
   assert.deepEqual(publicSlots, adminSlots);
+});
+
+test('Admin modal bindOperatingDays: restricts weekdays to [2026-11-23, 2026-11-25] and handles dynamic changes', async () => {
+  const source = await fs.readFile(new URL('../public/js/admin.js', import.meta.url), 'utf8');
+  const bindCode = source.slice(source.indexOf('  function bindOperatingDays('), source.indexOf('  function openTourForm('));
+
+  function createMockField(initialValue = '') {
+    const listeners = {};
+    return {
+      value: initialValue,
+      addEventListener(type, fn) {
+        listeners[type] = listeners[type] || [];
+        listeners[type].push(fn);
+      },
+      trigger(type) {
+        (listeners[type] || []).forEach(fn => fn());
+      }
+    };
+  }
+
+  function createMockChecks() {
+    const dayIndices = [1, 2, 3, 4, 5, 6, 0];
+    const inputs = dayIndices.map(index => {
+      const classSet = new Set(['inline-check']);
+      const label = {
+        classList: {
+          toggle(cls, force) {
+            if (force) classSet.add(cls);
+            else classSet.delete(cls);
+          },
+          contains(cls) { return classSet.has(cls); }
+        },
+        title: ''
+      };
+      const input = {
+        name: 'days',
+        value: String(index),
+        checked: false,
+        disabled: false,
+        parentElement: label,
+        closest(sel) { return sel === 'label' ? label : null; }
+      };
+      return input;
+    });
+
+    return {
+      inputs,
+      querySelectorAll(sel) {
+        if (sel === 'input') return inputs;
+        return [];
+      }
+    };
+  }
+
+  const context = vm.createContext({
+    Date,
+    Number,
+    Set,
+    String,
+    isNaN,
+    bindOperatingDays: null
+  });
+  vm.runInContext(bindCode + '\nthis.bindOperatingDays = bindOperatingDays;', context);
+  const { bindOperatingDays } = context;
+
+  // 1. Initial configuration: 2026-11-23 to 2026-11-25 (Monday to Wednesday)
+  const startField = createMockField('2026-11-23');
+  const endField = createMockField('2026-11-25');
+  const checks = createMockChecks();
+
+  const selectDays = bindOperatingDays(startField, endField, checks);
+
+  // Check which days are enabled/disabled
+  // 2026-11-23 = Lun (1), 2026-11-24 = Mar (2), 2026-11-25 = Mié (3)
+  const enabledDays = checks.inputs.filter(i => !i.disabled).map(i => Number(i.value));
+  const disabledDays = checks.inputs.filter(i => i.disabled).map(i => Number(i.value));
+
+  assert.deepEqual(enabledDays, [1, 2, 3], 'Only Lun, Mar, Mié should be enabled');
+  assert.deepEqual(disabledDays, [4, 5, 6, 0], 'Jue, Vie, Sáb, Dom must be disabled');
+
+  // Verify visual styling and title on disabled labels
+  disabledDays.forEach(day => {
+    const input = checks.inputs.find(i => Number(i.value) === day);
+    assert.equal(input.parentElement.classList.contains('is-disabled'), true);
+    assert.match(input.parentElement.title, /no cae dentro del rango/);
+    assert.equal(input.checked, false);
+  });
+
+  // 2. Shortcut "Todos" should only activate enabled days
+  selectDays(() => true);
+  const checkedAfterTodos = checks.inputs.filter(i => i.checked).map(i => Number(i.value));
+  assert.deepEqual(checkedAfterTodos, [1, 2, 3], 'Todos should only check enabled days (1, 2, 3)');
+
+  // Shortcut "Entre semana"
+  selectDays(day => day >= 1 && day <= 5);
+  const checkedAfterWeekdays = checks.inputs.filter(i => i.checked).map(i => Number(i.value));
+  assert.deepEqual(checkedAfterWeekdays, [1, 2, 3], 'Entre semana should only check 1, 2, 3 in range');
+
+  // 3. Dynamic change: Reduce range to 2026-11-23 .. 2026-11-24
+  endField.value = '2026-11-24';
+  endField.trigger('input');
+
+  const enabledAfterShrink = checks.inputs.filter(i => !i.disabled).map(i => Number(i.value));
+  const checkedAfterShrink = checks.inputs.filter(i => i.checked).map(i => Number(i.value));
+  assert.deepEqual(enabledAfterShrink, [1, 2], 'Only Lun, Mar enabled after shrinking');
+  assert.deepEqual(checkedAfterShrink, [1, 2], 'Mié (3) should be automatically unchecked when disabled');
+
+  // 4. Dynamic change: Expand range to 2026-11-29 (Mon through Sun)
+  endField.value = '2026-11-29';
+  endField.trigger('input');
+
+  const enabledAfterExpand = checks.inputs.filter(i => !i.disabled).map(i => Number(i.value));
+  assert.deepEqual(enabledAfterExpand, [1, 2, 3, 4, 5, 6, 0], 'All 7 days should be enabled');
+  // Previously checked days 1 and 2 should remain checked
+  assert.deepEqual(checks.inputs.filter(i => i.checked).map(i => Number(i.value)), [1, 2]);
+
+  // 5. Open or invalid range: Clear dates
+  endField.value = '';
+  endField.trigger('change');
+  assert.equal(checks.inputs.every(i => !i.disabled), true, 'Open range enables all days');
+
+  // Inverted dates: 2026-11-25 to 2026-11-23
+  startField.value = '2026-11-25';
+  endField.value = '2026-11-23';
+  startField.trigger('change');
+  assert.equal(checks.inputs.every(i => !i.disabled), true, 'Invalid range does not break/block unexpectedly');
 });

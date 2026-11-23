@@ -103,12 +103,12 @@
 
   function formatLong(date) {
     if (!date) return '—';
-    return new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(dateObj(date));
+    return new Intl.DateTimeFormat('es-GT', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(dateObj(date));
   }
 
   function formatFull(date) {
     if (!date) return '—';
-    return new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(dateObj(date));
+    return new Intl.DateTimeFormat('es-GT', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(dateObj(date));
   }
 
   function formatShort(date) {

@@ -1033,6 +1033,53 @@
     return wrap;
   }
 
+  function bindOperatingDays(start, end, checks) {
+    if (!checks) return () => {};
+    const inputs = checks.querySelectorAll ? checks.querySelectorAll('input') : [];
+    function utcDay(value) {
+      if (!value || typeof value !== 'string') return NaN;
+      const trimmed = value.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return NaN;
+      const epoch = Date.parse(trimmed + 'T00:00:00Z');
+      return Number.isFinite(epoch) && new Date(epoch).toISOString().slice(0, 10) === trimmed ? epoch : NaN;
+    }
+    function refresh() {
+      const first = start ? utcDay(start.value) : NaN;
+      const last = end ? utcDay(end.value) : NaN;
+      const hasClosedRange = Number.isFinite(first) && Number.isFinite(last) && first <= last;
+      const allowed = new Set();
+      if (hasClosedRange) {
+        for (let day = first; day <= last && allowed.size < 7; day += 86400000) {
+          allowed.add(new Date(day).getUTCDay());
+        }
+      }
+      for (const input of inputs) {
+        const isDisabled = hasClosedRange && !allowed.has(Number(input.value));
+        input.disabled = isDisabled;
+        if (isDisabled) input.checked = false;
+        const label = input.closest ? input.closest('label') : input.parentElement;
+        if (label) {
+          if (label.classList?.toggle) label.classList.toggle('is-disabled', isDisabled);
+          label.title = isDisabled ? 'Este día no cae dentro del rango de fechas del tour.' : '';
+        }
+      }
+    }
+    for (const field of [start, end]) {
+      if (field?.addEventListener) {
+        field.addEventListener('input', refresh);
+        field.addEventListener('change', refresh);
+      }
+    }
+    refresh();
+    return (predicate) => {
+      inputs.forEach(input => {
+        if (!input.disabled) {
+          input.checked = Boolean(predicate(Number(input.value)));
+        }
+      });
+    };
+  }
+
   function openTourForm(tour = null) {
     const editing = Boolean(tour);
     const form = el('form');
@@ -1129,11 +1176,12 @@
       check.append(input, document.createTextNode(label));
       checks.append(check);
     });
+    const selectDays = bindOperatingDays(grid.querySelector('[name=startDate]'), grid.querySelector('[name=endDate]'), checks);
     const shortcuts = el('div', 'tour-item');
     for (const [label, predicate] of [['Todos', () => true], ['Entre semana', day => day >= 1 && day <= 5], ['Ninguno', () => false]]) {
       const button = el('button', 'btn btn-outline', label);
       button.type = 'button';
-      button.onclick = () => checks.querySelectorAll('input').forEach(input => { input.checked = predicate(Number(input.value)); });
+      button.onclick = () => selectDays(predicate);
       shortcuts.append(button);
     }
     daysWrap.append(checks, shortcuts);
