@@ -33,10 +33,11 @@
     for (const row of rows) {
       const active = row.status === 'pending_payment' || (row.status === 'confirmed' && row.date >= today);
       const group = row.status === 'cancelled' ? 'cancelled' : active ? 'active' : 'history';
+      const tokenParam = row.token ? '&token=' + encodeURIComponent(row.token) : '';
       const card = document.createElement('article');
       card.append(element('strong', row.tourName), element('p', [row.date, row.time].filter(Boolean).join(' · ')),
         element('p', [labels[row.status] || row.status, row.code].join(' · ')),
-        link(active ? 'Consultar o cancelar' : 'Consultar reserva', '/mi-reserva.html?code=' + encodeURIComponent(row.code) + emailParam));
+        link(active ? 'Consultar o cancelar' : 'Consultar reserva', `/mi-reserva.html?code=${encodeURIComponent(row.code)}${tokenParam}${emailParam}`));
       byId(group).append(card);
     }
     byId('historySection').hidden = !byId('history').childElementCount;

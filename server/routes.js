@@ -653,7 +653,7 @@ async function handleApi(req, res, url) {
     const session = requireUser(req);
     return sendJson(res, 200, { user: session.user, redirectTo: dashboardFor(session.user),
       today: todayISO(), reservations: getDb().reservations.filter(r => r.userId === session.user.id)
-        .map(r => ({ code: r.code, tourName: r.tourName, date: r.date, time: r.time, status: r.status })) });
+        .map(r => ({ code: r.code, tourName: r.tourName, date: r.date, time: r.time, status: r.status, token: r.token })) });
   }
 
   /* ---------- Inicio de sesión con Google (OAuth 2.0) ---------- */
@@ -808,9 +808,16 @@ async function handleApi(req, res, url) {
     const code = String(body.code || '').trim().toUpperCase();
     const email = String(body.email || '').trim().toLowerCase();
     const reservation = getDb().reservations.find((r) => {
-      if (r.code !== code || r.userId !== owner.user.id) return false;
-      if (!email) return true;
-      return r.customer.email.toLowerCase() === email;
+      if (r.code !== code) return false;
+      // Si la reserva pertenece al usuario autenticado, tiene acceso directo como titular
+      if (r.userId && r.userId === owner.user.id) return true;
+      // Si la reserva no tiene usuario asociado, validar correspondencia por correo
+      if (!r.userId) {
+        const customerEmail = String(r.customer?.email || '').trim().toLowerCase();
+        const accountEmail = String(owner.user?.email || '').trim().toLowerCase();
+        return (email && customerEmail === email) || (accountEmail && customerEmail === accountEmail);
+      }
+      return false;
     });
     if (!reservation) throw new AppError('No encontramos una reserva con ese código y correo.', 404, 'not_found');
     rotateReservationToken(reservation);

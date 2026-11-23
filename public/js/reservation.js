@@ -612,16 +612,15 @@
     if (code && token) {
       state.code = code;
       state.token = token;
+      showState('amber', 'Cargando tu reserva…', 'Estamos consultando los detalles de tu tour.', []);
       loadReservation();
-    } else if (code && email) {
-      const form = $('#lookupForm');
-      if (form) form.requestSubmit();
     } else if (code) {
+      showState('amber', 'Cargando tu reserva…', 'Estamos consultando los detalles de tu tour.', []);
       (async () => {
         try {
           const data = await api('/api/reservations/lookup', {
             method: 'POST',
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ code, email })
           });
           state.code = data.reservation.code;
           state.token = data.token;
@@ -630,12 +629,16 @@
           setLocation(state.code, state.token);
           render(data.reservation);
           toast('Reserva encontrada.');
-        } catch {
-          const error = $('#lookupError');
-          if (error) {
-            error.hidden = false;
-            error.textContent = 'Por seguridad, confirma el correo del titular para abrir esta reserva.';
+        } catch (err) {
+          if (err.status === 401) {
+            window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+            return;
           }
+          showLookup(err.status === 404
+            ? (email ? 'No encontramos una reserva con ese código y correo. Verifica los datos e inténtalo de nuevo.' : 'No encontramos una reserva con ese código en tu cuenta. Confirma el correo del titular para buscarla.')
+            : (err.message || 'No pudimos abrir la reserva.'));
+          const emailInput = $('#lookupEmail');
+          if (emailInput && !email) emailInput.focus();
         }
       })();
     }
