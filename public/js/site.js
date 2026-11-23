@@ -1684,6 +1684,479 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Cafetería · Café The Hope (menú, carrito y pago en línea)           */
+  /* ------------------------------------------------------------------ */
+
+  function setupCafeOrderSystem() {
+    const menuCard = document.getElementById('hopeMenuCard');
+    const orderPanel = document.getElementById('cafeOrderPanel');
+    if (!menuCard || !orderPanel) return;
+
+    const STORAGE_KEY = 'kanba:cafe_cart_v1';
+    let cart = [];
+    const selectedVariants = {
+      'gallo-pequena-corona': 'Gallo Pequeña'
+    };
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      if (Array.isArray(saved)) {
+        cart = saved.filter((item) => item && item.id && Number(item.quantity) > 0);
+      }
+    } catch {
+      cart = [];
+    }
+
+    function saveCart() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+      } catch { /* almacenamiento no disponible */ }
+    }
+
+    const formatQ = (amount) => {
+      const n = Number(amount || 0);
+      return Number.isInteger(n) ? `${n} Q` : `${n.toFixed(2)} Q`;
+    };
+
+    function cartKey(id, variant) {
+      return variant ? `${id}::${variant}` : id;
+    }
+
+    function addItem({ id, name, price, category, variant = null }, delta = 1) {
+      const key = cartKey(id, variant);
+      const existing = cart.find((item) => item.key === key);
+      if (existing) {
+        existing.quantity += delta;
+        if (existing.quantity <= 0) {
+          cart = cart.filter((item) => item.key !== key);
+        }
+      } else if (delta > 0) {
+        cart.push({
+          key,
+          id,
+          name,
+          variant: variant || null,
+          displayName: variant ? `${name} (${variant})` : name,
+          price: Number(price),
+          category: category || '',
+          quantity: delta
+        });
+      }
+      saveCart();
+      const receiptBox = document.getElementById('cafeReceiptBox');
+      if (receiptBox && !receiptBox.hidden && cart.length > 0) {
+        receiptBox.hidden = true;
+      }
+      renderCafeCart();
+    }
+
+    function renderCafeCart() {
+      const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+      const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const net = Math.round((totalAmount / 1.12) * 100) / 100;
+      const tax = Math.round((totalAmount - net) * 100) / 100;
+
+      // Actualizar contadores en cada fila del menú
+      $$('.hope-item', menuCard).forEach((row) => {
+        const id = row.dataset.itemId;
+        const qtyForId = cart
+          .filter((item) => item.id === id)
+          .reduce((sum, item) => sum + item.quantity, 0);
+        const qtyNode = row.querySelector(`[data-qty-for="${id}"]`);
+        const minusBtn = row.querySelector('[data-action="minus"]');
+        const plusBtn = row.querySelector('[data-action="plus"]');
+        if (qtyNode) qtyNode.textContent = String(qtyForId);
+        if (minusBtn) minusBtn.disabled = qtyForId <= 0;
+        if (plusBtn) plusBtn.textContent = qtyForId > 0 ? '+' : '+ Pedir';
+        row.classList.toggle('in-cart', qtyForId > 0);
+      });
+
+      // Badges y barra móvil
+      setText('cafeCartBadge', `${totalItems} ${totalItems === 1 ? 'producto' : 'productos'}`);
+      setText('heroCartCount', String(totalItems));
+      const mobileLabel = document.getElementById('mobileCafeLabel');
+      const mobileTotal = document.getElementById('mobileCafeTotal');
+      const mobileBtn = document.getElementById('mobileCafeBtn');
+      if (mobileLabel && mobileTotal) {
+        if (totalItems > 0) {
+          mobileLabel.textContent = `Tu pedido (${totalItems})`;
+          mobileTotal.textContent = formatQ(totalAmount);
+          if (mobileBtn) mobileBtn.textContent = 'Pagar pedido';
+        } else {
+          mobileLabel.textContent = 'Café The Hope';
+          mobileTotal.textContent = 'Desde 10 Q';
+          if (mobileBtn) mobileBtn.textContent = 'Ver mi pedido';
+        }
+      }
+
+      const emptyNode = document.getElementById('cafeCartEmpty');
+      const contentNode = document.getElementById('cafeCartContent');
+      const receiptBox = document.getElementById('cafeReceiptBox');
+      const showingReceipt = receiptBox && !receiptBox.hidden;
+
+      if (totalItems === 0) {
+        if (contentNode) contentNode.hidden = true;
+        if (emptyNode) emptyNode.hidden = Boolean(showingReceipt);
+        return;
+      }
+
+      if (emptyNode) emptyNode.hidden = true;
+      if (contentNode) contentNode.hidden = false;
+
+      const listNode = document.getElementById('cafeCartList');
+      if (listNode) {
+        listNode.replaceChildren();
+        cart.forEach((item) => {
+          const li = el('li', { className: 'cafe-cart-row' }, [
+            el('div', { className: 'cafe-cart-row-info' }, [
+              el('strong', { text: item.displayName }),
+              el('small', { text: `${formatQ(item.price)} c/u` })
+            ]),
+            el('div', { className: 'cafe-cart-row-actions' }, [
+              el('button', {
+                attrs: { type: 'button', 'aria-label': `Restar ${item.displayName}` },
+                text: '−'
+              }),
+              el('span', { text: String(item.quantity) }),
+              el('button', {
+                attrs: { type: 'button', 'aria-label': `Sumar ${item.displayName}` },
+                text: '+'
+              })
+            ]),
+            el('span', { className: 'cafe-cart-row-sub', text: formatQ(item.price * item.quantity) })
+          ]);
+          const [btnMinus, btnPlus] = $$('button', li);
+          btnMinus?.addEventListener('click', () => addItem(item, -1));
+          btnPlus?.addEventListener('click', () => addItem(item, 1));
+          listNode.append(li);
+        });
+      }
+
+      setText('cafeSubtotal', `${net.toFixed(2)} Q`);
+      setText('cafeTax', `${tax.toFixed(2)} Q`);
+      setText('cafeTotal', formatQ(totalAmount));
+      setText('cafePayBtnText', `Pedir y pagar · ${formatQ(totalAmount)}`);
+    }
+
+    // Tabs de categorías
+    const tabsWrap = document.getElementById('cafeCategoryTabs');
+    if (tabsWrap) {
+      $$('[data-cafe-tab]', tabsWrap).forEach((tabBtn) => {
+        tabBtn.addEventListener('click', () => {
+          const targetCat = tabBtn.dataset.cafeTab || 'all';
+          $$('[data-cafe-tab]', tabsWrap).forEach((b) => {
+            const active = b === tabBtn;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', String(active));
+          });
+          $$('[data-category-section]', menuCard).forEach((sec) => {
+            sec.hidden = targetCat !== 'all' && sec.dataset.categorySection !== targetCat;
+          });
+        });
+      });
+    }
+
+    // Selección de variante (Gallo Pequeña / Corona)
+    $$('.hope-variant-chip', menuCard).forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const row = chip.closest('.hope-item');
+        if (!row) return;
+        const itemId = row.dataset.itemId;
+        const variant = chip.dataset.variant;
+        selectedVariants[itemId] = variant;
+        $$('.hope-variant-chip', row).forEach((c) => c.classList.toggle('is-selected', c === chip));
+      });
+    });
+
+    // Botones + y - en cada producto del menú
+    $$('.hope-item', menuCard).forEach((row) => {
+      const id = row.dataset.itemId;
+      const name = row.dataset.itemName;
+      const price = Number(row.dataset.itemPrice);
+      const category = row.dataset.itemCategory;
+      const minusBtn = row.querySelector('[data-action="minus"]');
+      const plusBtn = row.querySelector('[data-action="plus"]');
+
+      plusBtn?.addEventListener('click', () => {
+        const variant = selectedVariants[id] || null;
+        addItem({ id, name, price, category, variant }, 1);
+      });
+
+      minusBtn?.addEventListener('click', () => {
+        const preferredVariant = selectedVariants[id] || null;
+        const preferredKey = cartKey(id, preferredVariant);
+        const match = cart.find((item) => item.key === preferredKey) || [...cart].reverse().find((item) => item.id === id);
+        if (match) addItem(match, -1);
+      });
+    });
+
+    // Vaciar carrito
+    document.getElementById('cafeClearCart')?.addEventListener('click', () => {
+      cart = [];
+      saveCart();
+      renderCafeCart();
+      toast('Pedido vaciado.');
+    });
+
+    // Formateo de tarjeta y botón de tarjeta de prueba
+    const cardNumber = document.getElementById('cafeCardNumber');
+    const cardName = document.getElementById('cafeCardName');
+    const cardExpiry = document.getElementById('cafeCardExpiry');
+    const cardCvc = document.getElementById('cafeCardCvc');
+    const customerNameInput = document.getElementById('cafeCustomerName');
+
+    cardNumber?.addEventListener('input', () => {
+      const digits = cardNumber.value.replace(/\D/g, '').slice(0, 19);
+      cardNumber.value = digits.replace(/(.{4})/g, '$1 ').trim();
+      setCafeFieldError('number', '');
+    });
+    cardExpiry?.addEventListener('input', () => {
+      let digits = cardExpiry.value.replace(/\D/g, '').slice(0, 4);
+      if (digits.length >= 3) digits = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+      cardExpiry.value = digits;
+      setCafeFieldError('expiry', '');
+    });
+    cardCvc?.addEventListener('input', () => {
+      cardCvc.value = cardCvc.value.replace(/\D/g, '').slice(0, 4);
+      setCafeFieldError('cvc', '');
+    });
+    cardName?.addEventListener('input', () => setCafeFieldError('name', ''));
+    customerNameInput?.addEventListener('input', () => setCafeFieldError('customerName', ''));
+    document.getElementById('cafeCustomerEmail')?.addEventListener('input', () => setCafeFieldError('customerEmail', ''));
+
+    document.getElementById('cafeFillDemoCard')?.addEventListener('click', () => {
+      if (cardNumber) cardNumber.value = '4242 4242 4242 4242';
+      if (cardName && !cardName.value.trim()) {
+        cardName.value = customerNameInput?.value.trim() || state.user?.name || 'Visitante K’anba';
+      }
+      if (cardExpiry) cardExpiry.value = '12/29';
+      if (cardCvc) cardCvc.value = '123';
+      ['number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
+      toast('Tarjeta de prueba cargada.');
+    });
+
+    function setCafeFieldError(field, message) {
+      const errNode = orderPanel.querySelector(`[data-cafe-error="${field}"]`);
+      if (errNode) errNode.textContent = message || '';
+    }
+
+    function luhnCheck(num) {
+      const digits = String(num || '').replace(/\D/g, '');
+      if (digits.length < 13 || digits.length > 19) return false;
+      let sum = 0;
+      let alt = false;
+      for (let i = digits.length - 1; i >= 0; i--) {
+        let d = Number(digits[i]);
+        if (alt) {
+          d *= 2;
+          if (d > 9) d -= 9;
+        }
+        sum += d;
+        alt = !alt;
+      }
+      return sum % 10 === 0;
+    }
+
+    function validateCafeCheckout() {
+      ['customerName', 'customerEmail', 'number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
+      let valid = true;
+
+      const custName = customerNameInput?.value.trim() || '';
+      const custEmail = document.getElementById('cafeCustomerEmail')?.value.trim() || '';
+      const num = cardNumber?.value.replace(/\s/g, '') || '';
+      const holder = cardName?.value.trim() || '';
+      const exp = cardExpiry?.value.trim() || '';
+      const cvc = cardCvc?.value.trim() || '';
+
+      if (custName.length < 2) {
+        setCafeFieldError('customerName', 'Escribe tu nombre para el pedido.');
+        valid = false;
+      }
+      if (custEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(custEmail)) {
+        setCafeFieldError('customerEmail', 'Correo electrónico inválido.');
+        valid = false;
+      }
+      if (!luhnCheck(num)) {
+        setCafeFieldError('number', 'Número de tarjeta inválido.');
+        valid = false;
+      }
+      if (holder.length < 3) {
+        setCafeFieldError('name', 'Escribe el nombre del titular.');
+        valid = false;
+      }
+      if (!/^\d{2}\s*\/\s*\d{2}$/.test(exp)) {
+        setCafeFieldError('expiry', 'Formato MM/AA.');
+        valid = false;
+      } else {
+        const [mm, yy] = exp.split('/').map((x) => Number(x.trim()));
+        if (mm < 1 || mm > 12) {
+          setCafeFieldError('expiry', 'Mes inválido.');
+          valid = false;
+        } else if (new Date(2000 + yy, mm, 1).getTime() <= Date.now()) {
+          setCafeFieldError('expiry', 'Tarjeta vencida.');
+          valid = false;
+        }
+      }
+      if (!/^\d{3,4}$/.test(cvc)) {
+        setCafeFieldError('cvc', 'CVV inválido.');
+        valid = false;
+      }
+      return valid;
+    }
+
+    function renderCafeReceipt(order) {
+      const receiptBox = document.getElementById('cafeReceiptBox');
+      const contentNode = document.getElementById('cafeCartContent');
+      const emptyNode = document.getElementById('cafeCartEmpty');
+      if (!receiptBox) return;
+
+      if (contentNode) contentNode.hidden = true;
+      if (emptyNode) emptyNode.hidden = true;
+      receiptBox.hidden = false;
+
+      setText('cafeReceiptCode', order.code);
+      setText('cafeReceiptMeta', `Comprobante ${order.receipt?.number || '—'} · Ref. ${order.payment?.reference || '—'}`);
+      setText('cafeReceiptTotal', formatQ(order.total));
+
+      const details = document.getElementById('cafeReceiptDetails');
+      if (details) {
+        details.replaceChildren(
+          el('div', {}, [el('strong', { text: 'Cliente: ' }), document.createTextNode(order.customer?.name || '—')]),
+          el('div', {}, [el('strong', { text: 'Entrega: ' }), document.createTextNode(order.customer?.serviceType || 'En mesa · Cafetería')]),
+          order.customer?.notes ? el('div', {}, [el('strong', { text: 'Notas: ' }), document.createTextNode(order.customer.notes)]) : null,
+          el('div', {}, [el('strong', { text: 'Pago: ' }), document.createTextNode(`${order.payment?.brand || 'Tarjeta'} ****${order.payment?.last4 || '4242'}`)])
+        );
+      }
+
+      const itemsList = document.getElementById('cafeReceiptItems');
+      if (itemsList) {
+        itemsList.replaceChildren();
+        (order.items || []).forEach((item) => {
+          itemsList.append(el('li', {}, [
+            el('span', { text: `${item.quantity} × ${item.displayName || item.name}` }),
+            el('strong', { text: formatQ(item.subtotal) })
+          ]));
+        });
+      }
+
+      receiptBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    document.getElementById('cafeOrderForm')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const errorBox = document.getElementById('cafePayError');
+      if (errorBox) errorBox.hidden = true;
+
+      if (!cart.length) {
+        toast('Agrega al menos un producto del menú.');
+        return;
+      }
+      if (!validateCafeCheckout()) return;
+
+      const payBtn = document.getElementById('cafePayBtn');
+      busy(payBtn, true);
+
+      try {
+        const payload = {
+          items: cart.map((item) => ({
+            id: item.id,
+            quantity: item.quantity,
+            variant: item.variant
+          })),
+          customer: {
+            name: customerNameInput?.value.trim() || '',
+            email: document.getElementById('cafeCustomerEmail')?.value.trim() || '',
+            phone: document.getElementById('cafeCustomerPhone')?.value.trim() || '',
+            serviceType: document.getElementById('cafeServiceType')?.value || 'En mesa · Cafetería',
+            notes: document.getElementById('cafeOrderNotes')?.value.trim() || ''
+          },
+          card: {
+            number: cardNumber?.value.replace(/\s/g, '') || '',
+            name: cardName?.value.trim() || '',
+            expiry: cardExpiry?.value.trim() || '',
+            cvc: cardCvc?.value.trim() || ''
+          }
+        };
+
+        let orderObj = null;
+        try {
+          const res = await api('/api/cafe/orders', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          orderObj = res.order;
+        } catch (err) {
+          if (err.status) throw err;
+          // Modo local / sin servidor activo: procesar en sandbox local con las mismas reglas
+          const digits = payload.card.number.replace(/\D/g, '');
+          const last4 = digits.slice(-4);
+          if (last4 === '0002') {
+            throw new Error('La pasarela rechazó el pago: fondos insuficientes. Prueba otra tarjeta.');
+          }
+          if (last4 === '0003') {
+            throw new Error('La pasarela solicita autenticación adicional. Usa otra tarjeta de prueba.');
+          }
+          const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+          orderObj = {
+            code: `CAFE-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 8999 + 1000))}`,
+            total,
+            customer: payload.customer,
+            items: cart.map((i) => ({ ...i, subtotal: i.price * i.quantity })),
+            payment: {
+              brand: /^4/.test(digits) ? 'Visa' : /^5/.test(digits) ? 'Mastercard' : 'Tarjeta',
+              last4,
+              reference: `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}`
+            },
+            receipt: {
+              number: `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 89999 + 10000))}`
+            }
+          };
+        }
+
+        cart = [];
+        saveCart();
+        renderCafeCart();
+        renderCafeReceipt(orderObj);
+        toast(`¡Pago aprobado! Pedido ${orderObj.code} confirmado.`);
+      } catch (error) {
+        if (errorBox) {
+          errorBox.textContent = error.message;
+          errorBox.hidden = false;
+        }
+        if (error.fields) {
+          Object.entries(error.fields).forEach(([field, msg]) => setCafeFieldError(field, msg));
+        }
+      } finally {
+        busy(payBtn, false);
+      }
+    });
+
+    document.getElementById('cafePrintReceipt')?.addEventListener('click', () => {
+      window.print();
+    });
+
+    document.getElementById('cafeNewOrder')?.addEventListener('click', () => {
+      const receiptBox = document.getElementById('cafeReceiptBox');
+      if (receiptBox) receiptBox.hidden = true;
+      renderCafeCart();
+    });
+
+    renderCafeCart();
+  }
+
+  function prefillCafeUser() {
+    if (!state.user) return;
+    const nameInput = document.getElementById('cafeCustomerName');
+    const emailInput = document.getElementById('cafeCustomerEmail');
+    const phoneInput = document.getElementById('cafeCustomerPhone');
+    const cardName = document.getElementById('cafeCardName');
+    if (nameInput && !nameInput.value) nameInput.value = state.user.name || '';
+    if (emailInput && !emailInput.value) emailInput.value = state.user.email || '';
+    if (phoneInput && !phoneInput.value) phoneInput.value = state.user.phone || '';
+    if (cardName && !cardName.value) cardName.value = state.user.name || '';
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Teclado global                                                     */
   /* ------------------------------------------------------------------ */
 
@@ -1711,12 +2184,14 @@
     setupWizard();
     setupScrollProgress();
     setupFlipbook();
+    setupCafeOrderSystem();
     setupLightbox();
     setupVideoModal();
     setupMapButtons();
     setupKeyboard();
     setText('year', String(new Date().getFullYear()));
     await loadAuth();
+    prefillCafeUser();
 
     try {
       const site = await api('/api/site');

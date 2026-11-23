@@ -503,6 +503,152 @@ export function nextReceiptNumber() {
   return `REC-${new Date().getFullYear()}-${String(d.counters.receipt).padStart(5, '0')}`;
 }
 
+export const CAFE_MENU = [
+  { id: 'gallo-grande', name: 'Gallo Grande', category: 'Cervezas', price: 25 },
+  { id: 'gallo-pequena-corona', name: 'Gallo Pequeña y Corona', category: 'Cervezas', price: 20, variants: ['Gallo Pequeña', 'Corona'] },
+  { id: 'gaseosas', name: 'Gaseosas', category: 'Bebidas sin alcohol', price: 10 },
+  { id: 'agua-pura', name: 'Agua pura', category: 'Bebidas sin alcohol', price: 10 },
+  { id: 'ice-te', name: 'Ice Té', category: 'Bebidas sin alcohol', price: 15 },
+  { id: 'cafe', name: 'Café', category: 'Bebidas sin alcohol', price: 10 },
+  { id: 'te', name: 'Té', category: 'Bebidas sin alcohol', price: 10 },
+  { id: 'tequila', name: 'Tequila', category: 'Licores', price: 10 },
+  { id: 'ron', name: 'Ron', category: 'Licores', price: 15 },
+  { id: 'cuba-libre', name: 'Cuba libre', category: 'Licores', price: 20 }
+];
+
+const CAFE_ITEM_ALIASES = {
+  'gallo-pequena': { itemId: 'gallo-pequena-corona', defaultVariant: 'Gallo Pequeña' },
+  'corona': { itemId: 'gallo-pequena-corona', defaultVariant: 'Corona' }
+};
+
+export function nextCafeOrderCode() {
+  const d = getDb();
+  d.counters.cafeOrder = (Number(d.counters.cafeOrder) || 100) + 1;
+  return `CAFE-${new Date().getFullYear()}-${String(d.counters.cafeOrder).padStart(4, '0')}`;
+}
+
+export function prepareCafeOrder(input = {}) {
+  const rawItems = Array.isArray(input.items) ? input.items : [];
+  if (!rawItems.length) {
+    throw new AppError('Agrega al menos un producto del menú a tu pedido.', 422, 'empty_cart');
+  }
+
+  const lines = [];
+  let total = 0;
+
+  for (const raw of rawItems) {
+    const rawId = String(raw?.id || '').trim();
+    const alias = CAFE_ITEM_ALIASES[rawId];
+    const lookupId = alias ? alias.itemId : rawId;
+    const menuItem = CAFE_MENU.find((m) => m.id === lookupId);
+    if (!menuItem) {
+      throw new AppError(`Producto no válido en el pedido: ${rawId || 'desconocido'}.`, 422, 'invalid_item');
+    }
+    const qty = Number(raw?.quantity ?? raw?.qty ?? 1);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
+      throw new AppError(`Cantidad inválida para ${menuItem.name}.`, 422, 'invalid_quantity');
+    }
+    const variant = String(raw?.variant || alias?.defaultVariant || '').trim();
+    const displayName = variant && menuItem.variants?.includes(variant)
+      ? `${menuItem.name} (${variant})`
+      : menuItem.name;
+    const lineTotal = Math.round(menuItem.price * qty * 100) / 100;
+    total = Math.round((total + lineTotal) * 100) / 100;
+
+    lines.push({
+      id: menuItem.id,
+      name: menuItem.name,
+      displayName,
+      variant: variant || null,
+      category: menuItem.category,
+      unitPrice: menuItem.price,
+      quantity: qty,
+      subtotal: lineTotal
+    });
+  }
+
+  const customerInput = input.customer || {};
+  const name = String(customerInput.name || input.name || '').trim();
+  const email = String(customerInput.email || input.email || '').trim().toLowerCase();
+  const phone = String(customerInput.phone || input.phone || '').trim();
+  const serviceType = String(customerInput.serviceType || input.serviceType || 'En mesa · Cafetería').trim().slice(0, 80);
+  const tableOrNote = String(customerInput.notes || input.notes || '').trim().slice(0, 300);
+
+  if (name.length < 2) {
+    throw new AppError('Indica tu nombre para identificar el pedido.', 422, 'validation');
+  }
+  if (email && !EMAIL_RE.test(email)) {
+    throw new AppError('El correo electrónico no es válido.', 422, 'validation');
+  }
+
+  return {
+    items: lines,
+    total,
+    currency: 'GTQ',
+    customer: {
+      name,
+      email,
+      phone,
+      serviceType,
+      notes: tableOrNote
+    }
+  };
+}
+
+export function chargeCafeCard(card = {}, total = 0) {
+  const digits = String(card.number || '').replace(/\D/g, '');
+  const holder = String(card.name || '').trim();
+  const expiry = String(card.expiry || '').trim();
+  const cvc = String(card.cvc || '').trim();
+  const errors = {};
+
+  if (holder.length < 3) errors.name = 'Nombre del titular requerido.';
+  let luhnOk = digits.length >= 13 && digits.length <= 19;
+  if (luhnOk) {
+    let sum = 0;
+    let alt = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+      let d = Number(digits[i]);
+      if (alt) { d *= 2; if (d > 9) d -= 9; }
+      sum += d;
+      alt = !alt;
+    }
+    luhnOk = sum % 10 === 0;
+  }
+  if (!luhnOk) errors.number = 'Número de tarjeta inválido.';
+  if (!/^\d{2}\s*\/\s*\d{2}$/.test(expiry)) {
+    errors.expiry = 'Usa el formato MM/AA.';
+  } else {
+    const [mm, yy] = expiry.split('/').map((x) => Number(x.trim()));
+    if (mm < 1 || mm > 12) errors.expiry = 'Mes inválido.';
+    else if (new Date(2000 + yy, mm, 1).getTime() <= Date.now()) errors.expiry = 'La tarjeta está vencida.';
+  }
+  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = 'CVV inválido.';
+
+  const brand = /^4/.test(digits) ? 'Visa' : /^(5[1-5]|2[2-7])/.test(digits) ? 'Mastercard' : /^3[47]/.test(digits) ? 'Amex' : 'Tarjeta';
+  const last4 = digits.slice(-4);
+
+  if (Object.keys(errors).length) {
+    return { approved: false, code: 'invalid_card', message: Object.values(errors)[0], errors, brand, last4 };
+  }
+  if (last4 === '0002') {
+    return { approved: false, code: 'insufficient_funds', message: 'La pasarela rechazó el pago: fondos insuficientes. Prueba otra tarjeta.', brand, last4 };
+  }
+  if (last4 === '0003') {
+    return { approved: false, code: 'authentication_required', message: 'La pasarela solicita autenticación adicional. Usa otra tarjeta de prueba.', brand, last4 };
+  }
+  return {
+    approved: true,
+    code: 'approved',
+    brand,
+    last4,
+    reference: `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`,
+    provider: 'KanbaPay Sandbox',
+    amount: total,
+    currency: 'GTQ'
+  };
+}
+
 export function validateCustomer(input = {}) {
   const customer = {
     name: String(input.name || '').trim(),

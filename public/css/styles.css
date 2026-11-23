@@ -1810,3 +1810,550 @@ svg { display: block; }
 
 .order-lines dd, .order-total strong { min-width: 0; overflow-wrap: anywhere; }
 .order-total { flex-wrap: wrap; }
+
+/* ============================================================
+   Café The Hope · Menú oficial y pedidos en línea
+   ============================================================ */
+.cafe-hope-badge {
+  margin: 0;
+  width: clamp(190px, 24vw, 240px);
+  height: clamp(190px, 24vw, 240px);
+  border-radius: 50%;
+  background: #fdfbf6;
+  border: 3px solid rgba(232, 181, 106, .55);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, .45), 0 0 0 8px rgba(246, 241, 230, .07);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.cafe-hope-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cafe-cat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+}
+.cafe-cat-tab {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(14, 36, 32, .22);
+  background: #fffdf8;
+  color: var(--deep);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.cafe-cat-tab:hover {
+  border-color: var(--moss);
+  background: rgba(47, 107, 87, .06);
+}
+.cafe-cat-tab.is-active {
+  background: var(--deep);
+  border-color: var(--deep);
+  color: var(--cream);
+}
+
+.cafe-layout {
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr);
+  gap: clamp(1.5rem, 3.5vw, 2.5rem);
+  align-items: start;
+}
+
+.hope-menu-card {
+  background: #ffffff;
+  border: 1px solid rgba(14, 36, 32, .14);
+  border-radius: 20px;
+  padding: clamp(1.5rem, 4vw, 2.6rem);
+  box-shadow: 0 24px 60px rgba(14, 36, 32, .1);
+  color: #16211d;
+}
+.hope-menu-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1.8rem;
+}
+.hope-menu-logo {
+  width: clamp(140px, 24vw, 175px);
+  height: auto;
+  object-fit: contain;
+}
+.hope-menu-divider {
+  width: min(290px, 82%);
+  height: 2px;
+  background: #16211d;
+  margin-top: 12px;
+}
+
+.hope-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.85rem;
+}
+.hope-category[hidden] {
+  display: none !important;
+}
+.hope-category h3 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: clamp(1.45rem, 2.5vw, 1.75rem);
+  color: #2c4c5a;
+  margin: 0 0 .75rem;
+  letter-spacing: -.01em;
+}
+.hope-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hope-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: #faf7f0;
+  border: 1px solid rgba(14, 36, 32, .08);
+  transition: border-color .2s ease, background .2s ease, transform .15s ease;
+}
+.hope-item:hover {
+  border-color: rgba(47, 107, 87, .35);
+  background: #f5efe2;
+}
+.hope-item.in-cart {
+  border-color: var(--moss);
+  background: rgba(47, 107, 87, .08);
+}
+.hope-item-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+}
+.hope-bullet {
+  font-size: 1.15rem;
+  line-height: 1.35;
+  color: #16211d;
+  font-weight: 700;
+}
+.hope-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hope-name {
+  font-family: var(--display);
+  font-size: clamp(1rem, 1.5vw, 1.14rem);
+  color: #111815;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.hope-price {
+  font-weight: 600;
+  color: #0e2420;
+  white-space: nowrap;
+}
+.hope-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hope-variant-chip {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(14, 36, 32, .25);
+  background: #ffffff;
+  color: var(--deep);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.hope-variant-chip.is-selected {
+  background: var(--deep);
+  border-color: var(--deep);
+  color: var(--cream);
+}
+
+.hope-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+.hope-qty-btn {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 999px;
+  border: 1px solid rgba(14, 36, 32, .22);
+  background: #ffffff;
+  color: var(--deep);
+  cursor: pointer;
+  transition: all .18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.hope-minus {
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  padding: 0;
+}
+.hope-minus:disabled {
+  opacity: .32;
+  cursor: default;
+}
+.hope-plus {
+  height: 30px;
+  padding: 0 13px;
+  background: var(--deep);
+  border-color: var(--deep);
+  color: var(--cream);
+}
+.hope-plus:hover {
+  background: var(--moss);
+  border-color: var(--moss);
+}
+.hope-qty-val {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.hope-menu-footer {
+  margin-top: 1.8rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(14, 36, 32, .18);
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* Panel lateral de pedido y pago */
+.cafe-order-panel {
+  border: 1.5px solid rgba(14, 36, 32, .18);
+  padding: 20px;
+  background: #fffdf9;
+  box-shadow: 0 18px 46px rgba(14, 36, 32, .09);
+}
+.cafe-order-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.cafe-order-kicker {
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--moss);
+  margin-bottom: 3px;
+}
+.cafe-order-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.cafe-cart-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(47, 107, 87, .12);
+  color: var(--moss);
+  white-space: nowrap;
+}
+
+.cafe-cart-empty {
+  padding: 16px 14px;
+  border-radius: 12px;
+  background: #f6f1e6;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+.cafe-cart-empty p {
+  margin: 0;
+}
+
+.cafe-cart-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cafe-cart-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f7f3ea;
+  font-size: 12.5px;
+}
+.cafe-cart-row-info {
+  min-width: 0;
+  flex: 1;
+}
+.cafe-cart-row-info strong {
+  display: block;
+  color: var(--deep);
+  font-size: 13px;
+}
+.cafe-cart-row-info small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.cafe-cart-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cafe-cart-row-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(14, 36, 32, .22);
+  background: #fff;
+  color: var(--deep);
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.cafe-cart-row-sub {
+  font-weight: 800;
+  color: var(--deep);
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cafe-cart-totals {
+  border-top: 1px dashed var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cafe-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cafe-total-row.grand {
+  font-size: 15px;
+  color: var(--deep);
+  font-weight: 800;
+  padding-top: 4px;
+}
+.cafe-total-row.grand strong {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  color: var(--moss);
+}
+
+.cafe-cart-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.link-clear-cart {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #a13a28;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cafe-checkout-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cafe-form-section {
+  background: #f8f4ec;
+  border: 1px solid rgba(14, 36, 32, .1);
+  border-radius: 12px;
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cafe-form-section h4 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--deep);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.cafe-pay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.btn-demo-card {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--moss);
+  background: rgba(47, 107, 87, .1);
+  color: var(--moss);
+  cursor: pointer;
+}
+.btn-demo-card:hover {
+  background: var(--moss);
+  color: #fff;
+}
+.cafe-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cafe-sandbox-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.cafe-pay-submit {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Comprobante de pedido pagado */
+.cafe-receipt-box {
+  background: #f4f9f5;
+  border: 1.5px solid rgba(47, 107, 87, .38);
+  border-radius: 14px;
+  padding: 16px;
+}
+.cafe-receipt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #1c5e48;
+  background: rgba(47, 107, 87, .14);
+  padding: 5px 11px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+.cafe-receipt-badge svg {
+  width: 16px;
+  height: 16px;
+}
+.cafe-receipt-box h4 {
+  font-family: var(--display);
+  font-size: 1.45rem;
+  color: var(--deep);
+  margin: 0 0 2px;
+}
+.cafe-receipt-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+.cafe-receipt-details {
+  font-size: 12px;
+  color: var(--text);
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(14, 36, 32, .1);
+  margin-bottom: 10px;
+  display: grid;
+  gap: 4px;
+}
+.cafe-receipt-items {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cafe-receipt-items li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed rgba(14, 36, 32, .14);
+}
+.cafe-receipt-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 800;
+  color: var(--deep);
+  font-size: 14px;
+  padding-top: 4px;
+  margin-bottom: 14px;
+}
+.cafe-receipt-total strong {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  color: var(--moss);
+}
+.cafe-receipt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cafe-receipt-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+@media (max-width: 680px) {
+  .hope-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .hope-item-controls {
+    align-self: flex-end;
+  }
+  .cafe-form-row {
+    grid-template-columns: 1fr;
+  }
+}

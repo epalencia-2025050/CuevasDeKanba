@@ -10,6 +10,7 @@ import {
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
   AppError, nextReceiptNumber, TZ,
+  CAFE_MENU, nextCafeOrderCode, prepareCafeOrder, chargeCafeCard,
   registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared,
   createUserSession, registerGoogleUser, linkGoogleAccount
 } from './store.js';
@@ -637,6 +638,95 @@ async function handleApi(req, res, url) {
 
   if (method === 'GET' && p === '/api/site') {
     return sendJson(res, 200, publicSite());
+  }
+
+  /* ---------- Cafetería · Café The Hope ---------- */
+  if (method === 'GET' && p === '/api/cafe/menu') {
+    return sendJson(res, 200, {
+      ok: true,
+      brand: 'Café The Hope',
+      currency: 'GTQ',
+      categories: ['Cervezas', 'Bebidas sin alcohol', 'Licores'],
+      items: CAFE_MENU
+    });
+  }
+
+  if (method === 'POST' && p === '/api/cafe/orders') {
+    await rateLimit(`cafe-order:${clientIp(req)}`, 25, 10 * 60000);
+    const body = await readJson(req);
+    const session = getSessionUser(req);
+    const prepared = prepareCafeOrder({
+      ...body,
+      customer: {
+        name: body.customer?.name || body.name || session?.user?.name || '',
+        email: body.customer?.email || body.email || session?.user?.email || '',
+        phone: body.customer?.phone || body.phone || session?.user?.phone || '',
+        serviceType: body.customer?.serviceType || body.serviceType || 'En mesa · Cafetería',
+        notes: body.customer?.notes || body.notes || ''
+      }
+    });
+
+    const result = chargeCafeCard(body.card || {}, prepared.total);
+    if (!result.approved) {
+      return sendJson(res, 402, {
+        ok: false,
+        code: result.code,
+        message: result.message,
+        fields: result.errors || null
+      });
+    }
+
+    const now = new Date().toISOString();
+    const code = nextCafeOrderCode();
+    const receiptNumber = nextReceiptNumber();
+    const net = Math.round((prepared.total / 1.12) * 100) / 100;
+    const tax = Math.round((prepared.total - net) * 100) / 100;
+
+    const order = {
+      id: `cfo_${randomToken(6)}`,
+      code,
+      status: 'paid',
+      brand: 'Café The Hope',
+      createdAt: now,
+      paidAt: now,
+      userId: session?.user?.id || null,
+      customer: prepared.customer,
+      items: prepared.items,
+      subtotal: net,
+      tax,
+      total: prepared.total,
+      currency: prepared.currency,
+      payment: {
+        provider: result.provider,
+        status: 'paid',
+        brand: result.brand || 'Tarjeta',
+        last4: result.last4 || '4242',
+        reference: result.reference,
+        paidAt: now
+      },
+      receipt: {
+        number: receiptNumber,
+        issuedAt: now
+      }
+    };
+
+    const d = getDb();
+    d.cafeOrders = d.cafeOrders || [];
+    d.cafeOrders.unshift(order);
+    saveDb();
+
+    return sendJson(res, 201, {
+      ok: true,
+      order
+    });
+  }
+
+  const cafeMatch = p.match(/^\/api\/cafe\/orders\/([A-Za-z0-9-]+)$/);
+  if (method === 'GET' && cafeMatch) {
+    const code = cafeMatch[1].toUpperCase();
+    const order = (getDb().cafeOrders || []).find((o) => o.code === code);
+    if (!order) throw new AppError('Pedido de cafetería no encontrado.', 404, 'not_found');
+    return sendJson(res, 200, { ok: true, order });
   }
 
   /* ---------- Auth de usuarios (rol user) ---------- */

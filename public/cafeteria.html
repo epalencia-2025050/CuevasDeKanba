@@ -13,13 +13,13 @@
 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cafetería El Sendero · K’anba Cuevas Vivas</title>
-  <meta name="description" content="Café de especialidad, pan de la casa, desayunos y antojitos q’eqchi’es antes o después del descenso a las Cuevas de K’anba, Lanquín.">
+  <title>Café The Hope · Cafetería · K’anba Cuevas Vivas</title>
+  <meta name="description" content="Menú oficial de Café The Hope en las Cuevas de K’anba, Lanquín: cervezas, bebidas sin alcohol y licores. Pide y paga tus productos en línea.">
   <meta name="theme-color" content="#0e2420">
-  <meta property="og:title" content="El Sendero · Cafetería de K’anba">
-  <meta property="og:description" content="El mejor final para un descenso: café de Huehuetenango, pan recién horneado y comida honesta junto a la cueva.">
+  <meta property="og:title" content="Café The Hope · Cafetería de K’anba">
+  <meta property="og:description" content="Cervezas, bebidas sin alcohol, café, té y licores en las Cuevas de K’anba. Haz tu pedido y paga directamente desde la página.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="assets/img/kanba-cave-02.jpg">
+  <meta property="og:image" content="assets/img/cafe-the-hope-logo.png">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,209 +72,362 @@
       <div class="cafe-glow" aria-hidden="true"></div>
       <div class="container cafe-hero-inner">
         <div class="cafe-copy">
-          <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> El Sendero · Cafetería de la cueva</p>
-          <h1 class="cafe-title">Baja con hambre.<br><em>Sube servido.</em></h1>
-          <p class="cafe-lead">Café de especialidad de Huehuetenango, pan recién horneado al amanecer y antojitos q’eqchi’es para recuperar fuerzas antes o después del descenso. Mesa al aire libre con vista al sendero.</p>
-          <div class="cafe-badges" aria-label="Destacados">
-            <span>Café de especialidad</span>
-            <span>Pan de la casa</span>
-            <span>Opción vegetariana</span>
+          <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Café The Hope · Cafetería de K’anba</p>
+          <h1 class="cafe-title">Pide en línea.<br><em>Disfruta al salir.</em></h1>
+          <p class="cafe-lead">Bienvenido a <strong>Café The Hope</strong>. Elige tus cervezas, bebidas sin alcohol o licores directamente desde nuestro menú, realiza tu pago seguro en quetzales y recoge tu orden en barra o recíbela en tu mesa.</p>
+          <div class="cafe-badges" aria-label="Categorías del menú">
+            <span>Cervezas · 20 Q – 25 Q</span>
+            <span>Bebidas sin alcohol · 10 Q – 15 Q</span>
+            <span>Licores · 10 Q – 20 Q</span>
           </div>
           <div class="cafe-hero-actions">
-            <a class="btn btn-primary btn-lg" href="#menu">Ver el menú <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-            <a class="btn btn-glass btn-lg" href="reservar.html">Combinar con la cueva</a>
+            <a class="btn btn-primary btn-lg" href="#menu">Ver menú y pedir <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <a class="btn btn-glass btn-lg" href="#pedido">Ir a mi pedido (<span id="heroCartCount">0</span>)</a>
           </div>
         </div>
 
-        <div class="cafe-visual" aria-hidden="true">
-          <figure class="cafe-cup">
-            <svg viewBox="0 0 200 170" fill="none">
-              <path class="steam steam-1" d="M84 42c-3-7 3-9 0-16" stroke="#d6b36a" stroke-width="3" stroke-linecap="round"/>
-              <path class="steam steam-2" d="M100 36c-3-7 3-9 0-16" stroke="#d6b36a" stroke-width="3" stroke-linecap="round"/>
-              <path class="steam steam-3" d="M116 42c-3-7 3-9 0-16" stroke="#d6b36a" stroke-width="3" stroke-linecap="round"/>
-              <path d="M46 84h108v14c0 30-22 52-54 52s-54-22-54-52V84Z" fill="#0e2420" stroke="#b8d98c" stroke-opacity=".35" stroke-width="2"/>
-              <path d="M154 94c14 0 22 8 22 19 0 12-9 20-26 20" stroke="#b8d98c" stroke-opacity=".35" stroke-width="2"/>
-              <path d="M66 84V70" stroke="#b8d98c" stroke-opacity=".6" stroke-width="2" stroke-linecap="round"/>
-              <path d="M100 84V62" stroke="#b8d98c" stroke-opacity=".6" stroke-width="2" stroke-linecap="round"/>
-              <path d="M134 84V70" stroke="#b8d98c" stroke-opacity=".6" stroke-width="2" stroke-linecap="round"/>
-            </svg>
+        <div class="cafe-visual">
+          <figure class="cafe-hope-badge">
+            <img src="assets/img/cafe-the-hope-logo.png" alt="Logo oficial de Café The Hope" width="220" height="234">
           </figure>
           <div class="cafe-price-card">
             <span>Desde</span>
-            <strong>Q18</strong>
-            <small>café en olla o de especialidad</small>
+            <strong>10 Q</strong>
+            <small>Café, té, gaseosas, agua y más</small>
           </div>
         </div>
       </div>
 
       <div class="container cafe-strip" aria-hidden="true">
-        <span>Mesa al aire libre</span><i>✦</i><span>Servicio para llevar</span><i>✦</i><span>Diario · 07:00 – 20:00</span><i>✦</i><span>Junto a la recepción</span>
+        <span>Pedido y pago en línea</span><i>✦</i><span>Cervezas, bebidas y licores</span><i>✦</i><span>Diario · 08:00 – 20:00</span><i>✦</i><span>Comprobante digital inmediato</span>
       </div>
     </section>
 
-    <!-- MENÚ -->
+    <!-- MENÚ Y PEDIDOS -->
     <section class="section cafe-menu-section" id="menu">
       <div class="container">
         <div class="section-head split">
           <div>
-            <p class="eyebrow"><span class="line"></span>El menú del día</p>
-            <h2 class="display">Cosa honesta, hecha aquí mismo.</h2>
+            <p class="eyebrow"><span class="line"></span>Menú oficial · Café The Hope</p>
+            <h2 class="display">Elige tus bebidas y paga desde aquí.</h2>
           </div>
           <div class="section-head-aside">
-            <p>Precios en quetzales. Todo preparado en la cocina de la cueva. Estaciona, desayuna y baja ligero.</p>
+            <p>Precios en quetzales (Q). Selecciona las cantidades con los botones <strong>+</strong> y completa tu pago en el panel de pedido.</p>
           </div>
+        </div>
+
+        <!-- Filtros rápidos de categoría -->
+        <div class="cafe-cat-tabs" id="cafeCategoryTabs" role="tablist" aria-label="Filtrar categorías del menú">
+          <button class="cafe-cat-tab is-active" type="button" role="tab" aria-selected="true" data-cafe-tab="all">Todo el menú</button>
+          <button class="cafe-cat-tab" type="button" role="tab" aria-selected="false" data-cafe-tab="Cervezas">Cervezas</button>
+          <button class="cafe-cat-tab" type="button" role="tab" aria-selected="false" data-cafe-tab="Bebidas sin alcohol">Bebidas sin alcohol</button>
+          <button class="cafe-cat-tab" type="button" role="tab" aria-selected="false" data-cafe-tab="Licores">Licores</button>
         </div>
 
         <div class="cafe-layout">
-          <div class="flipbook" id="flipbook" aria-label="Menú interactivo. Desliza para voltear la página">
-          <div class="book-surface" id="bookSurface" tabindex="0" aria-label="Página del menú">
-              <article class="flip-page is-current" id="page-desayunos" data-page="0" aria-label="Desayunos">
-                <header class="page-head"><span class="page-kicker">07:00 – 11:00</span><h3>Desayunos</h3></header>
-                <ul class="menu-list">
-                  <li><span class="item-name">Huevos al gusto · frijoles chapines y tortillas<small>versión con chorizo o con queso</small></span><span class="leader"></span><span class="item-price">Q38</span></li>
-                  <li><span class="item-name">Huevos motuleños de Lanquín<small>salsa roja, plátano macho y queso fresco</small></span><span class="leader"></span><span class="item-price">Q48</span></li>
-                  <li><span class="item-name">Huevos rancheros con panela<small>salsa casera y crujientes tortillas</small></span><span class="leader"></span><span class="item-price">Q36</span></li>
-                  <li><span class="item-name">Baleadas campesinas<small>frijoles, queso fresco, aguacate y tortilla</small></span><span class="leader"></span><span class="item-price">Q35</span></li>
-                  <li><span class="item-name">Avena con canela y miel del bosque<em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q32</span></li>
-                  <li><span class="item-name">Tostones con guacamole <small>o salsa de chile</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q35</span></li>
+          <!-- CARTA / MENÚ DE CAFÉ THE HOPE -->
+          <div class="hope-menu-card" id="hopeMenuCard" aria-label="Carta de Café The Hope">
+            <header class="hope-menu-header">
+              <img class="hope-menu-logo" src="assets/img/cafe-the-hope-logo.png" alt="Café The Hope" width="165" height="175">
+              <div class="hope-menu-divider" aria-hidden="true"></div>
+            </header>
+
+            <div class="hope-menu-body" id="hopeMenuBody">
+              <!-- Cervezas -->
+              <section class="hope-category" data-category-section="Cervezas" aria-labelledby="cat-cervezas">
+                <h3 id="cat-cervezas">Cervezas</h3>
+                <ul class="hope-list">
+                  <li class="hope-item" data-item-id="gallo-grande" data-item-name="Gallo Grande" data-item-price="25" data-item-category="Cervezas">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Gallo Grande: <strong class="hope-price">25 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Gallo Grande" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="gallo-grande">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Gallo Grande">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="gallo-pequena-corona" data-item-name="Gallo Pequeña y Corona" data-item-price="20" data-item-category="Cervezas">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <div class="hope-name-wrap">
+                        <span class="hope-name">Gallo Pequeña y Corona: <strong class="hope-price">20 Q</strong></span>
+                        <div class="hope-variants" role="group" aria-label="Elegir entre Gallo Pequeña o Corona">
+                          <button type="button" class="hope-variant-chip is-selected" data-variant="Gallo Pequeña">Gallo Pequeña</button>
+                          <button type="button" class="hope-variant-chip" data-variant="Corona">Corona</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Gallo Pequeña y Corona" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="gallo-pequena-corona">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Gallo Pequeña y Corona">+ Pedir</button>
+                    </div>
+                  </li>
                 </ul>
-                              <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
+              </section>
 
-              <article class="flip-page" id="page-almuerzos" data-page="1" aria-label="Almuerzos" hidden>
-                <header class="page-head"><span class="page-kicker">11:30 – 15:00</span><h3>Almuerzos</h3></header>
-                <ul class="menu-list">
-                  <li><span class="item-name">Menú del día<small>sopa + plato principal + bebida de la casa</small></span><span class="leader"></span><span class="item-price">Q55</span></li>
-                  <li><span class="item-name">Pepián de pollo<small>arroz, tortillas y chiltepin recién molido</small></span><span class="leader"></span><span class="item-price">Q68</span></li>
-                  <li><span class="item-name">Lomo a la plancha<small>ensalada de la casa y papas doradas</small></span><span class="leader"></span><span class="item-price">Q78</span></li>
-                  <li><span class="item-name">Riguashte de la casa<small>garbanzo guisado con limón y hierbabuena</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q52</span></li>
-                  <li><span class="item-name">Gallo pinto con chorizo artesanal<small>queso fresco y huevo</small></span><span class="leader"></span><span class="item-price">Q52</span></li>
-                  <li><span class="item-name">Sopa de res<small>con tortillitas hechas a mano</small></span><span class="leader"></span><span class="item-price">Q58</span></li>
+              <!-- Bebidas sin alcohol -->
+              <section class="hope-category" data-category-section="Bebidas sin alcohol" aria-labelledby="cat-sin-alcohol">
+                <h3 id="cat-sin-alcohol">Bebidas sin alcohol</h3>
+                <ul class="hope-list">
+                  <li class="hope-item" data-item-id="gaseosas" data-item-name="Gaseosas" data-item-price="10" data-item-category="Bebidas sin alcohol">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Gaseosas: <strong class="hope-price">10 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Gaseosas" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="gaseosas">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Gaseosas">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="agua-pura" data-item-name="Agua pura" data-item-price="10" data-item-category="Bebidas sin alcohol">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Agua pura: <strong class="hope-price">10 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Agua pura" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="agua-pura">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Agua pura">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="ice-te" data-item-name="Ice Té" data-item-price="15" data-item-category="Bebidas sin alcohol">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Ice Té: <strong class="hope-price">15 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Ice Té" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="ice-te">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Ice Té">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="cafe" data-item-name="Café" data-item-price="10" data-item-category="Bebidas sin alcohol">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Café: <strong class="hope-price">10 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Café" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="cafe">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Café">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="te" data-item-name="Té" data-item-price="10" data-item-category="Bebidas sin alcohol">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Té: <strong class="hope-price">10 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Té" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="te">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Té">+ Pedir</button>
+                    </div>
+                  </li>
                 </ul>
-                              <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
+              </section>
 
-              <article class="flip-page" id="page-cenas" data-page="2" aria-label="Cenas" hidden>
-                <header class="page-head"><span class="page-kicker">17:00 – 20:00</span><h3>Cenas</h3></header>
-                <ul class="menu-list">
-                  <li><span class="item-name">Pechuga rellena de espinaca y queso<small>puré de plátano macho y ensalada</small></span><span class="leader"></span><span class="item-price">Q72</span></li>
-                  <li><span class="item-name">Tilapia al limón<small>arroz con azafrán y ensalada fresca</small></span><span class="leader"></span><span class="item-price">Q85</span></li>
-                  <li><span class="item-name">Hamburguesa La Cueva<small>pan brioche, papas al ajo y salsa criolla</small></span><span class="leader"></span><span class="item-price">Q55</span></li>
-                  <li><span class="item-name">Nachos Cahabón<small>con guacamole, pico de gallo y queso derretido</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q48</span></li>
-                  <li><span class="item-name">Ensalada del sendero<small>pollo a la plancha, aguacate y limón</small></span><span class="leader"></span><span class="item-price">Q45</span></li>
-                  <li><span class="item-name">Quesadillas de queso<small>salsa de chile asada</small><em class="tag tag-spicy">PICANTE</em></span><span class="leader"></span><span class="item-price">Q42</span></li>
+              <!-- Licores -->
+              <section class="hope-category" data-category-section="Licores" aria-labelledby="cat-licores">
+                <h3 id="cat-licores">Licores</h3>
+                <ul class="hope-list">
+                  <li class="hope-item" data-item-id="tequila" data-item-name="Tequila" data-item-price="10" data-item-category="Licores">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Tequila: <strong class="hope-price">10 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Tequila" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="tequila">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Tequila">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="ron" data-item-name="Ron" data-item-price="15" data-item-category="Licores">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Ron: <strong class="hope-price">15 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Ron" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="ron">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Ron">+ Pedir</button>
+                    </div>
+                  </li>
+
+                  <li class="hope-item" data-item-id="cuba-libre" data-item-name="Cuba libre" data-item-price="20" data-item-category="Licores">
+                    <div class="hope-item-main">
+                      <span class="hope-bullet" aria-hidden="true">•</span>
+                      <span class="hope-name">Cuba libre: <strong class="hope-price">20 Q</strong></span>
+                    </div>
+                    <div class="hope-item-controls">
+                      <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar Cuba libre" disabled>−</button>
+                      <span class="hope-qty-val" data-qty-for="cuba-libre">0</span>
+                      <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar Cuba libre">+ Pedir</button>
+                    </div>
+                  </li>
                 </ul>
-                              <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
+              </section>
+            </div>
 
-              <article class="flip-page" id="page-postres" data-page="3" aria-label="Postres" hidden>
-                <header class="page-head"><span class="page-kicker">toda la tarde</span><h3>Postres</h3></header>
-                <ul class="menu-list">
-                  <li><span class="item-name">Cheesecake de maracuyá<small>hecho en la casa con fruta de la región</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q35</span></li>
-                  <li><span class="item-name">Pan de plátano de la cueva<small>con mantequilla de café</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q22</span></li>
-                  <li><span class="item-name">Flan de coco<small>al horno de leña, caramelo artesanal</small></span><span class="leader"></span><span class="item-price">Q25</span></li>
-                  <li><span class="item-name">Helado artesanal de mango y coco<em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q18</span></li>
-                  <li><span class="item-name">Pastelitos de piña <small>fritos, con miel de caña</small></span><span class="leader"></span><span class="item-price">Q16</span></li>
-                </ul>
-                              <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
-
-              <article class="flip-page" id="page-cafe" data-page="4" aria-label="Café y calientes" hidden>
-                <header class="page-head"><span class="page-kicker">tostado en Cobán</span><h3>Café &amp; calientes</h3></header>
-                <div class="menu-group">
-                  <h4>Café <span>especialidad</span></h4>
-                  <ul>
-                    <li><span class="item-name">Café en olla<small>piloncillo, canela y naranja</small></span><span class="leader"></span><span class="item-price">Q18</span></li>
-                    <li><span class="item-name">Espresso de la casa<small>notas de cacao y nuez</small></span><span class="leader"></span><span class="item-price">Q22</span></li>
-                    <li><span class="item-name">Americano</span><span class="leader"></span><span class="item-price">Q24</span></li>
-                    <li><span class="item-name">Capuccino <small>o Latte</small></span><span class="leader"></span><span class="item-price">Q28</span></li>
-                    <li><span class="item-name">Café vienés<small>crema batida y cacao</small></span><span class="leader"></span><span class="item-price">Q30</span></li>
-                    <li><span class="item-name">Chocolate a la taza<small>con churrito de naranja</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q24</span></li>
-                  </ul>
-                </div>
-                <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
-
-              <article class="flip-page" id="page-frias" data-page="5" aria-label="Frías y cosas de la casa" hidden>
-                <header class="page-head"><span class="page-kicker">del territorio</span><h3>Frías &amp; cosas de la casa</h3></header>
-                <div class="menu-group">
-                  <h4>Gaseosas de la casa</h4>
-                  <ul>
-                    <li><span class="item-name">Agua de jamaica de la casa<em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q16</span></li>
-                    <li><span class="item-name">Limonada de yema<small>con sal o sin ella</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q14</span></li>
-                    <li><span class="item-name">Té frío de hierbabuena y limón<em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q16</span></li>
-                    <li><span class="item-name">Soda de jamaica artesanal<small>de fermentación natural</small><em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q18</span></li>
-                    <li><span class="item-name">Licuado de banano con mantequilla de maní<em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q30</span></li>
-                    <li><span class="item-name">Fresco de sandía con hierbabuena<em class="tag tag-veg">VEG</em></span><span class="leader"></span><span class="item-price">Q16</span></li>
-                  </ul>
-                </div>
-                <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
-
-              <article class="flip-page" id="page-alco" data-page="6" aria-label="Alcohólicas" hidden>
-                <header class="page-head"><span class="page-kicker">mayores de 18</span><h3>Alcohólicas</h3></header>
-                <div class="menu-group">
-                  <h4>De la barra <span>solo mayores de 18</span></h4>
-                  <ul>
-                    <li><span class="item-name">Cerveza artesanal Cahabón<small>lota de trigo con notas cítricas</small></span><span class="leader"></span><span class="item-price">Q42</span></li>
-                    <li><span class="item-name">Vino de la casa<small>tinto o blanco · copa</small></span><span class="leader"></span><span class="item-price">Q28</span></li>
-                    <li><span class="item-name">Ron Zacapa 4 años</span><span class="leader"></span><span class="item-price">Q35</span></li>
-                    <li><span class="item-name">Michelada de jamaica</span><span class="leader"></span><span class="item-price">Q30</span></li>
-                    <li><span class="item-name">Margarita del Sendero<small>con sal y un toque de limón verde</small></span><span class="leader"></span><span class="item-price">Q48</span></li>
-                  </ul>
-                </div>
-                <div class="page-foot" aria-hidden="true"><span>El Sendero · K’anba</span></div>
-              </article>
+            <footer class="hope-menu-footer">
+              <span>Café The Hope · Cuevas de K’anba · Precios en Quetzales (Q)</span>
+            </footer>
           </div>
 
-          <div class="book-foot">
-            <button class="book-arrow" id="bookPrev" type="button" aria-label="Página anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-            <div class="book-meta">
-              <span class="book-name" id="bookName">Desayunos</span>
-              <div class="book-dots" role="tablist" aria-label="Ir a una sección">
-                <button class="book-dot is-active" type="button" role="tab" data-goto="0" aria-label="Desayunos" aria-selected="true"></button>
-                <button class="book-dot" type="button" role="tab" data-goto="1" aria-label="Almuerzos" aria-selected="false"></button>
-                <button class="book-dot" type="button" role="tab" data-goto="2" aria-label="Cenas" aria-selected="false"></button>
-                <button class="book-dot" type="button" role="tab" data-goto="3" aria-label="Postres" aria-selected="false"></button>
-                <button class="book-dot" type="button" role="tab" data-goto="4" aria-label="Café" aria-selected="false"></button>
-                <button class="book-dot" type="button" role="tab" data-goto="5" aria-label="Frías y cosas de la casa" aria-selected="false"></button>
-                <button class="book-dot" type="button" role="tab" data-goto="6" aria-label="Alcohólicas" aria-selected="false"></button>
+          <!-- PANEL DE PEDIDO Y PAGO EN LÍNEA -->
+          <aside class="cafe-aside" id="pedido" aria-label="Tu pedido y pago en línea">
+            <div class="cafe-card cafe-order-panel" id="cafeOrderPanel">
+              <div class="cafe-order-head">
+                <div>
+                  <span class="cafe-order-kicker">Pedido en línea</span>
+                  <h3>Tu pedido · Café The Hope</h3>
+                </div>
+                <span class="cafe-cart-badge" id="cafeCartBadge">0 productos</span>
               </div>
-              <span class="book-count"><b id="bookNow">1</b> / 7</span>
-            </div>
-            <button class="book-arrow" id="bookNext" type="button" aria-label="Página siguiente"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          </div>
-        </div>
 
-          <aside class="cafe-aside">
+              <!-- Estado vacío -->
+              <div class="cafe-cart-empty" id="cafeCartEmpty">
+                <p>Todavía no has seleccionado productos. Haz clic en <strong>+ Pedir</strong> junto a cualquier bebida del menú para armar tu orden y pagarla desde aquí.</p>
+              </div>
+
+              <!-- Lista de productos seleccionados -->
+              <div class="cafe-cart-content" id="cafeCartContent" hidden>
+                <ul class="cafe-cart-list" id="cafeCartList" aria-label="Productos en tu pedido"></ul>
+
+                <div class="cafe-cart-totals">
+                  <div class="cafe-total-row">
+                    <span>Subtotal (sin IVA)</span>
+                    <span id="cafeSubtotal">0.00 Q</span>
+                  </div>
+                  <div class="cafe-total-row">
+                    <span>IVA incluido (12%)</span>
+                    <span id="cafeTax">0.00 Q</span>
+                  </div>
+                  <div class="cafe-total-row grand">
+                    <span>Total a pagar</span>
+                    <strong id="cafeTotal">0 Q</strong>
+                  </div>
+                </div>
+
+                <div class="cafe-cart-toolbar">
+                  <button type="button" class="link-clear-cart" id="cafeClearCart">Vaciar pedido</button>
+                </div>
+
+                <!-- Formulario de datos y pago -->
+                <form class="cafe-checkout-form" id="cafeOrderForm" novalidate>
+                  <div class="cafe-form-section">
+                    <h4>1. Datos para tu entrega</h4>
+                    <label class="field">
+                      <span>Tu nombre <em>*</em></span>
+                      <input type="text" id="cafeCustomerName" name="customerName" placeholder="Ej. Ana Lucía Pérez" required>
+                      <small class="field-error" data-cafe-error="customerName"></small>
+                    </label>
+                    <div class="cafe-form-row">
+                      <label class="field">
+                        <span>Correo (opcional)</span>
+                        <input type="email" id="cafeCustomerEmail" name="customerEmail" placeholder="correo@ejemplo.com">
+                        <small class="field-error" data-cafe-error="customerEmail"></small>
+                      </label>
+                      <label class="field">
+                        <span>Teléfono (opcional)</span>
+                        <input type="tel" id="cafeCustomerPhone" name="customerPhone" placeholder="+502 5555 0000">
+                      </label>
+                    </div>
+                    <label class="field">
+                      <span>Modalidad de entrega</span>
+                      <select id="cafeServiceType" name="serviceType">
+                        <option value="En mesa · Cafetería">En mesa · Cafetería</option>
+                        <option value="Para recoger en barra">Para recoger en barra</option>
+                        <option value="Al salir del tour">Al salir del tour</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Notas del pedido (opcional)</span>
+                      <input type="text" id="cafeOrderNotes" name="notes" maxlength="200" placeholder="Ej. Mesa 3, bien fría, café sin azúcar…">
+                    </label>
+                  </div>
+
+                  <div class="cafe-form-section">
+                    <div class="cafe-pay-header">
+                      <h4>2. Pago con tarjeta</h4>
+                      <button type="button" class="btn-demo-card" id="cafeFillDemoCard">Usar tarjeta de prueba</button>
+                    </div>
+                    <label class="field">
+                      <span>Número de tarjeta <em>*</em></span>
+                      <input type="text" id="cafeCardNumber" name="number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" maxlength="23" required>
+                      <small class="field-error" data-cafe-error="number"></small>
+                    </label>
+                    <label class="field">
+                      <span>Nombre en la tarjeta <em>*</em></span>
+                      <input type="text" id="cafeCardName" name="name" autocomplete="cc-name" placeholder="Como aparece en la tarjeta" required>
+                      <small class="field-error" data-cafe-error="name"></small>
+                    </label>
+                    <div class="cafe-form-row">
+                      <label class="field">
+                        <span>Vencimiento <em>*</em></span>
+                        <input type="text" id="cafeCardExpiry" name="expiry" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/AA" maxlength="5" required>
+                        <small class="field-error" data-cafe-error="expiry"></small>
+                      </label>
+                      <label class="field">
+                        <span>CVV <em>*</em></span>
+                        <input type="password" id="cafeCardCvc" name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" required>
+                        <small class="field-error" data-cafe-error="cvc"></small>
+                      </label>
+                    </div>
+                    <p class="cafe-sandbox-hint">
+                      Pasarela segura <strong>KanbaPay</strong>. En modo demo puedes usar <code>4242 4242 4242 4242</code> o pulsar <em>“Usar tarjeta de prueba”</em>.
+                    </p>
+                  </div>
+
+                  <div class="form-error" id="cafePayError" role="alert" hidden></div>
+
+                  <button type="submit" class="btn btn-primary btn-lg cafe-pay-submit" id="cafePayBtn">
+                    <span id="cafePayBtnText">Pedir y pagar ahora</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </form>
+              </div>
+
+              <!-- Comprobante de pedido pagado -->
+              <div class="cafe-receipt-box" id="cafeReceiptBox" hidden>
+                <div class="cafe-receipt-badge">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V6l-8-3Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m8.5 12.2 2.5 2.5 4.8-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>¡Pedido pagado y confirmado!</span>
+                </div>
+                <h4 id="cafeReceiptCode">CAFE-2026-0101</h4>
+                <p class="cafe-receipt-sub" id="cafeReceiptMeta">Comprobante REC-2026-00484 · Pago aprobado</p>
+
+                <div class="cafe-receipt-details" id="cafeReceiptDetails"></div>
+                <ul class="cafe-receipt-items" id="cafeReceiptItems"></ul>
+                <div class="cafe-receipt-total">
+                  <span>Total pagado</span>
+                  <strong id="cafeReceiptTotal">0 Q</strong>
+                </div>
+
+                <div class="cafe-receipt-actions">
+                  <button type="button" class="btn btn-outline btn-sm" id="cafePrintReceipt">Imprimir comprobante</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="cafeNewOrder">Hacer otro pedido</button>
+                </div>
+              </div>
+            </div>
+
             <div class="cafe-card cafe-hours">
-              <h3><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Un rato antes del descenso</h3>
+              <h3><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Horario de Café The Hope</h3>
               <ul>
-                <li><span>Desayuno</span><strong>07:00 – 11:00</strong></li>
-                <li><span>Almuerzo</span><strong>11:30 – 15:00</strong></li>
-                <li><span>Cena</span><strong>17:00 – 20:00</strong></li>
-                <li><span>Café y postres</span><strong>todo el día</strong></li>
+                <li><span>Bebidas sin alcohol y café</span><strong>08:00 – 20:00</strong></li>
+                <li><span>Cervezas y licores (+18)</span><strong>11:00 – 20:00</strong></li>
+                <li><span>Entrega en mesa o barra</span><strong>Inmediata</strong></li>
               </ul>
-              <p>Última orden 20:00. Usa tu hora de salida del tour como referencia para ordenar con tiempo.</p>
-            </div>
-
-            <div class="cafe-card cafe-notes">
-              <h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V6l-8-3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m8.5 12 2.4 2.4 4.6-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg> Del territorio</h3>
-              <ul class="note-list">
-                <li><strong>Café de especialidad</strong> de fincas de Huehuetenango, tostado en Cobán.</li>
-                <li><strong>Pan recién horneado</strong> cada mañana con el horno de la casa.</li>
-                <li><strong>Fruta de estación</strong> y panela de la región, cero jarabes industriales.</li>
-                <li><strong>Opciones vegetarianas</strong> marcadas con <em class="tag tag-veg">VEG</em>.</li>
-              </ul>
-            </div>
-
-            <div class="cafe-card cafe-offer">
-              <span class="offer-label"><span class="pulse-dot"></span> cortesía con tu reserva</span>
-              <p>Muestra la confirmación de tu reserva en línea y el <strong>café de la casa va por nuestra cuenta</strong>.</p>
-              <p class="offer-note">Válido el mismo día del tour, una bebida por persona.</p>
-              <a class="btn btn-primary" href="reservar.html">Reservar y tomar mi café
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-              </a>
+              <p>Presenta tu código de pedido (<code>CAFE-2026-####</code>) en la barra de Café The Hope o indica tu mesa al ordenar.</p>
             </div>
           </aside>
         </div>
@@ -286,8 +439,8 @@
       <div class="cta-media"><img src="assets/img/kanba-cave-01.jpg" alt="Puerta de la cueva K’anba bañada por la luz del sendero" loading="lazy" decoding="async"><div></div></div>
       <div class="container cta-inner">
         <p class="eyebrow eyebrow-light"><span class="pulse-dot"></span> Después del descenso</p>
-        <h2 class="display">El mejor post-tour<br><em>empieza en el sendero.</em></h2>
-        <p>Baja con la cabeza llena de río y lucecitas, y sube a esta mesa con café servido y pan todavía tibio.</p>
+        <h2 class="display">El mejor post-tour<br><em>te espera en Café The Hope.</em></h2>
+        <p>Sube de la cueva y celebra con una Gallo bien fría, un café recién servido o un Cuba libre frente a la selva de Lanquín.</p>
         <div class="cta-actions">
           <a class="btn btn-primary btn-lg" href="reservar.html">Reservar el descenso</a>
           <a class="btn btn-glass btn-lg" href="tours.html">Ver tours</a>
@@ -329,7 +482,6 @@
         <a href="mi-reserva.html">Mi reserva</a>
         <a href="informacion.html">Requisitos</a>
         <a href="politicas.html">Políticas</a>
-
       </div>
 
       <div class="footer-col footer-contact">
@@ -349,10 +501,10 @@
     <p class="footer-disclaimer container" id="footerNote"></p>
   </footer>
 
-  <!-- Mobile booking bar -->
+  <!-- Mobile bar para pedido de cafetería -->
   <div class="mobile-bar" id="mobileBar">
-    <div><span>Desde</span><strong>Q110 <small>/ persona</small></strong></div>
-    <a class="btn btn-primary" href="reservar.html">Reservar</a>
+    <div><span id="mobileCafeLabel">Café The Hope</span><strong id="mobileCafeTotal">Desde 10 Q</strong></div>
+    <a class="btn btn-primary" href="#pedido" id="mobileCafeBtn">Ver mi pedido</a>
     <a class="mobile-bar-wa" href="https://wa.me/50240002026" target="_blank" rel="noopener" aria-label="WhatsApp">
       <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 8.7c.2-.5.4-.5.6-.5h.5c.2 0 .4 0 .6.4l.7 1.7c.1.2 0 .4-.1.6l-.5.6c-.1.1-.2.3 0 .6.5.8 1.1 1.4 2 1.8.3.1.5.1.6 0l.7-.8c.1-.2.3-.2.5-.1l1.6.8c.2.1.4.2.4.4 0 .2 0 1-.5 1.5-.5.5-1.2.8-2.5.4-1.3-.4-2.9-1.3-4-2.7-1-1.2-1.5-2.4-1.5-3.2 0-.8.3-1.3.4-1.5Z" fill="currentColor"/></svg>
     </a>
@@ -360,7 +512,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="js/site.js?v=3" defer></script>
+  <script src="js/site.js?v=4" defer></script>
   <script src="js/file-notice.js"></script>
 </body>
 </html>
