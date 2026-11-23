@@ -17,6 +17,10 @@
 
   const money = (value) => `Q${Number(value || 0).toFixed(2)}`;
 
+  const trackBooking = (event, reservation) => {
+    try { window.kanbaTrackBooking?.(event, reservation); } catch { /* analítica no disponible */ }
+  };
+
   const STATUS_LABEL = {
     pending_payment: 'Pago pendiente',
     confirmed: 'Confirmada',
@@ -346,6 +350,13 @@
     const policy = $('#policyMini');
     if (panel) panel.hidden = false;
     if (policy) policy.hidden = false;
+    const beginKey = `kanba:ga:begin:${reservation.code}`;
+    try {
+      if (!sessionStorage.getItem(beginKey)) {
+        sessionStorage.setItem(beginKey, '1');
+        trackBooking('begin_checkout', reservation);
+      }
+    } catch { /* almacenamiento no disponible */ }
     const amount = $('#payAmount');
     if (amount) amount.textContent = `Pagar ${money(reservation.total)}`;
     startCountdown(reservation.secondsLeft || 0);
@@ -411,6 +422,7 @@
     const button = $('#payButton');
     busy(button, true);
     state.paying = true;
+    trackBooking('add_payment_info', reservation);
     try {
       // Los datos de la tarjeta no salen del navegador: se genera un token de
       // demostración local. En producción, la pasarela tokeniza (campos alojados).

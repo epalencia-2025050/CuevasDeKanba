@@ -7,6 +7,11 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+  // Eventos para Google Tag Manager / Analytics (ver js/analytics.js)
+  const track = (event, params) => {
+    try { window.kanbaTrack?.(event, params); } catch { /* analítica no disponible */ }
+  };
+
   const ICONS = {
     arrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
@@ -587,6 +592,12 @@
   async function selectTour(tourId, { scroll = false } = {}) {
     const tour = state.tours.find((item) => item.id === tourId);
     if (!tour) return;
+    track('select_tour', {
+      tour_id: tour.id,
+      tour_name: tour.name,
+      price: Number(tour.price) || 0,
+      currency: 'GTQ'
+    });
     state.tourId = tourId;
     state.date = null;
     state.time = null;
@@ -1032,6 +1043,18 @@
         throw error;
       }
       sessionStorage.setItem(`kanba:${data.code}`, JSON.stringify({ code: data.code, token: data.token }));
+      track('reservation_created', {
+        currency: 'GTQ',
+        value: Number(tour.price) * state.pax,
+        transaction_id: data.code,
+        items: [{
+          item_id: tour.id,
+          item_name: tour.name,
+          item_category: 'tour',
+          price: Number(tour.price) || 0,
+          quantity: state.pax
+        }]
+      });
       window.location.href = data.paymentUrl;
     } catch (error) {
       if (errorBox) {
@@ -1173,6 +1196,7 @@
     const modal = $('#videoModal');
     const embed = $('#videoEmbed');
     if (!modal || !embed) return;
+    track('video_play', { video_id: video.youtubeId, video_title: video.title, video_category: video.category });
     embed.replaceChildren();
     const iframe = el('iframe', {
       attrs: {

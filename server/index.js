@@ -1,4 +1,3 @@
-import { logHttpsRejection } from './https-diagnostic.js';
 import { createRequestSecurity, parseJsonObject, RequestSecurityError } from './request-security.js';
 import { bufferedResponse } from './store-transaction.js';
 import { safeErrorMessage } from './safe-errors.js';
@@ -14,7 +13,8 @@ import {
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
   AppError, nextReceiptNumber, TZ,
-  registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared
+  registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared,
+  createUserSession, registerGoogleUser, linkGoogleAccount
 } from './store.js';
 import { hashPassword, verifyPassword, randomToken, signPayload, verifySignature, safeEqual } from './security.js';
 import { charge } from './gateway.js';
@@ -39,6 +39,10 @@ const TRUST_PROXY = Boolean(process.env.TRUSTED_PROXY_CIDRS);
 const SESSION_COOKIE = 'kanba_session';
 const USER_COOKIE = 'kanba_user';
 const SESSION_MS = 8 * 3600 * 1000;
+// Inicio de sesión con Google (OAuth 2.0). Configurar en Render o en .env.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || '';
 const ADMIN_IDLE_MS = Number(process.env.ADMIN_SESSION_IDLE_MS) > 0
   ? Number(process.env.ADMIN_SESSION_IDLE_MS)
   : 30 * 60 * 1000;
@@ -98,12 +102,13 @@ function securityHeaders(res) {
   res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self'",
+    // Google Tag Manager / Google Analytics 4 (contenedor GTM-N8ZD2LM3)
+    "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://googleads.g.doubleclick.net",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com",
-    "frame-src https://www.youtube-nocookie.com https://www.youtube.com",
-    "connect-src 'self'",
+    "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com https://www.google.co.uk",
+    "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://www.googletagmanager.com https://td.doubleclick.net",
+    "connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://stats.g.doubleclick.net https://*.g.doubleclick.net https://region1.google-analytics.com",
     "media-src 'self'",
     "object-src 'none'",
     "frame-ancestors 'self'",
@@ -197,6 +202,38 @@ async function rateLimit(key, max, windowMs) {
     count = memoryLimit(key, max, windowMs);
   }
   if (count > max) throw new AppError('Demasiados intentos. Espera unos minutos.', 429, 'rate_limited');
+}
+
+/* ------------------------------------------------------------------ */
+/* Inicio de sesión con Google                                        */
+/* ------------------------------------------------------------------ */
+
+const GOOGLE_STATE_MS = 10 * 60 * 1000;
+const googleStates = new Map();
+
+function googleConfigured() {
+  return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+}
+
+function requestOrigin(req) {
+  const proto = (req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
+function googleCallbackUri(req) {
+  return GOOGLE_REDIRECT_URI || `${requestOrigin(req)}/api/auth/google/callback`;
+}
+
+// Solo permite rutas internas como destino posterior al login.
+function safeNextPath(value) {
+  const next = String(value || '').trim();
+  if (!next || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) return '/';
+  return next;
+}
+
+function googleLoginError(code) {
+  return `/login.html?error=${encodeURIComponent(code)}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -664,6 +701,95 @@ async function handleApi(req, res, url) {
       authenticated: Boolean(session),
       user: session ? session.user : null
     });
+  }
+
+  /* ---------- Inicio de sesión con Google (OAuth 2.0) ---------- */
+  if (method === 'GET' && p === '/api/auth/google') {
+    await rateLimit(`google-start:${clientIp(req)}`, 20, 10 * 60000);
+    if (!googleConfigured()) return sendRedirect(res, googleLoginError('google_unconfigured'));
+
+    const now = Date.now();
+    for (const [key, entry] of googleStates) {
+      if (entry.expiresAt <= now) googleStates.delete(key);
+    }
+
+    const state = randomToken(18);
+    googleStates.set(state, {
+      next: safeNextPath(url.searchParams.get('next')),
+      expiresAt: now + GOOGLE_STATE_MS
+    });
+
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: googleCallbackUri(req),
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      prompt: 'select_account',
+      access_type: 'online'
+    });
+    return sendRedirect(res, `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  }
+
+  if (method === 'GET' && p === '/api/auth/google/callback') {
+    const state = url.searchParams.get('state') || '';
+    const entry = googleStates.get(state);
+    googleStates.delete(state);
+
+    if (!entry || entry.expiresAt <= Date.now()) {
+      return sendRedirect(res, googleLoginError('google_state'));
+    }
+    if (!googleConfigured()) return sendRedirect(res, googleLoginError('google_unconfigured'));
+    if (url.searchParams.get('error')) {
+      // El usuario canceló o rechazó el acceso en la pantalla de Google.
+      return sendRedirect(res, googleLoginError('google_cancelled'));
+    }
+
+    const code = url.searchParams.get('code') || '';
+    if (!code) return sendRedirect(res, googleLoginError('google_failed'));
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          redirect_uri: googleCallbackUri(req),
+          grant_type: 'authorization_code'
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      const tokens = await tokenRes.json();
+      if (!tokenRes.ok || !tokens.access_token) {
+        throw new Error(tokens.error_description || tokens.error || 'token_exchange_failed');
+      }
+
+      const infoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+      const profile = await infoRes.json();
+      if (!infoRes.ok || !profile.email) throw new Error(profile.error_description || 'userinfo_failed');
+      if (profile.email_verified === false) {
+        return sendRedirect(res, googleLoginError('google_email_unverified'));
+      }
+
+      const email = String(profile.email).trim().toLowerCase();
+      const googleProfile = { googleId: String(profile.sub || ''), avatar: String(profile.picture || '') };
+      const existing = findUserByEmail(email);
+      const user = existing
+        ? linkGoogleAccount(existing, googleProfile)
+        : registerGoogleUser({ ...googleProfile, email, name: profile.name });
+
+      const session = createUserSession(user);
+      setUserCookie(res, req, session.token, session.expiresAt);
+      return sendRedirect(res, entry.next);
+    } catch (err) {
+      console.error('[auth/google] no se pudo completar el inicio de sesión:', safeErrorMessage(err));
+      return sendRedirect(res, googleLoginError('google_failed'));
+    }
   }
 
   if (method === 'POST' && p === '/api/auth/register') {
@@ -1219,12 +1345,414 @@ async function handleApi(req, res, url) {
     return sendJson(res, 201, { ok: true, url: `/uploads/${filename}`, size: buffer.length });
   }
 
-  throw new AppError('Ruta no encontrada.', 404, 'not_found');
+/* ==================================================================== */
+/* Cafetería — Gestión administrativa y operativa                       */
+/* ==================================================================== */
+
+function cafeteriaCode() {
+  const d = getDb();
+  const next = Math.max(0, Number(d.counters?.cafeteriaSale || 0)) + 1;
+  d.counters.cafeteriaSale = next;
+  saveDb();
+  return `CAF-${new Date().getFullYear()}-${String(next).padStart(5, '0')};
 }
 
-/* ------------------------------------------------------------------ */
-/* Static                                                             */
-/* ------------------------------------------------------------------ */
+/* ---------- Categorías ---------- */
+
+if (method === 'GET' && p === '/api/admin/cafeteria/categories') {
+  const type = url.searchParams.get('type');
+  const list = getDb().cafeteriaCategories.filter((c) => !type || c.type === type);
+  return sendJson(res, 200, { ok: true, categories: list });
+}
+
+if (method === 'POST' && p === '/api/admin/cafeteria/categories') {
+  const body = await readJson(req);
+  const d = getDb();
+  const id = String(body.id || '')
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!id) throw new AppError('Identificador inválido.', 422, 'validation');
+  if (d.cafeteriaCategories.some((c) => c.id === id)) throw new AppError('Ya existe una categoría con ese identificador.', 409, 'duplicate');
+  const now = new Date().toISOString();
+  const category = {
+    id,
+    name: String(body.name || '').trim(),
+    type: String(body.type || 'product'),
+    description: String(body.description || '').trim().slice(0, 300),
+    active: body.active !== false,
+    createdAt: now,
+    updatedAt: now
+  };
+  if (!category.name) throw new AppError('El nombre de la categoría es obligatorio.', 422, 'validation');
+  d.cafeteriaCategories.push(category);
+  saveDb();
+  return sendJson(res, 201, { ok: true, category });
+}
+
+m = p.match(/^\/api\/admin\/cafeteria\/categories\/([a-z0-9-]+)$/);
+if (m && method === 'PUT') {
+  const body = await readJson(req);
+  const d = getDb();
+  const idx = d.cafeteriaCategories.findIndex((c) => c.id === m[1]);
+  if (idx < 0) throw new AppError('Categoría no encontrada.', 404, 'not_found');
+  const now = new Date().toISOString();
+  d.cafeteriaCategories[idx] = {
+    ...d.cafeteriaCategories[idx],
+    name: String(body.name || d.cafeteriaCategories[idx].name).trim(),
+    type: String(body.type || d.cafeteriaCategories[idx].type),
+    description: String(body.description || '').trim().slice(0, 300),
+    active: body.active !== false,
+    updatedAt: now
+  };
+  saveDb();
+  return sendJson(res, 200, { ok: true, category: d.cafeteriaCategories[idx] });
+}
+if (m && method === 'DELETE') {
+  const d = getDb();
+  const idx = d.cafeteriaCategories.findIndex((c) => c.id === m[1]);
+  if (idx < 0) throw new AppError('Categoría no encontrada.', 404, 'not_found');
+  const used = d.cafeteriaProducts.some((p) => p.categoryId === m[1]) || d.cafeteriaExpenses.some((e) => e.categoryId === m[1]);
+  if (used) {
+    d.cafeteriaCategories[idx].active = false;
+    d.cafeteriaCategories[idx].updatedAt = new Date().toISOString();
+    saveDb();
+    return sendJson(res, 200, { ok: true, archived: true });
+  }
+  d.cafeteriaCategories.splice(idx, 1);
+  saveDb();
+  return sendJson(res, 200, { ok: true });
+}
+
+/* ---------- Productos ---------- */
+
+if (method === 'GET' && p === '/api/admin/cafeteria/products') {
+  const categoryId = url.searchParams.get('categoryId');
+  const active = url.searchParams.get('active');
+  const list = getDb().cafeteriaProducts.filter((p) => {
+    if (categoryId && p.categoryId !== categoryId) return false;
+    if (active !== null && active !== undefined) return p.active === (active === 'true');
+    return true;
+  });
+  return sendJson(res, 200, { ok: true, products: list });
+}
+
+if (method === 'POST' && p === '/api/admin/cafeteria/products') {
+  const body = await readJson(req);
+  const d = getDb();
+  const id = String(body.id || '')
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!id) throw new AppError('Identificador inválido.', 422, 'validation');
+  if (d.cafeteriaProducts.some((p) => p.id === id)) throw new AppError('Ya existe un producto con ese identificador.', 409, 'duplicate');
+  if (!d.cafeteriaCategories.some((c) => c.id === body.categoryId)) throw new AppError('Categoría no encontrada.', 404, 'not_found');
+  const price = Number(body.price);
+  const cost = Number(body.cost);
+  if (!Number.isFinite(price) || price < 0) throw new AppError('El precio debe ser mayor o igual a cero.', 422, 'validation');
+  if (!Number.isFinite(cost) || cost < 0) throw new AppError('El costo debe ser mayor o igual a cero.', 422, 'validation');
+  const now = new Date().toISOString();
+  const product = {
+    id,
+    categoryId: body.categoryId,
+    name: String(body.name || '').trim(),
+    description: String(body.description || '').trim().slice(0, 300),
+    price: Math.round(price * 100) / 100,
+    cost: Math.round(cost * 100) / 100,
+    stock: Math.max(0, Number(body.stock) || 0),
+    minStock: Math.max(0, Number(body.minStock) || 0),
+    active: body.active !== false,
+    createdAt: now,
+    updatedAt: now
+  };
+  if (!product.name) throw new AppError('El nombre del producto es obligatorio.', 422, 'validation');
+  d.cafeteriaProducts.push(product);
+  saveDb();
+  return sendJson(res, 201, { ok: true, product });
+}
+
+m = p.match(/^\/api\/admin\/cafeteria\/products\/([a-z0-9-]+)$/);
+if (m && method === 'PUT') {
+  const body = await readJson(req);
+  const d = getDb();
+  const idx = d.cafeteriaProducts.findIndex((p) => p.id === m[1]);
+  if (idx < 0) throw new AppError('Producto no encontrado.', 404, 'not_found');
+  if (body.categoryId && !d.cafeteriaCategories.some((c) => c.id === body.categoryId)) throw new AppError('Categoría no encontrada.', 404, 'not_found');
+  const now = new Date().toISOString();
+  const price = body.price !== undefined ? Number(body.price) : d.cafeteriaProducts[idx].price;
+  const cost = body.cost !== undefined ? Number(body.cost) : d.cafeteriaProducts[idx].cost;
+  if (!Number.isFinite(price) || price < 0) throw new AppError('El precio debe ser mayor o igual a cero.', 422, 'validation');
+  if (!Number.isFinite(cost) || cost < 0) throw new AppError('El costo debe ser mayor o igual a cero.', 422, 'validation');
+  d.cafeteriaProducts[idx] = {
+    ...d.cafeteriaProducts[idx],
+    categoryId: body.categoryId || d.cafeteriaProducts[idx].categoryId,
+    name: String(body.name || d.cafeteriaProducts[idx].name).trim(),
+    description: String(body.description || '').trim().slice(0, 300),
+    price: Math.round(price * 100) / 100,
+    cost: Math.round(cost * 100) / 100,
+    stock: body.stock !== undefined ? Math.max(0, Number(body.stock)) : d.cafeteriaProducts[idx].stock,
+    minStock: body.minStock !== undefined ? Math.max(0, Number(body.minStock)) : d.cafeteriaProducts[idx].minStock,
+    active: body.active !== false,
+    updatedAt: now
+  };
+  saveDb();
+  return sendJson(res, 200, { ok: true, product: d.cafeteriaProducts[idx] });
+}
+if (m && method === 'DELETE') {
+  const d = getDb();
+  const idx = d.cafeteriaProducts.findIndex((p) => p.id === m[1]);
+  if (idx < 0) throw new AppError('Producto no encontrado.', 404, 'not_found');
+  const hasSales = d.cafeteriaSales.some((s) => s.items.some((it) => it.productId === m[1]));
+  if (hasSales) {
+    d.cafeteriaProducts[idx].active = false;
+    d.cafeteriaProducts[idx].updatedAt = new Date().toISOString();
+    saveDb();
+    return sendJson(res, 200, { ok: true, archived: true });
+  }
+  d.cafeteriaProducts.splice(idx, 1);
+  saveDb();
+  return sendJson(res, 200, { ok: true });
+}
+
+/* ---------- Ventas ---------- */
+
+if (method === 'GET' && p === '/api/admin/cafeteria/sales') {
+  const from = url.searchParams.get('from') || null;
+  const to = url.searchParams.get('to') || null;
+  const list = getDb().cafeteriaSales.filter((s) => {
+    if (from && new Date(s.createdAt) < new Date(from)) return false;
+    if (to && new Date(s.createdAt) > new Date(to + 'T23:59:59')) return false;
+    return true;
+  });
+  list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return sendJson(res, 200, { ok: true, sales: list });
+}
+
+m = p.match(/^\/api\/admin\/cafeteria\/sales\/([A-Za-z0-9-]+)$/);
+if (method === 'GET' && m) {
+  const s = getDb().cafeteriaSales.find((x) => x.id === m[1] || x.code === m[1]);
+  if (!s) throw new AppError('Venta no encontrada.', 404, 'not_found');
+  return sendJson(res, 200, { ok: true, sale: s });
+}
+
+if (method === 'POST' && p === '/api/admin/cafeteria/sales') {
+  const body = await readJson(req);
+  const d = getDb();
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!items.length) throw new AppError('Agrega al menos un producto a la venta.', 422, 'validation');
+  const now = new Date().toISOString();
+  const code = cafeteriaCode();
+  const processedItems = [];
+  let total = 0;
+  for (const it of items) {
+    const product = d.cafeteriaProducts.find((p) => p.id === it.productId);
+    if (!product || product.active === false) throw new AppError(`Producto "${it.productId}" no encontrado o inactivo.`, 404, 'not_found');
+    const qty = Math.max(1, Number(it.qty) || 1);
+    if (product.stock < qty) throw new AppError(`Stock insuficiente para ${product.name} (disponible: ${product.stock}).`, 409, 'insufficient_stock');
+    const price = Number(it.price) || product.price;
+    const subtotal = Math.round(price * qty * 100) / 100;
+    total += subtotal;
+    product.stock -= qty;
+    d.cafeteriaInventoryMovements.push({
+      id: `inv_${randomToken(5)}`,
+      productId: product.id,
+      type: 'salida',
+      qty: -qty,
+      reason: `Venta ${code}`,
+      reference: code,
+      createdAt: now
+    });
+    processedItems.push({ productId: product.id, name: product.name, qty, price, subtotal });
+  }
+  const sale = {
+    id: `sale_${randomToken(5)}`,
+    code,
+    items: processedItems,
+    total: Math.round(total * 100) / 100,
+    paymentMethod: String(body.paymentMethod || 'Efectivo'),
+    createdAt: now
+  };
+  d.cafeteriaSales.push(sale);
+  saveDb();
+  return sendJson(res, 201, { ok: true, sale });
+}
+
+/* ---------- Inventario ---------- */
+
+if (method === 'GET' && p === '/api/admin/cafeteria/inventory') {
+  const productId = url.searchParams.get('productId') || null;
+  const type = url.searchParams.get('type') || null;
+  const list = getDb().cafeteriaInventoryMovements.filter((m) => {
+    if (productId && m.productId !== productId) return false;
+    if (type && m.type !== type) return false;
+    return true;
+  });
+  list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return sendJson(res, 200, { ok: true, movements: list });
+}
+
+if (method === 'POST' && p === '/api/admin/cafeteria/inventory') {
+  const body = await readJson(req);
+  const d = getDb();
+  const product = d.cafeteriaProducts.find((p) => p.id === body.productId);
+  if (!product) throw new AppError('Producto no encontrado.', 404, 'not_found');
+  const type = String(body.type || 'entrada');
+  if (!['entrada', 'salida', 'ajuste'].includes(type)) throw new AppError('Tipo de movimiento inválido.', 422, 'validation');
+  const qty = Math.max(1, Number(body.qty) || 1);
+  const signed = type === 'entrada' ? qty : (type === 'salida' ? -qty : (body.signed ?? 0 ? qty : -qty));
+  if (type === 'salida' && product.stock < qty) throw new AppError(`Stock insuficiente para ${product.name} (disponible: ${product.stock}).`, 409, 'insufficient_stock');
+  const now = new Date().toISOString();
+  product.stock += signed;
+  const movement = {
+    id: `inv_${randomToken(5)}`,
+    productId: product.id,
+    type,
+    qty: signed,
+    reason: String(body.reason || type === 'entrada' ? 'Entrada de inventario' : type === 'salida' ? 'Salida de inventario' : 'Ajuste de inventario').slice(0, 300),
+    reference: String(body.reference || ''),
+    createdAt: now
+  };
+  d.cafeteriaInventoryMovements.push(movement);
+  saveDb();
+  return sendJson(res, 201, { ok: true, movement, product });
+}
+
+/* ---------- Gastos ---------- */
+
+if (method === 'GET' && p === '/api/admin/cafeteria/expenses') {
+  const from = url.searchParams.get('from') || null;
+  const to = url.searchParams.get('to') || null;
+  const categoryId = url.searchParams.get('categoryId') || null;
+  const list = getDb().cafeteriaExpenses.filter((e) => {
+    if (from && new Date(e.date) < new Date(from)) return false;
+    if (to && new Date(e.date) > new Date(to + 'T23:59:59')) return false;
+    if (categoryId && e.categoryId !== categoryId) return false;
+    return true;
+  });
+  list.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return sendJson(res, 200, { ok: true, expenses: list });
+}
+
+if (method === 'POST' && p === '/api/admin/cafeteria/expenses') {
+  const body = await readJson(req);
+  const d = getDb();
+  if (!d.cafeteriaCategories.some((c) => c.id === body.categoryId && c.type === 'expense')) throw new AppError('Categoría de gasto no encontrada.', 404, 'not_found');
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new AppError('El monto debe ser mayor a cero.', 422, 'validation');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.date || ''))) throw new AppError('Fecha inválida.', 422, 'validation');
+  const now = new Date().toISOString();
+  const expense = {
+    id: `exp_${randomToken(5)}`,
+    categoryId: body.categoryId,
+    concept: String(body.concept || 'Gasto de operación').trim().slice(0, 300),
+    amount: Math.round(amount * 100) / 100,
+    date: body.date,
+    createdAt: now
+  };
+  d.cafeteriaExpenses.push(expense);
+  saveDb();
+  return sendJson(res, 201, { ok: true, expense });
+}
+
+m = p.match(/^\/api\/admin\/cafeteria\/expenses\/([a-z0-9-]+)$/);
+if (m && method === 'PUT') {
+  const body = await readJson(req);
+  const d = getDb();
+  const idx = d.cafeteriaExpenses.findIndex((e) => e.id === m[1]);
+  if (idx < 0) throw new AppError('Gasto no encontrado.', 404, 'not_found');
+  if (body.categoryId && !d.cafeteriaCategories.some((c) => c.id === body.categoryId && c.type === 'expense')) throw new AppError('Categoría de gasto no encontrada.', 404, 'not_found');
+  const amount = body.amount !== undefined ? Number(body.amount) : d.cafeteriaExpenses[idx].amount;
+  if (!Number.isFinite(amount) || amount <= 0) throw new AppError('El monto debe ser mayor a cero.', 422, 'validation');
+  const now = new Date().toISOString();
+  d.cafeteriaExpenses[idx] = {
+    ...d.cafeteriaExpenses[idx],
+    categoryId: body.categoryId || d.cafeteriaExpenses[idx].categoryId,
+    concept: String(body.concept || d.cafeteriaExpenses[idx].concept).trim().slice(0, 300),
+    amount: Math.round(amount * 100) / 100,
+    date: body.date || d.cafeteriaExpenses[idx].date,
+    updatedAt: now
+  };
+  saveDb();
+  return sendJson(res, 200, { ok: true, expense: d.cafeteriaExpenses[idx] });
+}
+if (m && method === 'DELETE') {
+  const d = getDb();
+  const idx = d.cafeteriaExpenses.findIndex((e) => e.id === m[1]);
+  if (idx < 0) throw new AppError('Gasto no encontrado.', 404, 'not_found');
+  d.cafeteriaExpenses.splice(idx, 1);
+  saveDb();
+  return sendJson(res, 200, { ok: true });
+}
+
+/* ---------- Estadísticas y reportes ---------- */
+
+if (method === 'GET' && p === '/api/admin/cafeteria/stats') {
+  const d = getDb();
+  const from = url.searchParams.get('from') || null;
+  const to = url.searchParams.get('to') || null;
+  const inRange = (date) => {
+    if (from && new Date(date) < new Date(from)) return false;
+    if (to && new Date(date) > new Date(to + 'T23:59:59')) return false;
+    return true;
+  };
+  const sales = d.cafeteriaSales.filter((s) => inRange(s.createdAt));
+  const expenses = d.cafeteriaExpenses.filter((e) => inRange(e.date));
+  const revenue = sales.reduce((sum, s) => sum + Number(s.total), 0);
+  const expenseTotal = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
+  // Productos más vendidos
+  const productSales = {};
+  sales.forEach((s) => {
+    s.items.forEach((it) => {
+      if (!productSales[it.productId]) productSales[it.productId] = { name: it.name, qty: 0, revenue: 0 };
+      productSales[it.productId].qty += it.qty;
+      productSales[it.productId].revenue += it.subtotal;
+    });
+  });
+  const topProducts = Object.values(productSales)
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 10);
+
+  // Ventas por día
+  const salesByDay = {};
+  sales.forEach((s) => {
+    const day = new Date(s.createdAt).toISOString().slice(0, 10);
+    if (!salesByDay[day]) salesByDay[day] = { count: 0, revenue: 0 };
+    salesByDay[day].count += 1;
+    salesByDay[day].revenue += Number(s.total);
+  });
+  const salesByDayList = Object.entries(salesByDay).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+
+  // Gastos por categoría
+  const expenseByCat = {};
+  expenses.forEach((e) => {
+    const cat = d.cafeteriaCategories.find((c) => c.id === e.categoryId);
+    const name = cat ? cat.name : e.categoryId;
+    if (!expenseByCat[name]) expenseByCat[name] = 0;
+    expenseByCat[name] += Number(e.amount);
+  });
+  const expenseByCatList = Object.entries(expenseByCat).map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount);
+
+  // Productos con stock bajo
+  const lowStock = d.cafeteriaProducts.filter((p) => p.active && p.stock <= p.minStock);
+
+  return sendJson(res, 200, {
+    ok: true,
+    stats: {
+      period: { from, to },
+      revenue,
+      expenseTotal,
+      net: Math.round((revenue - expenseTotal) * 100) / 100,
+      salesCount: sales.length,
+      expenseCount: expenses.length,
+      avgTicket: sales.length ? Math.round((revenue / sales.length) * 100) / 100 : 0,
+      topProducts,
+      salesByDay: salesByDayList,
+      expenseByCategory: expenseByCatList,
+      lowStock
+    }
+  });
+}
+
+throw new AppError('Ruta no encontrada.', 404, 'not_found');
 
 function resolveStaticPath(pathname) {
   // /uploads/* se sirve desde UPLOADS_DIR; el resto desde public/.
@@ -1344,7 +1872,6 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (err instanceof AppError || err instanceof PaymentPolicyError || err instanceof RequestSecurityError) {
-      logHttpsRejection(err, req);
       return sendError(res, err.status, err.message, err.code);
     }
     console.error('[server]', safeErrorMessage(err));
