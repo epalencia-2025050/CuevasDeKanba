@@ -807,7 +807,11 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     const code = String(body.code || '').trim().toUpperCase();
     const email = String(body.email || '').trim().toLowerCase();
-    const reservation = getDb().reservations.find((r) => r.code === code && r.userId === owner.user.id && r.customer.email.toLowerCase() === email);
+    const reservation = getDb().reservations.find((r) => {
+      if (r.code !== code || r.userId !== owner.user.id) return false;
+      if (!email) return true;
+      return r.customer.email.toLowerCase() === email;
+    });
     if (!reservation) throw new AppError('No encontramos una reserva con ese código y correo.', 404, 'not_found');
     rotateReservationToken(reservation);
     return sendJson(res, 200, { ok: true, token: reservation.token, reservation: reservationView(reservation) });

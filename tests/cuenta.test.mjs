@@ -26,5 +26,5 @@ test('account renders real profile and separates upcoming, cancelled and histori
   assert.equal(get('contact').hidden, true);
   assert.equal(get('accountContent').hidden, false);
   assert.deepEqual(['active', 'cancelled', 'history'].map(id => get(id).childElementCount), [2, 1, 2]);
-  assert.equal(get('active').children[0].children.at(-1).href, '/mi-reserva.html?code=0');
+  assert.equal(get('active').children[0].children.at(-1).href, '/mi-reserva.html?code=0&email=ana%40example.invalid');
 });

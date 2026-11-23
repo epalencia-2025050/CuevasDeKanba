@@ -27,15 +27,16 @@
     image.onerror = () => { image.hidden = true; };
     image.src = url.href;
   }
-  function reservations(rows, today) {
+  function reservations(rows, today, user) {
     const labels = { confirmed: 'Confirmada', pending_payment: 'Pendiente de pago', expired: 'Vencida', cancelled: 'Cancelada' };
+    const emailParam = user?.email ? '&email=' + encodeURIComponent(user.email) : '';
     for (const row of rows) {
       const active = row.status === 'pending_payment' || (row.status === 'confirmed' && row.date >= today);
       const group = row.status === 'cancelled' ? 'cancelled' : active ? 'active' : 'history';
       const card = document.createElement('article');
       card.append(element('strong', row.tourName), element('p', [row.date, row.time].filter(Boolean).join(' · ')),
         element('p', [labels[row.status] || row.status, row.code].join(' · ')),
-        link(active ? 'Consultar o cancelar' : 'Consultar reserva', '/mi-reserva.html?code=' + encodeURIComponent(row.code)));
+        link(active ? 'Consultar o cancelar' : 'Consultar reserva', '/mi-reserva.html?code=' + encodeURIComponent(row.code) + emailParam));
       byId(group).append(card);
     }
     byId('historySection').hidden = !byId('history').childElementCount;
@@ -49,7 +50,7 @@
       if (!response.ok) throw new Error('No pudimos cargar tu cuenta. Recarga para intentarlo de nuevo.');
       const data = await response.json();
       profile(data.user);
-      reservations(data.reservations, data.today);
+      reservations(data.reservations, data.today, data.user);
       byId('accountContent').hidden = false;
       status.textContent = '';
     } catch (error) { status.textContent = error.message; }
