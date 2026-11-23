@@ -260,7 +260,7 @@
     availability: [],
     date: null,
     time: null,
-    pax: 0,
+    pax: 1,
     step: 1,
     gallery: [],
     galleryFilter: 'all',
@@ -520,8 +520,9 @@
     }
     setText('footerNote', site.footerNote);
 
-    const holdMinutes = site.settings?.booking?.holdMinutes ?? '';
+    const holdMinutes = site.settings?.booking?.holdMinutes ?? '20';
     setText('holdMinutesText', holdMinutes);
+    setText('holdMinutesNotice', holdMinutes);
     $$('#bookingSummary .summary-hold strong, #bookingForm .form-legal strong').forEach((node) => { node.textContent = holdMinutes; });
 
     renderList('requirementsList', site.requirements);
@@ -926,9 +927,16 @@
         ]));
       }
     }
-    setText('summaryPax', String(state.pax));
-    setText('summaryUnit', `${money(tour.price)} × ${state.pax}`);
-    setText('summaryTotal', money(tour.price * state.pax));
+    setText('summaryPax', String(state.pax || 1));
+    setText('summaryUnit', `${money(tour.price)} × ${state.pax || 1}`);
+    setText('summaryTotal', money(tour.price * (state.pax || 1)));
+
+    setText('recapTourName', tour.name);
+    setText('recapTourMeta', `${tour.duration} · ${tour.difficulty}`);
+    setText('recapDate', state.date ? formatLong(state.date) : 'Por elegir');
+    setText('recapTime', state.time || 'Por elegir');
+    setText('recapPax', String(state.pax || 1));
+    setText('recapTotal', money(tour.price * (state.pax || 1)));
   }
 
   /* ------------------------------------------------------------------ */
@@ -1148,7 +1156,31 @@
       window.location.href = data.paymentUrl;
     } catch (error) {
       if (errorBox) {
-        errorBox.textContent = error.message;
+        errorBox.replaceChildren();
+        if (error.status === 409) {
+          const isCapacityIssue = /agotó|quedan|cupos|sold_out/i.test(error.message) || error.code === 'sold_out';
+          const title = document.createElement('strong');
+          title.textContent = isCapacityIssue ? 'Cupos no disponibles en este momento' : 'Aviso sobre tu reserva';
+          const p = document.createElement('p');
+          p.textContent = isCapacityIssue
+            ? `Otro viajero completó su reserva justo antes (${error.message}). Tus datos personales se han conservado intactos en el formulario. Puedes ajustar la cantidad de participantes o elegir otro horario/fecha sin volver a escribir todo.`
+            : error.message;
+          const actions = document.createElement('div');
+          actions.className = 'form-error-actions';
+          const changeSlotBtn = document.createElement('button');
+          changeSlotBtn.type = 'button';
+          changeSlotBtn.className = 'btn btn-outline btn-compact';
+          changeSlotBtn.textContent = 'Elegir otro horario o fecha (Paso 2)';
+          changeSlotBtn.onclick = () => {
+            goStep(2);
+            const t = currentTour();
+            if (t) selectTour(t.id);
+          };
+          actions.append(changeSlotBtn);
+          errorBox.append(title, p, actions);
+        } else {
+          errorBox.textContent = error.message;
+        }
         errorBox.hidden = false;
         errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }

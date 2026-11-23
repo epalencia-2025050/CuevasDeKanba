@@ -109,7 +109,7 @@
             <div class="wizard-panel" data-panel="2" hidden>
               <div class="panel-head">
                 <h3>2. Fecha y horario</h3>
-                <p>Elige un día de operación y consulta los cupos de cada salida.</p>
+                <p>Elige un día de operación y consulta los cupos en tiempo real. La retención temporal de <span id="holdMinutesNotice">20</span> minutos se activará al completar los datos del viajero en el paso 3.</p>
               </div>
               <div class="date-strip-wrap" hidden>
                 <button class="strip-arrow" id="datePrev" aria-label="Fechas anteriores" type="button"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
@@ -143,6 +143,19 @@
               <div class="panel-head">
                 <h3>3. Participantes y datos del viajero</h3>
                 <p>El titular recibirá la confirmación y el comprobante por correo.</p>
+              </div>
+
+              <div class="booking-selection-recap" id="bookingSelectionRecap">
+                <div class="recap-tour">
+                  <strong id="recapTourName">—</strong>
+                  <span id="recapTourMeta">—</span>
+                </div>
+                <div class="recap-details">
+                  <span><strong>Fecha:</strong> <span id="recapDate">—</span></span>
+                  <span><strong>Horario:</strong> <span id="recapTime">—</span></span>
+                  <span><strong>Participantes:</strong> <span id="recapPax">1</span></span>
+                  <span class="recap-total"><strong>Total:</strong> <span id="recapTotal">—</span></span>
+                </div>
               </div>
 
               <form class="booking-form" id="bookingForm" novalidate>
@@ -196,7 +209,7 @@
                     <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
                   </button>
                 </div>
-                <p class="form-legal">Al continuar se crea una reserva con número único y un enlace de pago privado. El cupo se libera automáticamente si no pagas en <strong id="holdMinutesText"></strong> minutos.</p>
+                <p class="form-legal">Al hacer clic en "Bloquear cupos y pagar" se crea tu reserva oficial con número único y tus cupos quedan retenidos exclusivamente durante <strong id="holdMinutesText"></strong> minutos para completar el pago.</p>
               </form>
             </div>
           </div>
@@ -235,7 +248,7 @@
               </div>
               <div class="summary-hold">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                <span>Al continuar, tus cupos quedan bloqueados <strong></strong> minutos.</span>
+                <span>Al enviar tus datos en el paso 3, tus cupos quedan retenidos exclusivamente por <strong></strong> minutos.</span>
               </div>
             </div>
             <div class="summary-foot">

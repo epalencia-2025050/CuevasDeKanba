@@ -218,18 +218,19 @@
   }
 
   function expirePayment() {
+    clearInterval(state.timer);
     const banner = $('#holdBanner');
     if (banner) {
       banner.classList.add('hold-expired');
       const text = $('#holdText');
-      if (text) text.textContent = 'El plazo de pago venció y los cupos fueron liberados automáticamente.';
+      if (text) text.textContent = 'El plazo de retención venció y los cupos fueron liberados automáticamente.';
     }
     showState({
       tone: 'rust',
-      title: 'El plazo de pago venció',
-      text: 'Los cupos de esta reserva fueron liberados. Puedes volver a reservar la misma experiencia o escribirnos para buscar disponibilidad.',
+      title: 'El plazo de retención venció',
+      text: 'El tiempo límite para completar el pago ha concluido y los cupos se liberaron automáticamente para otros viajeros. Puedes iniciar una nueva reserva de inmediato para asegurar tu lugar.',
       actions: [
-        { label: 'Volver a reservar', href: '/#reservar', variant: 'btn-primary' },
+        { label: 'Volver a reservar', href: '/reservar.html', variant: 'btn-primary' },
         { label: 'Consultar mi reserva', href: `/mi-reserva.html?code=${encodeURIComponent(state.code)}&token=${encodeURIComponent(state.token)}`, variant: 'btn-outline' }
       ]
     });
@@ -255,12 +256,12 @@
     if (reservation.status === 'cancelled' || reservation.status === 'expired') {
       showState({
         tone: 'rust',
-        title: reservation.status === 'expired' ? 'La reserva expiró' : 'La reserva fue cancelada',
+        title: reservation.status === 'expired' ? 'El plazo de retención venció' : 'La reserva fue cancelada',
         text: reservation.status === 'expired'
-          ? 'El plazo para pagar terminó y los cupos se liberaron. Puedes iniciar una nueva reserva.'
+          ? 'El plazo para completar el pago terminó y los cupos se liberaron automáticamente. Puedes iniciar una nueva reserva de inmediato para asegurar tu lugar.'
           : 'Esta reserva fue cancelada y ya no admite pagos. Si tienes dudas, contáctanos con tu número de reserva.',
         actions: [
-          { label: 'Volver a reservar', href: '/#reservar', variant: 'btn-primary' },
+          { label: 'Volver a reservar', href: '/reservar.html', variant: 'btn-primary' },
           { label: 'Consultar la reserva', href: `/mi-reserva.html?code=${encodeURIComponent(reservation.code)}&token=${encodeURIComponent(state.token)}`, variant: 'btn-outline' }
         ]
       });
