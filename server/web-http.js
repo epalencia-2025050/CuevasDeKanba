@@ -8,8 +8,15 @@ export function validateRequest(req, config) {
   if (config.NODE_ENV === 'production' && !req.secure) throw new RequestSecurityError('Se requiere HTTPS.', 426);
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
   if (new URL(req.url).pathname === '/api/webhooks/payments') return;
-  if ((req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
-    throw new RequestSecurityError('Se requiere application/json.', 415);
+  const contentType = (req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  const contentLength = Number(req.headers['content-length']);
+  const hasBody = !Number.isNaN(contentLength) && contentLength > 0;
+  if (contentType !== 'application/json') {
+    if (req.method === 'DELETE' && !contentType && !hasBody) {
+      // DELETE sin cuerpo ni content-type es seguro y válido
+    } else {
+      throw new RequestSecurityError('Se requiere application/json.', 415);
+    }
   }
   if (req.headers.origin !== config.PUBLIC_URL ||
       (req.headers['sec-fetch-site'] && !['same-origin', 'none'].includes(req.headers['sec-fetch-site']))) {

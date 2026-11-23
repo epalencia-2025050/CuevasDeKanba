@@ -138,14 +138,17 @@
   }
 
   async function api(url, options = {}) {
+    const method = (options.method || 'GET').toUpperCase();
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     const res = await fetch(url, {
       credentials: 'same-origin',
       ...options,
       headers: {
         Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(isMutation || options.body ? { 'Content-Type': 'application/json' } : {}),
         ...(options.headers || {})
-      }
+      },
+      body: isMutation && options.body === undefined && method === 'DELETE' ? '{}' : options.body
     });
     let data = null;
     try { data = await res.json(); } catch { /* respuesta vacía */ }
@@ -884,7 +887,7 @@
       remove.addEventListener('click', async () => {
         if (!window.confirm('¿Eliminar este cierre? Los cupos vuelven a estar disponibles.')) return;
         try {
-          await api(`/api/admin/closures/${encodeURIComponent(closure.id)}`, { method: 'DELETE' });
+          await api(`/api/admin/closures/${encodeURIComponent(closure.id)}`, { method: 'DELETE', body: '{}' });
           toast('Cierre eliminado.');
           loadAvailability();
         } catch (error) {
@@ -996,7 +999,7 @@
         const hasReservations = window.confirm(`¿${tour.active !== false ? 'Archivar' : 'Eliminar'} “${tour.name}”? Si tiene reservas, se archivará en lugar de borrarse.`);
         if (!hasReservations) return;
         try {
-          const result = await api(`/api/admin/tours/${encodeURIComponent(tour.id)}`, { method: 'DELETE' });
+          const result = await api(`/api/admin/tours/${encodeURIComponent(tour.id)}`, { method: 'DELETE', body: '{}' });
           toast(result.archived ? 'Tour archivado (tiene reservas asociadas).' : 'Tour eliminado.');
           loadTours();
         } catch (error) {

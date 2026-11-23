@@ -48,7 +48,16 @@ export function createRequestSecurity(env = {}) {
       if (env.NODE_ENV === 'production' && !this.secure(req)) throw new RequestSecurityError('Se requiere HTTPS.', 426);
       if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
       if (req.url.split('?')[0] === '/api/webhooks/payments') return; // Authenticated by the payment provider signature.
-      if (String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/json') throw new RequestSecurityError('Se requiere application/json.', 415);
+      const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+      const contentLength = Number(req.headers['content-length']);
+      const hasBody = !Number.isNaN(contentLength) && contentLength > 0;
+      if (contentType !== 'application/json') {
+        if (req.method === 'DELETE' && !contentType && !hasBody) {
+          // DELETE sin cuerpo ni content-type es seguro y válido
+        } else {
+          throw new RequestSecurityError('Se requiere application/json.', 415);
+        }
+      }
       let origin = publicOrigin;
       if (!origin) {
         try { origin = new URL(`${this.secure(req) ? 'https' : 'http'}://${req.headers.host}`).origin; }
