@@ -543,6 +543,114 @@ function defaultTours() {
   ];
 }
 
+/* ------------------------------------------------------------------ */
+/* Datos de semilla de la Cafetería                                   */
+/* ------------------------------------------------------------------ */
+
+function defaultCafeteriaCategories() {
+  const now = new Date().toISOString();
+  return [
+    // Categorías de productos (venta)
+    { id: 'cat_bebidas_calientes', name: 'Bebidas calientes', type: 'product', description: 'Café, té, chocolate y calientes.', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_bebidas_frias', name: 'Bebidas frías', type: 'product', description: 'Aguas, limonadas, sodas y licuados.', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_desayunos', name: 'Desayunos', type: 'product', description: 'Platos del desayuno (07:00 – 11:00).', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_almuerzos', name: 'Almuerzos', type: 'product', description: 'Platos fuertes del mediodía (11:30 – 15:00).', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_cenas', name: 'Cenas', type: 'product', description: 'Platos de la noche (17:00 – 20:00).', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_postres', name: 'Postres', type: 'product', description: 'Dulces y helados.', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_alcoholicas', name: 'Bebidas alcohólicas', type: 'product', description: 'Solo mayores de 18.', active: true, createdAt: now, updatedAt: now },
+    { id: 'cat_insumos', name: 'Insumos', type: 'product', description: 'Materias primas y suministros de cocina.', active: true, createdAt: now, updatedAt: now },
+    // Categorías de gasto
+    { id: 'gasto_alimentos', name: 'Alimentos e insumos', type: 'expense', description: 'Compra de materias primas para la cocina.', active: true, createdAt: now, updatedAt: now },
+    { id: 'gasto_bebidas', name: 'Bebidas para reventa', type: 'expense', description: 'Compra de cervezas, vinos y gaseosas.', active: true, createdAt: now, updatedAt: now },
+    { id: 'gasto_servicios', name: 'Servicios', type: 'expense', description: 'Luz, agua, gas e internet del local.', active: true, createdAt: now, updatedAt: now },
+    { id: 'gasto_mantenimiento', name: 'Mantenimiento', type: 'expense', description: 'Reparaciones y equipo de cocina.', active: true, createdAt: now, updatedAt: now },
+    { id: 'gasto_otro', name: 'Otros gastos', type: 'expense', description: 'Gastos varios de operación.', active: true, createdAt: now, updatedAt: now }
+  ];
+}
+
+function defaultCafeteriaProducts() {
+  const now = new Date().toISOString();
+  return [
+    // Bebidas calientes
+    { id: 'prod_cafe_olla', categoryId: 'cat_bebidas_calientes', name: 'Café en olla', description: 'Piloncillo, canela y naranja.', price: 18, cost: 6, stock: 120, minStock: 20, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_espresso', categoryId: 'cat_bebidas_calientes', name: 'Espresso de la casa', description: 'Notas de cacao y nuez.', price: 22, cost: 8, stock: 100, minStock: 15, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_americano', categoryId: 'cat_bebidas_calientes', name: 'Americano', description: '', price: 24, cost: 7, stock: 90, minStock: 15, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_capuccino', categoryId: 'cat_bebidas_calientes', name: 'Capuccino / Latte', description: '', price: 28, cost: 10, stock: 80, minStock: 15, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_chocolate', categoryId: 'cat_bebidas_calientes', name: 'Chocolate a la taza', description: 'Con churrito de naranja.', price: 24, cost: 9, stock: 70, minStock: 10, active: true, createdAt: now, updatedAt: now },
+    // Bebidas frías
+    { id: 'prod_jamaica', categoryId: 'cat_bebidas_frias', name: 'Agua de jamaica de la casa', description: '', price: 16, cost: 5, stock: 60, minStock: 10, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_limonada', categoryId: 'cat_bebidas_frias', name: 'Limonada de yema', description: 'Con sal o sin ella.', price: 14, cost: 4, stock: 50, minStock: 10, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_te_frio', categoryId: 'cat_bebidas_frias', name: 'Té frío de hierbabuena y limón', description: '', price: 16, cost: 5, stock: 55, minStock: 10, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_licuado', categoryId: 'cat_bebidas_frias', name: 'Licuado de banano con mantequilla de maní', description: '', price: 30, cost: 12, stock: 30, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    // Desayunos
+    { id: 'prod_huevos_gusto', categoryId: 'cat_desayunos', name: 'Huevos al gusto', description: 'Frijoles chapines y tortillas.', price: 38, cost: 15, stock: 40, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_motulenos', categoryId: 'cat_desayunos', name: 'Huevos motuleños de Lanquín', description: 'Salsa roja, plátano macho y queso fresco.', price: 48, cost: 18, stock: 35, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_baleadas', categoryId: 'cat_desayunos', name: 'Baleadas campesinas', description: 'Frijoles, queso fresco, aguacate y tortilla.', price: 35, cost: 12, stock: 30, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_avena', categoryId: 'cat_desayunos', name: 'Avena con canela y miel del bosque', description: '', price: 32, cost: 10, stock: 25, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    // Almuerzos
+    { id: 'prod_menu_dia', categoryId: 'cat_almuerzos', name: 'Menú del día', description: 'Sopa + plato principal + bebida de la casa.', price: 55, cost: 22, stock: 30, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_pepian', categoryId: 'cat_almuerzos', name: 'Pepián de pollo', description: 'Arroz, tortillas y chiltepin recién molido.', price: 68, cost: 28, stock: 25, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_lomo', categoryId: 'cat_almuerzos', name: 'Lomo a la plancha', description: 'Ensalada de la casa y papas doradas.', price: 78, cost: 32, stock: 20, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    // Cenas
+    { id: 'prod_pechuga', categoryId: 'cat_cenas', name: 'Pechuga rellena de espinaca y queso', description: 'Puré de plátano macho y ensalada.', price: 72, cost: 30, stock: 15, minStock: 3, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_hamburguesa', categoryId: 'cat_cenas', name: 'Hamburguesa La Cueva', description: 'Pan brioche, papas al ajo y salsa criolla.', price: 55, cost: 22, stock: 20, minStock: 5, active: true, createdAt: now, updatedAt: now },
+    // Postres
+    { id: 'prod_cheesecake', categoryId: 'cat_postres', name: 'Cheesecake de maracuyá', description: 'Hecho en la casa con fruta de la región.', price: 35, cost: 14, stock: 12, minStock: 3, active: true, createdAt: now, updatedAt: now },
+    { id: 'prod_flan', categoryId: 'cat_postres', name: 'Flan de coco', description: 'Al horno de leña, caramelo artesanal.', price: 25, cost: 9, stock: 15, minStock: 3, active: true, createdAt: now, updatedAt: now },
+    // Insumos
+    { id: 'ins_cafe_grano', categoryId: 'cat_insumos', name: 'Café en grano (Huehuetenango)', description: 'Tostado en Cobán, bolsa de 500 g.', price: 0, cost: 45, stock: 40, minStock: 10, active: true, createdAt: now, updatedAt: now },
+    { id: 'ins_harina', categoryId: 'cat_insumos', name: 'Harina de trigo', description: 'Saco de 25 kg para pan y tortillas.', price: 0, cost: 85, stock: 12, minStock: 3, active: true, createdAt: now, updatedAt: now },
+    { id: 'ins_queso', categoryId: 'cat_insumos', name: 'Queso fresco', description: 'Queso de la región, kg.', price: 0, cost: 55, stock: 18, minStock: 4, active: true, createdAt: now, updatedAt: now }
+  ];
+}
+
+function defaultCafeteriaSales() {
+  const now = new Date();
+  const iso = (d) => d.toISOString();
+  const makeCode = (n) => `CAF-${new Date().getFullYear()}-${String(n).padStart(5, '0')}`;
+  const items = (productIds, qtys) => productIds.map((pid, i) => {
+    const p = defaultCafeteriaProducts().find((x) => x.id === pid);
+    const qty = qtys[i] || 1;
+    return { productId: pid, name: p.name, qty, price: p.price, subtotal: Math.round(p.price * qty * 100) / 100 };
+  });
+  const base = [
+    { code: makeCode(2001), items: items(['prod_cafe_olla', 'prod_baleadas'], [2, 1]), total: 71, paymentMethod: 'Efectivo', createdAt: iso(new Date(Date.now() - 2 * 3600000)) },
+    { code: makeCode(2002), items: items(['prod_americano', 'prod_menu_dia'], [1, 1]), total: 79, paymentMethod: 'Tarjeta', createdAt: iso(new Date(Date.now() - 5 * 3600000)) },
+    { code: makeCode(2003), items: items(['prod_capuccino', 'prod_cheesecake'], [1, 1]), total: 63, paymentMethod: 'Efectivo', createdAt: iso(new Date(Date.now() - 8 * 3600000)) },
+    { code: makeCode(2004), items: items(['prod_jamaica', 'prod_pepian'], [2, 1]), total: 100, paymentMethod: 'Efectivo', createdAt: iso(new Date(Date.now() - 1 * 86400000)) },
+    { code: makeCode(2005), items: items(['prod_espresso', 'prod_hamburguesa'], [1, 1]), total: 77, paymentMethod: 'Tarjeta', createdAt: iso(new Date(Date.now() - 2 * 86400000)) }
+  ];
+  return base.map((s, i) => ({ ...s, id: `sale_${String(i + 1).padStart(3, '0')}` }));
+}
+
+function defaultCafeteriaInventoryMovements() {
+  const now = new Date();
+  const iso = (d) => d.toISOString();
+  const sales = defaultCafeteriaSales();
+  return [
+    { id: 'inv_001', productId: 'prod_cafe_olla', type: 'entrada', qty: 100, reason: 'Compra de café en grano', reference: '', createdAt: iso(new Date(Date.now() - 10 * 86400000)) },
+    { id: 'inv_002', productId: 'prod_harina', type: 'entrada', qty: 50, reason: 'Saco de harina mensual', reference: '', createdAt: iso(new Date(Date.now() - 9 * 86400000)) },
+    { id: 'inv_003', productId: 'prod_queso', type: 'entrada', qty: 20, reason: 'Queso fresco semanal', reference: '', createdAt: iso(new Date(Date.now() - 8 * 86400000)) },
+    { id: 'inv_004', productId: 'prod_cafe_olla', type: 'salida', qty: -3, reason: 'Venta CAf-2026-02001', reference: sales[0].code, createdAt: sales[0].createdAt },
+    { id: 'inv_005', productId: 'prod_baleadas', type: 'salida', qty: -1, reason: 'Venta CAf-2026-02001', reference: sales[0].code, createdAt: sales[0].createdAt },
+    { id: 'inv_006', productId: 'prod_menu_dia', type: 'salida', qty: -1, reason: 'Venta CAf-2026-02002', reference: sales[1].code, createdAt: sales[1].createdAt },
+    { id: 'inv_007', productId: 'prod_harina', type: 'ajuste', qty: -2, reason: 'Ajuste por pérdida', reference: '', createdAt: iso(new Date(Date.now() - 3 * 86400000)) },
+    { id: 'inv_008', productId: 'prod_queso', type: 'salida', qty: -2, reason: 'Venta CAf-2026-02004', reference: sales[3].code, createdAt: sales[3].createdAt }
+  ];
+}
+
+function defaultCafeteriaExpenses() {
+  const now = new Date();
+  const iso = (d) => d.toISOString();
+  return [
+    { id: 'exp_001', categoryId: 'gasto_alimentos', concept: 'Compra semanal de frutas y verduras', amount: 450, date: iso(new Date(Date.now() - 2 * 86400000)), createdAt: iso(new Date(Date.now() - 2 * 86400000)) },
+    { id: 'exp_002', categoryId: 'gasto_bebidas', concept: 'Caja de cerveza artesanal Cahabón (24 unidades)', amount: 960, date: iso(new Date(Date.now() - 5 * 86400000)), createdAt: iso(new Date(Date.now() - 5 * 86400000)) },
+    { id: 'exp_003', categoryId: 'gasto_servicios', concept: 'Servicio eléctrico del local de cafetería', amount: 320, date: iso(new Date(Date.now() - 10 * 86400000)), createdAt: iso(new Date(Date.now() - 10 * 86400000)) },
+    { id: 'exp_004', categoryId: 'gasto_mantenimiento', concept: 'Reparación de licuadora industrial', amount: 280, date: iso(new Date(Date.now() - 15 * 86400000)), createdAt: iso(new Date(Date.now() - 15 * 86400000)) },
+    { id: 'exp_005', categoryId: 'gasto_alimentos', concept: 'Café en grano Huehuetenango (5 kg)', amount: 600, date: iso(new Date(Date.now() - 1 * 86400000)), createdAt: iso(new Date(Date.now() - 1 * 86400000)) }
+  ];
+}
+
 function defaultSettings() {
   return {
     business: {
@@ -601,6 +709,11 @@ function seedDatabase() {
   const tours = defaultTours();
   const settings = defaultSettings();
   const admin = initialAdminPassword();
+  const cafeteriaCategories = defaultCafeteriaCategories();
+  const cafeteriaProducts = defaultCafeteriaProducts();
+  const cafeteriaSales = defaultCafeteriaSales();
+  const cafeteriaInventoryMovements = defaultCafeteriaInventoryMovements();
+  const cafeteriaExpenses = defaultCafeteriaExpenses();
 
   const makeCode = (n) => `KAN-${new Date().getFullYear()}-${String(n).padStart(5, '0')}`;
   const r1 = {
@@ -777,7 +890,7 @@ function seedDatabase() {
         createdAt: now
       }
     ],
-    counters: { reservation: 1036, receipt: 483 },
+    counters: { reservation: 1036, receipt: 483, cafeteriaSale: 2005 },
     content,
     tours,
     settings,
@@ -809,7 +922,13 @@ function seedDatabase() {
       }
     ],
     emails,
-    sessions: {}
+    sessions: {},
+    /* Entidades de la Cafetería */
+    cafeteriaCategories,
+    cafeteriaProducts,
+    cafeteriaSales,
+    cafeteriaInventoryMovements,
+    cafeteriaExpenses
   };
 }
 
@@ -878,7 +997,8 @@ export function createInitialStore() {
   initial.emails = [];
   initial.closures = [];
   initial.userSessions = {};
-  initial.counters = { reservation: 0, receipt: 0 };
+  initial.counters = { reservation: 0, receipt: 0, cafeteriaSale: 0 };
+  // Datos de demostración de la cafetería se conservan como catálogo base.
   return initial;
 }
 

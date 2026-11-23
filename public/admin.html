@@ -98,6 +98,31 @@
           Reembolsos
           <span class="nav-badge" id="refundBadge" hidden>0</span>
         </button>
+        <p class="nav-label">Cafetería</p>
+        <button type="button" class="nav-item" data-view="cafeteria-categories">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7 7h10v10H7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Clasificación y categorías
+        </button>
+        <button type="button" class="nav-item" data-view="cafeteria-products">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></span>
+          Productos y menú
+        </button>
+        <button type="button" class="nav-item" data-view="cafeteria-sales">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M1 12h4m16 0h4M4 12L8 16M20 12l-4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Ventas (TPV)
+        </button>
+        <button type="button" class="nav-item" data-view="cafeteria-inventory">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg></span>
+          Control de inventario
+        </button>
+        <button type="button" class="nav-item" data-view="cafeteria-expenses">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          Control de gastos
+        </button>
+        <button type="button" class="nav-item" data-view="cafeteria-stats">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="6" y1="20" x2="6" y2="4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          Estadísticas y reportes
+        </button>
         <button type="button" class="nav-item" data-view="settings">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
           Configuración
@@ -304,6 +329,141 @@
           <div class="admin-card no-pad">
             <div class="list-head"><span id="refundCount">—</span><button class="text-link" type="button" id="refreshRefunds">Actualizar</button></div>
             <div id="refundsList" class="refund-list"></div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Clasificación y categorías -->
+        <section class="admin-view" id="view-cafeteria-categories" data-view-panel="cafeteria-categories" hidden>
+          <div class="toolbar">
+            <span class="toolbar-note">Gestiona categorías de productos e insumos, y conceptos de clasificación para gastos.</span>
+            <button class="btn btn-primary btn-compact" type="button" id="newCafeteriaCategory">+ Nueva categoría</button>
+          </div>
+          <div class="admin-card no-pad">
+            <div class="table-wrap"><table class="data-table" id="cafeteriaCategoriesTable"></table></div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Productos y menú -->
+        <section class="admin-view" id="view-cafeteria-products" data-view-panel="cafeteria-products" hidden>
+          <div class="toolbar">
+            <div class="toolbar-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <input type="search" id="cafeteriaProductSearch" placeholder="Buscar producto…" autocomplete="off">
+            </div>
+            <select id="cafeteriaProductCategory" class="select-compact" aria-label="Filtrar por categoría">
+              <option value="all">Todas las categorías</option>
+            </select>
+            <button class="btn btn-primary btn-compact" type="button" id="newCafeteriaProduct">+ Nuevo producto</button>
+          </div>
+          <div class="admin-card no-pad">
+            <div class="table-wrap"><table class="data-table" id="cafeteriaProductsTable"></table></div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Ventas (TPV) -->
+        <section class="admin-view" id="view-cafeteria-sales" data-view-panel="cafeteria-sales" hidden>
+          <div class="toolbar">
+            <label class="inline-field">Desde
+              <input type="date" id="cafeteriaSalesFrom">
+            </label>
+            <label class="inline-field">Hasta
+              <input type="date" id="cafeteriaSalesTo">
+            </label>
+            <button class="btn btn-primary btn-compact" type="button" id="refreshCafeteriaSales">Actualizar</button>
+            <button class="btn btn-outline btn-compact" type="button" id="newCafeteriaSale">+ Nueva venta</button>
+          </div>
+          <div class="admin-grid two">
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Ventas del período</span><h2>Total e ingreso</h2></div><span class="card-meta" id="cafeteriaSalesTotal">—</span></div>
+              <div class="table-wrap"><table class="data-table" id="cafeteriaSalesTable"></table></div>
+            </div>
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Formas de pago</span><h2>Resumen</h2></div></div>
+              <div id="cafeteriaPaymentSummary" class="payment-summary"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Control de inventario -->
+        <section class="admin-view" id="view-cafeteria-inventory" data-view-panel="cafeteria-inventory" hidden>
+          <div class="toolbar">
+            <label class="inline-field">Producto
+              <select id="cafeteriaInventoryProduct" class="select-compact"><option value="all">Todos los productos</option></select>
+            </label>
+            <label class="inline-field">Tipo
+              <select id="cafeteriaInventoryType" class="select-compact">
+                <option value="all">Todos los tipos</option>
+                <option value="entrada">Entrada</option>
+                <option value="salida">Salida</option>
+                <option value="ajuste">Ajuste</option>
+              </select>
+            </label>
+            <button class="btn btn-primary btn-compact" type="button" id="refreshCafeteriaInventory">Actualizar</button>
+            <button class="btn btn-outline btn-compact" type="button" id="newCafeteriaInventory">+ Movimiento</button>
+          </div>
+          <div class="admin-card no-pad">
+            <div class="table-wrap"><table class="data-table" id="cafeteriaInventoryTable"></table></div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Control de gastos -->
+        <section class="admin-view" id="view-cafeteria-expenses" data-view-panel="cafeteria-expenses" hidden>
+          <div class="toolbar">
+            <label class="inline-field">Desde
+              <input type="date" id="cafeteriaExpensesFrom">
+            </label>
+            <label class="inline-field">Hasta
+              <input type="date" id="cafeteriaExpensesTo">
+            </label>
+            <select id="cafeteriaExpenseCategory" class="select-compact" aria-label="Filtrar por categoría de gasto">
+              <option value="all">Todas las categorías</option>
+            </select>
+            <button class="btn btn-primary btn-compact" type="button" id="refreshCafeteriaExpenses">Actualizar</button>
+            <button class="btn btn-outline btn-compact" type="button" id="newCafeteriaExpense">+ Gasto</button>
+          </div>
+          <div class="admin-grid two">
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Gastos del período</span><h2>Total de egresos</h2></div><span class="card-meta" id="cafeteriaExpensesTotal">—</span></div>
+              <div class="table-wrap"><table class="data-table" id="cafeteriaExpensesTable"></table></div>
+            </div>
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Por categoría</span><h2>Distribución</h2></div></div>
+              <div id="cafeteriaExpenseCategorySummary" class="expense-category-summary"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cafetería: Estadísticas y reportes -->
+        <section class="admin-view" id="view-cafeteria-stats" data-view-panel="cafeteria-stats" hidden>
+          <div class="toolbar">
+            <label class="inline-field">Desde
+              <input type="date" id="cafeteriaStatsFrom">
+            </label>
+            <label class="inline-field">Hasta
+              <input type="date" id="cafeteriaStatsTo">
+            </label>
+            <button class="btn btn-primary btn-compact" type="button" id="refreshCafeteriaStats">Actualizar</button>
+            <a class="btn btn-outline btn-compact" href="cafeteria.html" target="_blank" rel="noopener">Ver menú público</a>
+          </div>
+          <div class="admin-grid two">
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Ingresos</span><h2>Total ventas</h2></div><span class="card-meta" id="cafeteriaStatsRevenue">—</span></div>
+              <div class="kpis-inline" id="cafeteriaStatsKpis"></div>
+            </div>
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Egresos</span><h2>Total gastos</h2></div><span class="card-meta" id="cafeteriaStatsExpenseTotal">—</span></div>
+              <div class="kpis-inline" id="cafeteriaStatsExpenseKpis"></div>
+            </div>
+          </div>
+          <div class="admin-grid two">
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Más vendidos</span><h2>Top productos</h2></div></div>
+              <div id="cafeteriaStatsTopProducts" class="top-products-list"></div>
+            </div>
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Stock bajo</span><h2>Reabastecer</h2></div></div>
+              <div id="cafeteriaStatsLowStock" class="low-stock-list"></div>
+            </div>
           </div>
         </section>
 
