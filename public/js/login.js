@@ -101,14 +101,25 @@
     clearErrors();
   }
 
-  function redirectAfterLogin(data) {
-    const nextParam = new URLSearchParams(window.location.search).get('next');
-    const isSafe = (path) => typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') &&
-        !path.includes('\\') && new URL(path, window.location.origin).origin === window.location.origin;
-    const target = isSafe(nextParam) ? nextParam : data?.redirectTo;
-    if (isSafe(target)) {
-      window.location.replace(target);
+  function isSafeRelativePath(path) {
+    if (typeof path !== 'string' || !path || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) {
+      return false;
     }
+    try {
+      return new URL(path, window.location.origin).origin === window.location.origin;
+    } catch {
+      return false;
+    }
+  }
+
+  function redirectAfterLogin(data) {
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (isSafeRelativePath(next)) {
+      window.location.replace(next);
+      return;
+    }
+    const fallback = isSafeRelativePath(data?.redirectTo) ? data.redirectTo : '/';
+    window.location.replace(fallback);
   }
 
   function setBusy(on) {
