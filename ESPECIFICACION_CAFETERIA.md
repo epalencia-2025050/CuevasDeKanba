@@ -1,4 +1,4 @@
-# Especificación: Sistema de Gestión de Cafetería
+# Sistema de Gestión Administrativa y Operativa de Cafetería
 
 ## Orden de Módulos
 
@@ -10,7 +10,9 @@
 
 ---
 
-## Vista de Usuario (Parte Visual / Punto de Venta / Operativa)
+## Vista de Usuario (Parte Visual / Operativa de Cafetería)
+
+Esta es la interfaz que usa el cajero o personal de mostrador para operar la cafetería en el punto de venta.
 
 ### 1. Módulo de Clasificación y Categorización
 - Visualización de productos organizados por categorías y conceptos.
@@ -19,20 +21,22 @@
 - Visualización de precios por categoría.
 
 ### 2. Ventas
-- Registro y administración de productos y precios (vista operativa de caja).
+- Registro y administración de productos y precios.
 - Registro de ventas y formas de pago.
 - Cálculo automático del importe total de cada venta.
-- Emisión de comprobantes internos (tickets/facturas).
-- Consulta de ventas por período (vista rápida del cajero).
+- Emisión de comprobantes internos.
+- Consulta de ventas por período.
 
 ### 3. Control de Inventario (Consulta Operativa)
 - Consulta de existencias disponibles.
 - Historial de movimientos de inventario (solo lectura para usuario de caja).
-- Descuento automático de existencias por venta de productos registrados (proceso interno).
+- Descuento automático de existencias por venta de productos registrados (proceso interno al realizar una venta).
 
 ---
 
-## Vista del Administrador (Back-office / Gestión)
+## Vista del Administrador (Gestión / Back-office)
+
+Esta es la interfaz de administración para configurar, supervisar y obtener reportes de la cafetería.
 
 ### 1. Módulo de Clasificación y Categorización (NUEVO)
 - Registro, edición y eliminación de categorías de productos e insumos.
@@ -69,4 +73,4 @@
 
 ---
 
-> **Nota:** El contenido está listo para ser versionado. El directorio actual no es un repositorio de Git, por lo que para subirlo a la rama `emendoza` es necesario inicializar Git o contar con un repositorio remoto configurado.
+> **Nota:** Este documento contiene exclusivamente la especificación funcional de la parte de cafetería, dividida en la parte visual de usuario y la vista del administrador, según lo indicado en los textos de referencia.
