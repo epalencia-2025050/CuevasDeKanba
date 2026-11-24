@@ -374,10 +374,10 @@ CREATE INDEX IF NOT EXISTS rate_limits_window_idx ON kanba_rel.rate_limits(windo
 COMMENT ON TABLE kanba_rel.rate_limits IS 'Limitacion distribuida de intentos por accion/cuenta/IP; aplicar retencion corta.';
 
 CREATE TABLE IF NOT EXISTS kanba_rel.counters (
-  name VARCHAR(30) PRIMARY KEY CHECK (name IN ('reservation','receipt','cafeOrder','cafeMovement','cafeExpense')),
+  name VARCHAR(30) PRIMARY KEY,
   value BIGINT NOT NULL DEFAULT 0 CHECK (value >= 0)
 );
-INSERT INTO kanba_rel.counters(name,value) VALUES ('reservation',0),('receipt',0),('cafeOrder',100),('cafeMovement',0),('cafeExpense',0)
+INSERT INTO kanba_rel.counters(name,value) VALUES ('reservation',0),('receipt',0),('cafeOrder',100),('cafeMovement',0),('cafeExpense',0),('guide',0),('tourExpense',0)
 ON CONFLICT (name) DO NOTHING;
 COMMENT ON TABLE kanba_rel.counters IS 'Folios correlativos comerciales. Incrementar con UPDATE RETURNING, nunca SELECT + UPDATE separado; no reiniciar al migrar.';
 
