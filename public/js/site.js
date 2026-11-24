@@ -382,22 +382,32 @@
       if (hero.reviews) setText('heroReviews', hero.reviews);
       if (hero.openText) setText('heroOpen', hero.openText);
       const img = $('#heroImage');
-      if (img && hero.image) { img.src = hero.image; img.alt = hero.imageAlt || img.alt; }
+      if (img && hero.image) {
+        const cleanHeroImg = hero.image.replace(/^\/assets\/img\/kanba-cave-02\.jpg$/, 'images/image_12.png');
+        img.src = cleanHeroImg;
+        img.alt = hero.imageAlt || img.alt;
+      }
     }
 
     if (intro) {
-      setText('introKicker', intro.kicker);
-      setText('introTitle', intro.title);
-      setText('introLead', intro.lead);
+      if (intro.kicker) setText('introKicker', intro.kicker);
+      if (intro.title) setText('introTitle', intro.title);
+      if (intro.lead) setText('introLead', intro.lead);
       const paragraphs = $('#introParagraphs');
-      if (paragraphs) {
+      if (paragraphs && Array.isArray(intro.paragraphs) && intro.paragraphs.length > 0) {
         paragraphs.replaceChildren();
-        (intro.paragraphs || []).forEach((text) => paragraphs.append(el('p', { text })));
+        intro.paragraphs.forEach((text) => paragraphs.append(el('p', { text })));
       }
       const img1 = $('#introImage');
       const img2 = $('#introImage2');
-      if (img1 && intro.image) img1.src = intro.image;
-      if (img2 && intro.image2) img2.src = intro.image2;
+      if (img1 && intro.image) {
+        const cleanImg1 = intro.image.replace(/^\/assets\/img\/kanba-cave-04\.jpg$/, 'images/kanba-waterfall-nature.jpg');
+        img1.src = cleanImg1;
+      }
+      if (img2 && intro.image2) {
+        const cleanImg2 = intro.image2.replace(/^\/assets\/img\/kanba-river-01\.jpg$/, 'images/kanba-river-valley.jpg');
+        img2.src = cleanImg2;
+      }
       const stats = $('#stats');
       if (stats && Array.isArray(intro.stats)) {
         const STAT_ICONS = [
