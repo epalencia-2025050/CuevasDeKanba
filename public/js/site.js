@@ -398,7 +398,9 @@
       if (hero.openText) setText('heroOpen', hero.openText);
       const img = $('#heroImage');
       if (img && hero.image) {
-        const cleanHeroImg = hero.image.replace(/^\/assets\/img\/kanba-cave-02\.jpg$/, 'images/image_12.png');
+        const cleanHeroImg = hero.image
+          .replace(/^\/assets\/img\/kanba-cave-02\.jpg$/, 'images/kanba-hero.jpg')
+          .replace(/^images\/image_12\.png$/, 'images/kanba-hero.jpg');
         img.src = cleanHeroImg;
         img.alt = hero.imageAlt || img.alt;
       }
