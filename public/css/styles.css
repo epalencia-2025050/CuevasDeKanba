@@ -2357,3 +2357,106 @@ svg { display: block; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Skeleton Loading System (Reutilizable & Accesible)
+   ========================================================================== */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(14, 36, 32, 0.06) 25%,
+    rgba(14, 36, 32, 0.13) 50%,
+    rgba(14, 36, 32, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 6px;
+  display: block;
+}
+
+.skeleton-dark {
+  background: linear-gradient(
+    90deg,
+    rgba(246, 241, 230, 0.05) 25%,
+    rgba(246, 241, 230, 0.12) 50%,
+    rgba(246, 241, 230, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+.skeleton-text.sm { height: 10px; width: 60%; }
+.skeleton-text.md { height: 14px; width: 80%; }
+.skeleton-text.lg { height: 22px; width: 50%; }
+
+.skeleton-card {
+  border-radius: var(--r, 18px);
+  background: rgba(14, 36, 32, 0.04);
+  border: 1px solid rgba(14, 36, 32, 0.08);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-tour-card {
+  border-radius: var(--r, 18px);
+  background: #fff;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+.skeleton-tour-card .skeleton-media {
+  height: 240px;
+  width: 100%;
+  border-radius: 0;
+}
+.skeleton-tour-card .skeleton-content {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-gallery-thumb {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: var(--r-sm, 10px);
+}
+
+.skeleton-date-btn {
+  width: 68px;
+  height: 74px;
+  border-radius: 12px;
+  flex: 0 0 auto;
+}
+
+.skeleton-time-btn {
+  height: 52px;
+  border-radius: 10px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeleton-dark {
+    animation: none !important;
+    background: rgba(14, 36, 32, 0.08);
+  }
+  .skeleton-dark {
+    background: rgba(246, 241, 230, 0.08);
+  }
+}

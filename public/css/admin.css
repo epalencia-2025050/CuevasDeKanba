@@ -585,3 +585,120 @@
   cursor: not-allowed;
   opacity: 0.55;
 }
+
+/* ==========================================================================
+   Admin Skeleton Utilities & Wireframe Loader
+   ========================================================================== */
+
+#adminLoadStatus {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+.admin-skeleton-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #f1ecdf;
+}
+
+.admin-skeleton-sidebar {
+  width: 260px;
+  background: linear-gradient(165deg, #133f34, #09251f 72%);
+  padding: 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.admin-skeleton-brand {
+  height: 48px;
+  width: 160px;
+  border-radius: 10px;
+}
+
+.admin-skeleton-nav-item {
+  height: 38px;
+  width: 100%;
+  border-radius: 9px;
+  margin-bottom: 6px;
+}
+
+.admin-skeleton-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin-skeleton-topbar {
+  height: 64px;
+  background: #faf7ee;
+  border-bottom: 1px solid #cfdbcf;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+}
+
+.admin-skeleton-content {
+  padding: clamp(1rem, 3vw, 2.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-skeleton-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.admin-skeleton-kpi {
+  background: #faf7ee;
+  border: 1px solid #d4dfd1;
+  border-radius: 18px;
+  padding: 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-skeleton-card {
+  background: #faf7ee;
+  border: 1px solid #d4dfd1;
+  border-radius: 18px;
+  padding: clamp(1rem, 2vw, 1.8rem);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-skeleton-table {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: rgba(14, 36, 32, 0.03);
+  border-radius: 8px;
+}
+
+.admin-skeleton-cell {
+  height: 14px;
+  border-radius: 4px;
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .admin-skeleton-sidebar {
+    display: none;
+  }
+}

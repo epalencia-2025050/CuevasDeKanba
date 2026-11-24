@@ -316,10 +316,51 @@
   }
 
   /* ====================================================================
+     Skeleton Loading Helpers
+     ==================================================================== */
+
+  function renderTableSkeleton(tbody, cols = 4, rows = 4) {
+    if (!tbody) return;
+    tbody.replaceChildren();
+    for (let r = 0; r < rows; r++) {
+      const tr = document.createElement('tr');
+      for (let c = 0; c < cols; c++) {
+        const td = document.createElement('td');
+        const bar = document.createElement('div');
+        bar.className = 'skeleton';
+        bar.style.height = '14px';
+        bar.style.borderRadius = '4px';
+        bar.style.width = c === 0 ? '70%' : c === 1 ? '90%' : '50%';
+        td.appendChild(bar);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+  }
+
+  function renderKpisSkeleton(container, count = 4) {
+    if (!container) return;
+    container.replaceChildren();
+    for (let i = 0; i < count; i++) {
+      const card = document.createElement('div');
+      card.className = 'kpi';
+      card.innerHTML = `
+        <div class="skeleton" style="height: 11px; width: 50%; margin-bottom: 8px; border-radius: 3px;"></div>
+        <div class="skeleton" style="height: 24px; width: 70%; margin-bottom: 6px; border-radius: 4px;"></div>
+        <div class="skeleton" style="height: 10px; width: 40%; border-radius: 3px;"></div>
+      `;
+      container.appendChild(card);
+    }
+  }
+
+  /* ====================================================================
      Resumen
      ==================================================================== */
 
   async function loadOverview() {
+    renderKpisSkeleton($('#overviewKpis'), 4);
+    renderTableSkeleton($('#upcomingTable'), 4, 3);
+    renderTableSkeleton($('#recentTable'), 4, 3);
     setSync(true);
     try {
       const data = await api('/api/admin/overview');
@@ -518,6 +559,7 @@
      ==================================================================== */
 
   function loadReservations() {
+    renderTableSkeleton($('#reservationsTable'), 6, 4);
     const seq = ++state.reservationSeq;
     const q = $('#reservationSearch')?.value.trim() || '';
     const status = $('#reservationStatus')?.value || 'all';
@@ -1000,6 +1042,21 @@
      ==================================================================== */
 
   async function loadTours() {
+    const grid = $('#toursGrid');
+    if (grid) {
+      grid.replaceChildren();
+      for (let i = 0; i < 3; i++) {
+        const c = document.createElement('div');
+        c.className = 'admin-card';
+        c.innerHTML = `
+          <div class="skeleton" style="height: 140px; border-radius: 10px; margin-bottom: 12px;"></div>
+          <div class="skeleton" style="height: 18px; width: 60%; margin-bottom: 8px; border-radius: 4px;"></div>
+          <div class="skeleton" style="height: 12px; width: 85%; margin-bottom: 6px; border-radius: 3px;"></div>
+          <div class="skeleton" style="height: 12px; width: 70%; border-radius: 3px;"></div>
+        `;
+        grid.appendChild(c);
+      }
+    }
     setSync(true);
     try {
       const data = await api('/api/admin/tours');
@@ -2567,6 +2624,8 @@
 
   // --- Ventas y POS ---
   async function loadCafeSales() {
+    renderKpisSkeleton($('#cafeSalesKpis'), 3);
+    renderTableSkeleton($('#cafeSalesTbody'), 7, 4);
     setSync(true);
     const newSaleBtn = $('#btnNewCafeSale');
     if (newSaleBtn && !newSaleBtn.__posBound) {
@@ -2974,6 +3033,7 @@
 
   // --- Catálogo de Productos y Precios ---
   async function loadCafeProducts() {
+    renderTableSkeleton($('#cafeProductsTbody'), 7, 4);
     setSync(true);
     const catFilter = $('#cafeProductCatFilter')?.value || '';
     const search = ($('#cafeProductSearch')?.value || '').toLowerCase().trim();
@@ -3158,6 +3218,8 @@
   // --- Inventario y Kardex ---
   let activeInvTab = 'stock';
   async function loadCafeInventory() {
+    renderKpisSkeleton($('#cafeInvKpis'), 3);
+    renderTableSkeleton($('#cafeInvStockTbody'), 7, 4);
     setSync(true);
     try {
       const res = await api('/api/admin/cafe/inventory');
@@ -3453,6 +3515,8 @@
 
   // --- Control de Gastos ---
   async function loadCafeExpenses() {
+    renderKpisSkeleton($('#cafeExpensesKpis'), 3);
+    renderTableSkeleton($('#cafeExpensesTbody'), 7, 4);
     setSync(true);
     const from = $('#cafeExpensesFrom')?.value || '';
     const to = $('#cafeExpensesTo')?.value || '';
@@ -3590,6 +3654,8 @@
 
   // --- Estadísticas y Reportes ---
   async function loadCafeReports() {
+    renderKpisSkeleton($('#cafeReportKpis'), 4);
+    renderTableSkeleton($('#cafeTopProductsTbody'), 5, 4);
     setSync(true);
     let from = $('#cafeReportFrom')?.value || '';
     let to = $('#cafeReportTo')?.value || '';
@@ -3767,6 +3833,7 @@
 
   /* 1. Guías Turísticos */
   async function loadGuides() {
+    renderTableSkeleton($('#guidesTbody'), 5, 4);
     setSync(true);
     try {
       const data = await api('/api/admin/guides');
@@ -4098,6 +4165,7 @@
 
   /* 3. Gastos Operativos de Tours */
   async function loadTourExpenses() {
+    renderTableSkeleton($('#tourExpensesTbody'), 7, 4);
     setSync(true);
     const from = $('#tourExpensesFrom')?.value || '';
     const to = $('#tourExpensesTo')?.value || '';
@@ -4250,6 +4318,8 @@
 
   /* 4. Reportes y Exportación de Tours */
   async function loadTourReports() {
+    renderTableSkeleton($('#tourRankingTbody'), 3, 3);
+    renderTableSkeleton($('#tourChannelsTbody'), 4, 2);
     setSync(true);
     const from = $('#tourReportsFrom')?.value || '';
     const to = $('#tourReportsTo')?.value || '';

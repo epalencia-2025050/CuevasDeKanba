@@ -122,12 +122,40 @@
     window.location.replace(fallback);
   }
 
-  function setBusy(on) {
+  function setBusy(on, message = 'Validando credenciales…') {
     form.querySelectorAll('button[type="submit"]').forEach((button) => {
       button.disabled = on;
       if (on) button.classList.add('is-loading');
       else button.classList.remove('is-loading');
     });
+
+    const card = $('#loginCard');
+    if (!card) return;
+    let overlay = $('#loginSkeletonOverlay');
+    if (on) {
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loginSkeletonOverlay';
+        overlay.className = 'login-skeleton-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = `
+          <div class="skeleton skeleton-dark login-skeleton-bar" style="width: 55%; height: 20px;"></div>
+          <div class="skeleton skeleton-dark login-skeleton-bar" style="width: 80%; height: 14px;"></div>
+          <div class="skeleton skeleton-dark login-skeleton-bar" style="width: 100%; height: 42px; border-radius: 12px; margin-top: 8px;"></div>
+          <div class="skeleton skeleton-dark login-skeleton-bar" style="width: 100%; height: 42px; border-radius: 12px;"></div>
+          <div class="skeleton skeleton-dark login-skeleton-bar" style="width: 100%; height: 46px; border-radius: 999px; margin-top: 10px;"></div>
+          <div class="login-skeleton-status">${message}</div>
+        `;
+        card.style.position = 'relative';
+        card.appendChild(overlay);
+      } else {
+        overlay.hidden = false;
+        const statusText = overlay.querySelector('.login-skeleton-status');
+        if (statusText) statusText.textContent = message;
+      }
+    } else if (overlay) {
+      overlay.hidden = true;
+    }
   }
 
   async function api(url, body) {

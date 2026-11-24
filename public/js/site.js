@@ -557,6 +557,52 @@
     items.forEach((text) => wrap.append(el('li', { text })));
   }
 
+  function renderToursSkeleton(count = 3) {
+    const grid = $('#toursGrid');
+    if (!grid) return;
+    grid.replaceChildren();
+    for (let i = 0; i < count; i++) {
+      const card = el('article', { className: 'skeleton-tour-card' }, [
+        el('div', { className: 'skeleton skeleton-media' }),
+        el('div', { className: 'skeleton-content' }, [
+          el('div', { className: 'skeleton skeleton-text sm', style: 'width: 40%;' }),
+          el('div', { className: 'skeleton skeleton-text lg', style: 'width: 75%;' }),
+          el('div', { className: 'skeleton skeleton-text md' }),
+          el('div', { className: 'skeleton skeleton-text md', style: 'width: 90%;' }),
+          el('div', { className: 'skeleton', style: 'height: 44px; border-radius: 999px; margin-top: 8px;' })
+        ])
+      ]);
+      grid.appendChild(card);
+    }
+  }
+
+  function renderGallerySkeleton(count = 6) {
+    const grid = $('#galleryGrid');
+    if (!grid) return;
+    grid.replaceChildren();
+    for (let i = 0; i < count; i++) {
+      grid.appendChild(el('div', { className: 'skeleton skeleton-gallery-thumb' }));
+    }
+  }
+
+  function renderAvailabilitySkeleton() {
+    const strip = $('#dateStrip');
+    if (strip) {
+      if (strip.parentElement) strip.parentElement.hidden = false;
+      strip.replaceChildren();
+      for (let i = 0; i < 7; i++) {
+        strip.appendChild(el('div', { className: 'skeleton skeleton-date-btn' }));
+      }
+    }
+    const wrap = $('#timeSlots');
+    if (wrap) {
+      wrap.replaceChildren();
+      for (let i = 0; i < 4; i++) {
+        wrap.appendChild(el('div', { className: 'skeleton skeleton-time-btn' }));
+      }
+    }
+  }
+
   /* ------------------------------------------------------------------ */
   /* Tours                                                              */
   /* ------------------------------------------------------------------ */
@@ -658,8 +704,8 @@
     state.time = null;
     state.pax = 1;
     state.availability = [];
-    renderDates();
-    renderTimes();
+    if (typeof renderAvailabilitySkeleton === 'function') renderAvailabilitySkeleton();
+    else { renderDates(); renderTimes(); }
     setText('selectedDateLabel', '');
     showAvailabilityNote('Consultando las salidas del tour…');
     renderTourOptions();
@@ -2283,6 +2329,8 @@
     setupMapButtons();
     setupKeyboard();
     setText('year', String(new Date().getFullYear()));
+    renderToursSkeleton();
+    renderGallerySkeleton();
     await loadAuth();
     prefillCafeUser();
 

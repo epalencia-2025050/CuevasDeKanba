@@ -15,7 +15,61 @@
   <link rel="stylesheet" href="css/admin.css">
 </head>
 <body class="admin-body">
-  <p id="adminLoadStatus" role="status">Verificando acceso…</p>
+  <div id="adminLoadStatus" role="status" aria-label="Verificando acceso y cargando administración">
+    <div class="admin-skeleton-shell" aria-hidden="true">
+      <aside class="admin-skeleton-sidebar">
+        <div class="skeleton skeleton-dark admin-skeleton-brand"></div>
+        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+          <div class="skeleton skeleton-dark admin-skeleton-nav-item"></div>
+          <div class="skeleton skeleton-dark admin-skeleton-nav-item" style="width: 85%;"></div>
+          <div class="skeleton skeleton-dark admin-skeleton-nav-item" style="width: 90%;"></div>
+          <div class="skeleton skeleton-dark admin-skeleton-nav-item" style="width: 75%;"></div>
+          <div class="skeleton skeleton-dark admin-skeleton-nav-item" style="width: 80%;"></div>
+        </div>
+      </aside>
+      <div class="admin-skeleton-main">
+        <header class="admin-skeleton-topbar">
+          <div class="skeleton skeleton-text lg" style="width: 220px; margin: 0;"></div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="skeleton" style="width: 140px; height: 36px; border-radius: 8px;"></div>
+            <div class="skeleton" style="width: 38px; height: 38px; border-radius: 50%;"></div>
+          </div>
+        </header>
+        <main class="admin-skeleton-content">
+          <div class="admin-skeleton-kpis">
+            <div class="admin-skeleton-kpi">
+              <div class="skeleton skeleton-text sm"></div>
+              <div class="skeleton skeleton-text lg" style="width: 70%;"></div>
+            </div>
+            <div class="admin-skeleton-kpi">
+              <div class="skeleton skeleton-text sm"></div>
+              <div class="skeleton skeleton-text lg" style="width: 50%;"></div>
+            </div>
+            <div class="admin-skeleton-kpi">
+              <div class="skeleton skeleton-text sm"></div>
+              <div class="skeleton skeleton-text lg" style="width: 65%;"></div>
+            </div>
+            <div class="admin-skeleton-kpi">
+              <div class="skeleton skeleton-text sm"></div>
+              <div class="skeleton skeleton-text lg" style="width: 45%;"></div>
+            </div>
+          </div>
+          <div class="admin-skeleton-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div class="skeleton skeleton-text md" style="width: 200px; margin: 0;"></div>
+              <div class="skeleton" style="width: 110px; height: 32px; border-radius: 6px;"></div>
+            </div>
+            <div class="admin-skeleton-table">
+              <div class="admin-skeleton-row"><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="flex:2;"></div><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="width:80px; flex:none;"></div></div>
+              <div class="admin-skeleton-row"><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="flex:2;"></div><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="width:80px; flex:none;"></div></div>
+              <div class="admin-skeleton-row"><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="flex:2;"></div><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="width:80px; flex:none;"></div></div>
+              <div class="admin-skeleton-row"><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="flex:2;"></div><div class="skeleton admin-skeleton-cell"></div><div class="skeleton admin-skeleton-cell" style="width:80px; flex:none;"></div></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
   <!-- Panel -->
   <div class="admin-shell" id="adminShell" hidden>
     <aside class="admin-sidebar" id="adminSidebar" aria-label="Navegación administrativa">
