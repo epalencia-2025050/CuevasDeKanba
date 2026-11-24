@@ -197,6 +197,20 @@ test('cafeteria: public menu serves active products and supports online ordering
   assert.equal(cashOrder.payment?.brand, 'Efectivo');
   assert.equal(cashOrder.customer.notes, '');
   assert.notEqual(cashOrder.customer.notes, 'null');
+
+  // 4. Order online fails when quantity exceeds stock
+  const overStockRes = await request('/api/cafe/orders', '', 'POST', {
+    paymentMethod: 'cash',
+    items: [{ id: 'tequila', quantity: 35 }],
+    customer: {
+      name: 'Sin Stock Test',
+      phone: '+502 1111 2222',
+      serviceType: 'Para llevar'
+    }
+  });
+  assert.equal(overStockRes.status, 422);
+  const overStockBody = await overStockRes.json();
+  assert.equal(overStockBody.error?.code, 'out_of_stock');
 });
 
 test('cafeteria: admin security guards require admin role', async () => {
@@ -300,6 +314,19 @@ test('cafeteria: admin POS sale automatically generates receipt and logs invento
     assert(mov);
     assert.equal(mov.quantity, -3);
   });
+
+  // Verify POS sale rejects when quantity exceeds stock
+  const overStockPosRes = await request('/api/admin/cafe/sales', adminCookie, 'POST', {
+    items: [{ id: 'gallo-grande', quantity: 9999 }],
+    paymentMethod: 'cash',
+    customer: {
+      name: 'Mario Sin Stock',
+      serviceType: 'En barra'
+    }
+  });
+  assert.equal(overStockPosRes.status, 422);
+  const overStockPosBody = await overStockPosRes.json();
+  assert.equal(overStockPosBody.error?.code, 'out_of_stock');
 });
 
 test('cafeteria: inventory manual movements (in, out, adjustment) enforce stock validity', async () => {

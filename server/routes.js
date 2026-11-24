@@ -2235,6 +2235,9 @@ async function handleApi(req, res, url) {
 
       const qty = parseInt(raw.quantity ?? raw.qty ?? 1, 10);
       if (!Number.isInteger(qty) || qty < 1) throw new AppError(`Cantidad inválida para ${prod.name}.`, 422, 'invalid_quantity');
+      if (typeof prod.stock === 'number' && prod.stock < qty) {
+        throw new AppError(`Stock insuficiente para ${prod.name} (disponible: ${prod.stock}).`, 422, 'out_of_stock');
+      }
 
       const variant = String(raw.variant || '').trim();
       const displayName = variant ? `${prod.name} (${variant})` : prod.name;

@@ -605,6 +605,9 @@ export function prepareCafeOrder(input = {}) {
     if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
       throw new AppError(`Cantidad inválida para ${menuItem.name}.`, 422, 'invalid_quantity');
     }
+    if (typeof menuItem.stock === 'number' && menuItem.stock < qty) {
+      throw new AppError(`Disponibilidad insuficiente para ${menuItem.name} (disponible: ${menuItem.stock}).`, 422, 'out_of_stock');
+    }
     const variant = String(raw?.variant || '').trim();
     const displayName = variant && menuItem.variants?.includes(variant)
       ? `${menuItem.name} (${variant})`
@@ -700,7 +703,7 @@ export function chargeCafeCard(card = {}, total = 0) {
     code: 'approved',
     brand,
     last4,
-    reference: `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`,
+    reference: `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}${randomToken(4).toUpperCase()}`,
     provider: 'KanbaPay Sandbox',
     amount: total,
     currency: 'GTQ'

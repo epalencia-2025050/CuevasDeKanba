@@ -1921,9 +1921,15 @@
       return id;
     }
 
-    function addItem({ id, name, price, category }, delta = 1) {
-      const key = id;
+    function addItem(prod, delta = 1) {
+      const key = prod.id;
       const existing = cart.find((item) => item.key === key);
+      const currentQty = existing ? existing.quantity : 0;
+      const targetQty = currentQty + delta;
+      if (delta > 0 && typeof prod.stock === 'number' && targetQty > prod.stock) {
+        toast(`Solo hay ${prod.stock} disponibles de ${prod.name}.`);
+        return;
+      }
       if (existing) {
         existing.quantity += delta;
         if (existing.quantity <= 0) {
@@ -1932,11 +1938,12 @@
       } else if (delta > 0) {
         cart.push({
           key,
-          id,
-          name,
-          displayName: name,
-          price: Number(price),
-          category: category || '',
+          id: prod.id,
+          name: prod.name,
+          displayName: prod.name,
+          price: Number(prod.price),
+          category: prod.category || '',
+          stock: typeof prod.stock === 'number' ? prod.stock : null,
           quantity: delta
         });
       }
@@ -2295,41 +2302,12 @@
           };
         }
 
-        let orderObj = null;
-        try {
-          const res = await api('/api/cafe/orders', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-          });
-          orderObj = res.order;
-        } catch (err) {
-          if (err.status) throw err;
-          // Modo local / sin servidor activo: procesar en sandbox local con las mismas reglas
-          const digits = (payload.card?.number || '').replace(/\D/g, '');
-          const last4 = isCash ? '—' : (digits.slice(-4) || '4242');
-          if (!isCash && last4 === '0002') {
-            throw new Error('La pasarela rechazó el pago: fondos insuficientes. Prueba otra tarjeta.');
-          }
-          if (!isCash && last4 === '0003') {
-            throw new Error('La pasarela solicita autenticación adicional. Usa otra tarjeta de prueba.');
-          }
-          const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-          orderObj = {
-            code: `CAFE-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 8999 + 1000))}`,
-            total,
-            customer: payload.customer,
-            items: cart.map((i) => ({ ...i, subtotal: i.price * i.quantity })),
-            payment: {
-              method: isCash ? 'cash' : 'card',
-              brand: isCash ? 'Efectivo' : (/^4/.test(digits) ? 'Visa' : /^5/.test(digits) ? 'Mastercard' : 'Tarjeta'),
-              last4,
-              reference: isCash ? `CASH-${Date.now().toString(36).toUpperCase().slice(-6)}` : `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}`
-            },
-            receipt: {
-              number: `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 89999 + 10000))}`
-            }
-          };
-        }
+        const res = await api('/api/cafe/orders', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const orderObj = res.order;
+        if (!orderObj) throw new Error('No se recibió la confirmación del pedido.');
 
         cart = [];
         saveCart();
@@ -2447,6 +2425,9 @@
             li.dataset.itemName = p.name;
             li.dataset.itemPrice = String(p.price);
             li.dataset.itemCategory = p.category;
+            if (typeof p.stock === 'number') li.dataset.itemStock = String(p.stock);
+
+            const isOutOfStock = typeof p.stock === 'number' && p.stock <= 0;
 
             const main = document.createElement('div');
             main.className = 'hope-item-main';
@@ -2454,28 +2435,33 @@
 
             const nameWrap = document.createElement('div');
             nameWrap.className = 'hope-name-wrap';
-            nameWrap.innerHTML = `<span class="hope-name">${p.name}: <strong class="hope-price">${p.price} Q</strong></span>`;
+            const badgeHtml = isOutOfStock ? ' <span class="badge badge-gray" style="font-size:9.5px;margin-left:6px;padding:2px 7px;">Agotado</span>' : '';
+            nameWrap.innerHTML = `<span class="hope-name">${p.name}: <strong class="hope-price">${p.price} Q</strong>${badgeHtml}</span>`;
             main.append(nameWrap);
 
             const controls = document.createElement('div');
             controls.className = 'hope-item-controls';
-            controls.innerHTML = `
-              <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar ${p.name}" disabled>−</button>
-              <span class="hope-qty-val" data-qty-for="${p.id}">0</span>
-              <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar ${p.name}">+ Pedir</button>
-            `;
+            if (isOutOfStock) {
+              controls.innerHTML = `<span style="font-size:11px;color:var(--muted);font-weight:600;padding:4px 8px;">Sin stock</span>`;
+            } else {
+              controls.innerHTML = `
+                <button type="button" class="hope-qty-btn hope-minus" data-action="minus" aria-label="Quitar ${p.name}" disabled>−</button>
+                <span class="hope-qty-val" data-qty-for="${p.id}">0</span>
+                <button type="button" class="hope-qty-btn hope-plus" data-action="plus" aria-label="Agregar ${p.name}">+ Pedir</button>
+              `;
 
-            const minusBtn = controls.querySelector('[data-action="minus"]');
-            const plusBtn = controls.querySelector('[data-action="plus"]');
+              const minusBtn = controls.querySelector('[data-action="minus"]');
+              const plusBtn = controls.querySelector('[data-action="plus"]');
 
-            plusBtn?.addEventListener('click', () => {
-              addItem({ id: p.id, name: p.name, price: p.price, category: p.category }, 1);
-            });
+              plusBtn?.addEventListener('click', () => {
+                addItem(p, 1);
+              });
 
-            minusBtn?.addEventListener('click', () => {
-              const match = cart.find(item => item.id === p.id);
-              if (match) addItem(match, -1);
-            });
+              minusBtn?.addEventListener('click', () => {
+                const match = cart.find(item => item.id === p.id);
+                if (match) addItem(match, -1);
+              });
+            }
 
             li.append(main, controls);
             ul.append(li);
