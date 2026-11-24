@@ -374,13 +374,13 @@
 
 
     if (hero) {
-      setText('heroKicker', hero.kicker);
-      setText('heroTitle', hero.title);
-      setText('heroSubtitle', hero.subtitle);
-      setText('heroText', hero.text);
-      setText('heroRating', hero.rating);
-      setText('heroReviews', hero.reviews);
-      setText('heroOpen', hero.openText);
+      if (hero.kicker) setText('heroKicker', hero.kicker);
+      if (hero.title) setText('heroTitle', hero.title);
+      if (hero.subtitle) setText('heroSubtitle', hero.subtitle);
+      if (hero.text) setText('heroText', hero.text);
+      if (hero.rating) setText('heroRating', hero.rating);
+      if (hero.reviews) setText('heroReviews', hero.reviews);
+      if (hero.openText) setText('heroOpen', hero.openText);
       const img = $('#heroImage');
       if (img && hero.image) { img.src = hero.image; img.alt = hero.imageAlt || img.alt; }
     }
