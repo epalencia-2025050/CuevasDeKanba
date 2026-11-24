@@ -39,6 +39,9 @@ export function createRepository(sql, schema = 'public', controlSql = sql) {
     async readUpload(name) {
       const [row] = await client`SELECT mime,data FROM ${table('kanba_media')} WHERE name=${name}`;
       return row || null;
+    },
+    async deleteUpload(name) {
+      await client`DELETE FROM ${table('kanba_media')} WHERE name=${name}`;
     }
   });
   return {

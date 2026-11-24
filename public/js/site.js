@@ -1226,6 +1226,11 @@
     if (!grid) return;
     const items = galleryItems(filter);
     grid.replaceChildren();
+    if (!items.length) {
+      grid.append(el('p', { className: 'empty-state-text', text: 'No hay imágenes disponibles en esta categoría.' }));
+      setText('photoCount', '0 fotografías');
+      return;
+    }
     items.forEach((item, index) => {
       const button = el('button', {
         className: 'gallery-item',

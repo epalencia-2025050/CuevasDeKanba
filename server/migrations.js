@@ -198,6 +198,40 @@ export const RELATIONAL_SCHEMA = `
     created_by text DEFAULT 'admin',
     created_at timestamptz NOT NULL DEFAULT now()
   );
+
+  -- 13. Contenido del Sitio y Galería
+  CREATE TABLE IF NOT EXISTS kanba_site_content (
+    section text PRIMARY KEY,
+    data jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  -- 14. Cueva y Tours · Guías Turísticos
+  CREATE TABLE IF NOT EXISTS kanba_guides (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    phone text DEFAULT '',
+    languages text[] NOT NULL DEFAULT '{}',
+    notes text DEFAULT '',
+    active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  -- 15. Cueva y Tours · Gastos Operativos
+  CREATE TABLE IF NOT EXISTS kanba_tour_expenses (
+    id text PRIMARY KEY,
+    concept text NOT NULL,
+    category text NOT NULL CHECK (category IN ('equipo', 'guias', 'traslados', 'entradas', 'mantenimiento', 'otros')),
+    amount numeric(10, 2) NOT NULL CHECK (amount > 0),
+    expense_date date NOT NULL,
+    notes text DEFAULT '',
+    created_by text DEFAULT 'admin',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  ALTER TABLE kanba_reservations ADD COLUMN IF NOT EXISTS guide_id text;
+  ALTER TABLE kanba_reservations ADD COLUMN IF NOT EXISTS channel text DEFAULT 'web';
 `;
 
 /**
@@ -415,6 +449,53 @@ async function importDocument(client, d) {
           g.id, g.concept, g.category || 'otros', g.amount || 0,
           g.expenseDate || g.date || new Date().toISOString().slice(0, 10),
           g.notes || '', g.createdBy || 'admin', g.createdAt || new Date().toISOString()
+        ]
+      );
+    }
+  }
+
+  // 11. Contenido del Sitio y Galería
+  if (d.content && typeof d.content === 'object') {
+    for (const [section, data] of Object.entries(d.content)) {
+      if (data !== undefined) {
+        await client.query(
+          `INSERT INTO kanba_site_content (section, data, updated_at)
+           VALUES ($1, $2::jsonb, now())
+           ON CONFLICT (section) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+          [section, JSON.stringify(data)]
+        );
+      }
+    }
+  }
+
+  // 12. Cueva y Tours · Guías Turísticos
+  if (Array.isArray(d.guides)) {
+    for (const g of d.guides) {
+      await client.query(
+        `INSERT INTO kanba_guides (id, name, phone, languages, notes, active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name, phone = EXCLUDED.phone, languages = EXCLUDED.languages,
+           notes = EXCLUDED.notes, active = EXCLUDED.active, updated_at = now()`,
+        [
+          g.id, g.name, g.phone || '', g.languages || [], g.notes || '',
+          g.active !== false, g.createdAt || new Date().toISOString(), g.updatedAt || new Date().toISOString()
+        ]
+      );
+    }
+  }
+
+  // 13. Cueva y Tours · Gastos Operativos
+  if (Array.isArray(d.tourExpenses)) {
+    for (const e of d.tourExpenses) {
+      await client.query(
+        `INSERT INTO kanba_tour_expenses (id, concept, category, amount, expense_date, notes, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          e.id, e.concept, e.category || 'otros', e.amount || 0,
+          e.expenseDate || e.date || new Date().toISOString().slice(0, 10),
+          e.notes || '', e.createdBy || 'admin', e.createdAt || new Date().toISOString()
         ]
       );
     }

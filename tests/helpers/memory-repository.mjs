@@ -13,7 +13,8 @@ export function memoryRepository(initial, onCommit = () => {}) {
       const pendingFiles = new Map(files);
       try {
         const unit = { document: structuredClone(document), dirty: false,
-          async saveUpload(name, mime, data) { pendingFiles.set(name, { mime, data }); } };
+          async saveUpload(name, mime, data) { pendingFiles.set(name, { mime, data }); },
+          async deleteUpload(name) { pendingFiles.delete(name); files.delete(name); } };
         const result = await work(unit);
         if (this.failCommit) throw new Error('Synthetic commit failure');
         if (unit.dirty) { document = structuredClone(unit.document); await onCommit(document); }
@@ -33,6 +34,7 @@ export function memoryRepository(initial, onCommit = () => {}) {
       oauth.delete(state); return entry;
     },
     async readUpload(name) { return files.get(name) || null; },
+    async deleteUpload(name) { files.delete(name); },
     async cleanup() {}, async close() {}, async health() {}
   };
 }

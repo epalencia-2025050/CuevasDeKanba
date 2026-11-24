@@ -20,14 +20,20 @@
     refunds: [],
     closures: [],
     contentTab: 'brand',
-    charts: []
+    charts: [],
+    guides: [],
+    tourExpenses: [],
+    tourReports: null
   };
 
   const VIEW_META = {
     overview: ['Operación', 'Resumen'],
     reservations: ['Operación', 'Reservas'],
+    guides: ['Operación', 'Guías Turísticos'],
     availability: ['Operación', 'Disponibilidad'],
     tours: ['Operación', 'Tours'],
+    'tour-expenses': ['Operación', 'Gastos de Tours'],
+    'tour-reports': ['Operación', 'Reportes de Tours'],
     'cafe-sales': ['Cafetería', 'Ventas y POS'],
     'cafe-products': ['Cafetería', 'Menú y Precios'],
     'cafe-inventory': ['Cafetería', 'Inventario y Kardex'],
@@ -264,8 +270,11 @@
     const loaders = {
       overview: loadOverview,
       reservations: loadReservations,
+      guides: loadGuides,
       availability: loadAvailability,
       tours: loadTours,
+      'tour-expenses': loadTourExpenses,
+      'tour-reports': loadTourReports,
       'cafe-sales': loadCafeSales,
       'cafe-products': loadCafeProducts,
       'cafe-inventory': loadCafeInventory,
@@ -607,6 +616,8 @@
       summary.append(el('div', 'mt'));
       summary.append(detailList([
         ['Experiencia', r.tour?.name || r.tourId],
+        ['Canal', r.channel === 'pos' ? 'Taquilla presencial (POS)' : 'Reserva Web'],
+        ['Guía asignado', r.guideName || 'Sin asignar'],
         ['Fecha', r.dateLong || r.date],
         ['Horario', r.time],
         ['Participantes', `${r.participants}`],
@@ -647,6 +658,12 @@
         receipt.target = '_blank';
         receipt.rel = 'noopener';
         actions.append(receipt);
+
+        const ticket = el('a', 'btn btn-outline btn-compact', 'Imprimir boleto');
+        ticket.href = `/api/admin/reservations/${encodeURIComponent(r.code)}/ticket`;
+        ticket.target = '_blank';
+        ticket.rel = 'noopener';
+        actions.append(ticket);
       }
       const confirmation = el('a', 'btn btn-outline btn-compact', 'Ver confirmación');
       confirmation.href = `/confirmacion.html?code=${encodeURIComponent(r.code)}${token}`;
@@ -701,6 +718,43 @@
       mailSection.append(mailRow);
       mailSection.append(el('div', 'modal-note', 'Los correos se guardan en la bandeja de salida y en data/outbox. Si el SMTP está configurado, también se envían.'));
       body.append(mailSection);
+
+      /* Asignación de Guía */
+      const guideSection = el('div', 'modal-section');
+      guideSection.append(el('h3', '', 'Guía Turístico Asignado'));
+      const guideRow = el('div', 'row');
+      const guideSelect = el('select', 'select-compact');
+      const unassignedOpt = el('option', '', '— Sin guía asignado —');
+      unassignedOpt.value = '';
+      guideSelect.append(unassignedOpt);
+      if (Array.isArray(state.guides)) {
+        state.guides.forEach(g => {
+          const opt = el('option', '', `${g.name} (${(g.languages || []).join(', ')})`);
+          opt.value = g.id;
+          if (r.guideId === g.id) opt.selected = true;
+          guideSelect.append(opt);
+        });
+      }
+      const assignGuideBtn = el('button', 'btn btn-outline btn-compact', 'Asignar guía');
+      assignGuideBtn.type = 'button';
+      assignGuideBtn.addEventListener('click', async () => {
+        busy(assignGuideBtn, true);
+        try {
+          await api(`/api/admin/reservations/${encodeURIComponent(r.code)}/guide`, {
+            method: 'PATCH',
+            body: JSON.stringify({ guideId: guideSelect.value })
+          });
+          toast('Guía asignado exitosamente.');
+          loadReservations();
+        } catch (error) {
+          handleError(error);
+        } finally {
+          busy(assignGuideBtn, false);
+        }
+      });
+      guideRow.append(guideSelect, assignGuideBtn);
+      guideSection.append(guideRow);
+      body.append(guideSection);
 
       /* Cancelación */
       if (r.status === 'pending_payment' || r.status === 'confirmed') {
@@ -1713,11 +1767,20 @@
       preview.rel = 'noopener';
       const remove = el('button', 'btn btn-outline danger', 'Quitar');
       remove.type = 'button';
-      remove.addEventListener('click', () => {
-        if (!window.confirm('¿Quitar esta imagen de la galería? Se aplicará al guardar.')) return;
-        state.content.gallery.splice(index, 1);
-        renderGallery();
-        toast('Imagen quitada. Guarda la galería para publicar.');
+      remove.addEventListener('click', async () => {
+        if (!window.confirm('¿Eliminar esta imagen de la galería de forma definitiva?')) return;
+        busy(remove, true);
+        try {
+          const id = item.id || item.src;
+          const data = await api(`/api/admin/gallery/${encodeURIComponent(id)}`, { method: 'DELETE', body: '{}' });
+          state.content.gallery = clone(data.gallery || []);
+          renderGallery();
+          toast('Imagen eliminada de la galería de forma definitiva.');
+        } catch (error) {
+          handleError(error);
+        } finally {
+          busy(remove, false);
+        }
       });
       actions.append(preview, remove);
       body.append(caption, category, credit, actions);
@@ -1756,24 +1819,33 @@
     actions.append(save, cancel);
     form.append(actions);
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const src = form.elements.namedItem('src')?.value.trim();
       if (!src) {
         toast('La URL de la imagen es obligatoria.');
         return;
       }
-      state.content.gallery = state.content.gallery || [];
-      state.content.gallery.push({
-        id: `img_${Date.now()}`,
-        src,
-        caption: form.elements.namedItem('caption')?.value.trim() || '',
-        category: select.value || 'cueva',
-        credit: form.elements.namedItem('credit')?.value.trim() || ''
-      });
-      closeModal();
-      renderGallery();
-      toast('Imagen añadida. Guarda la galería para publicar.');
+      busy(save, true);
+      try {
+        const data = await api('/api/admin/gallery', {
+          method: 'POST',
+          body: JSON.stringify({
+            src,
+            caption: form.elements.namedItem('caption')?.value.trim() || '',
+            category: select.value || 'cueva',
+            credit: form.elements.namedItem('credit')?.value.trim() || ''
+          })
+        });
+        state.content.gallery = clone(data.gallery || []);
+        closeModal();
+        renderGallery();
+        toast('Imagen añadida a la galería.');
+      } catch (error) {
+        handleError(error);
+      } finally {
+        busy(save, false);
+      }
     });
 
     openModal('Añadir imagen', form, { kicker: 'Galería pública' });
@@ -1871,11 +1943,20 @@
       edit.addEventListener('click', () => openVideoForm(video));
       const remove = el('button', 'btn btn-outline danger', 'Quitar');
       remove.type = 'button';
-      remove.addEventListener('click', () => {
-        if (!window.confirm('¿Quitar este video de la videoteca? Se aplicará al guardar.')) return;
-        state.content.videos.splice(index, 1);
-        renderVideos();
-        toast('Video quitado. Guarda los videos para publicar.');
+      remove.addEventListener('click', async () => {
+        if (!window.confirm('¿Eliminar este video de la videoteca de forma definitiva?')) return;
+        busy(remove, true);
+        try {
+          const id = video.id || video.youtubeId;
+          const data = await api(`/api/admin/videos/${encodeURIComponent(id)}`, { method: 'DELETE', body: '{}' });
+          state.content.videos = clone(data.videos || []);
+          renderVideos();
+          toast('Video eliminado de la videoteca de forma definitiva.');
+        } catch (error) {
+          handleError(error);
+        } finally {
+          busy(remove, false);
+        }
       });
       actions.append(edit, remove);
       body.append(meta, actions);
@@ -1903,30 +1984,34 @@
     cancel.addEventListener('click', closeModal);
     actions.append(save, cancel);
     form.append(actions);
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const youtubeId = form.elements.namedItem('youtubeId')?.value.trim();
       if (!/^[A-Za-z0-9_-]{6,20}$/.test(youtubeId || '')) {
         toast('El ID de YouTube no es válido.');
         return;
       }
-      const data = {
-        id: video?.id || `vid_${Date.now()}`,
-        youtubeId,
-        title: form.elements.namedItem('title')?.value.trim() || 'Video',
-        description: form.elements.namedItem('description')?.value.trim() || '',
-        category: form.elements.namedItem('category')?.value.trim() || 'Cueva'
-      };
-      state.content.videos = state.content.videos || [];
-      if (editing) {
-        const index = state.content.videos.findIndex((v) => v.id === video.id);
-        if (index >= 0) state.content.videos[index] = data;
-      } else {
-        state.content.videos.push(data);
+      busy(save, true);
+      try {
+        const data = await api('/api/admin/videos', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: video?.id || undefined,
+            youtubeId,
+            title: form.elements.namedItem('title')?.value.trim() || 'Video',
+            description: form.elements.namedItem('description')?.value.trim() || '',
+            category: form.elements.namedItem('category')?.value.trim() || 'Cueva'
+          })
+        });
+        state.content.videos = clone(data.videos || []);
+        closeModal();
+        renderVideos();
+        toast(editing ? 'Video actualizado.' : 'Video añadido.');
+      } catch (error) {
+        handleError(error);
+      } finally {
+        busy(save, false);
       }
-      closeModal();
-      renderVideos();
-      toast('Video actualizado. Guarda los videos para publicar.');
     });
     openModal(editing ? 'Editar video' : 'Nuevo video', form, { kicker: 'Videoteca pública' });
   }
@@ -2455,6 +2540,7 @@
     });
 
     bindCafeEvents();
+    bindTourEvents();
   }
 
   /* ====================================================================
@@ -3655,6 +3741,601 @@
     $('#btnUpdateCafeReport')?.addEventListener('click', loadCafeReports);
     $('#btnExportCafeExcel')?.addEventListener('click', exportCafeExcel);
     $('#btnExportCafePdf')?.addEventListener('click', exportCafePdf);
+  }
+
+  /* ====================================================================
+     Cueva y Tours · Guías, Taquilla (POS), Gastos Operativos y Reportes
+     ==================================================================== */
+
+  /* 1. Guías Turísticos */
+  async function loadGuides() {
+    setSync(true);
+    try {
+      const data = await api('/api/admin/guides');
+      state.guides = data.guides || [];
+      renderGuides();
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function renderGuides() {
+    const tbody = $('#guidesTbody');
+    const count = $('#guidesCount');
+    if (count) count.textContent = `${state.guides.length} ${state.guides.length === 1 ? 'guía registrado' : 'guías registrados'}`;
+    if (!tbody) return;
+    tbody.replaceChildren();
+
+    if (!state.guides.length) {
+      const tr = el('tr');
+      tr.innerHTML = '<td colspan="5" class="table-empty">No hay guías registrados todavía. Pulsa "+ Nuevo guía" para añadir el primero.</td>';
+      tbody.append(tr);
+      return;
+    }
+
+    state.guides.forEach(g => {
+      const tr = el('tr');
+      const nameTd = el('td');
+      nameTd.append(el('strong', '', g.name));
+
+      const phoneTd = el('td', '', g.phone || '—');
+
+      const langTd = el('td');
+      const langs = Array.isArray(g.languages) && g.languages.length ? g.languages.join(', ') : 'Español';
+      langTd.textContent = langs;
+
+      const statusTd = el('td');
+      const statusPill = el('span', g.active ? 'badge badge-green' : 'badge badge-gray', g.active ? 'Activo' : 'Inactivo');
+      statusTd.append(statusPill);
+
+      const actionsTd = el('td', 'cell-right');
+      const editBtn = el('button', 'btn btn-outline btn-compact', 'Editar');
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', () => openGuideModal(g));
+
+      const delBtn = el('button', 'btn btn-outline btn-compact', 'Eliminar');
+      delBtn.type = 'button';
+      delBtn.style.color = '#b91c1c';
+      delBtn.style.marginLeft = '6px';
+      delBtn.addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar o desactivar al guía "${g.name}"?`)) return;
+        busy(delBtn, true);
+        try {
+          await api(`/api/admin/guides/${encodeURIComponent(g.id)}`, { method: 'DELETE' });
+          toast('Guía eliminado o desactivado.');
+          loadGuides();
+        } catch (err) {
+          handleError(err);
+        } finally {
+          busy(delBtn, false);
+        }
+      });
+
+      actionsTd.append(editBtn, delBtn);
+      tr.append(nameTd, phoneTd, langTd, statusTd, actionsTd);
+      tbody.append(tr);
+    });
+  }
+
+  function openGuideModal(guide = null) {
+    const isEdit = Boolean(guide && guide.id);
+    const form = el('form', 'stack-form');
+
+    const nameLabel = el('label', 'field');
+    nameLabel.append(el('span', '', 'Nombre completo'));
+    const nameInput = el('input');
+    nameInput.type = 'text';
+    nameInput.required = true;
+    nameInput.value = guide?.name || '';
+    nameInput.placeholder = 'Ej. Pedro Che';
+    nameLabel.append(nameInput);
+
+    const phoneLabel = el('label', 'field');
+    phoneLabel.append(el('span', '', 'Teléfono / WhatsApp'));
+    const phoneInput = el('input');
+    phoneInput.type = 'tel';
+    phoneInput.value = guide?.phone || '';
+    phoneInput.placeholder = 'Ej. +502 5555-1234';
+    phoneLabel.append(phoneInput);
+
+    const langLabel = el('label', 'field');
+    langLabel.append(el('span', '', 'Idiomas que domina (separados por coma)'));
+    const langInput = el('input');
+    langInput.type = 'text';
+    langInput.value = guide?.languages ? guide.languages.join(', ') : 'Español, Q\'eqchi\'';
+    langInput.placeholder = 'Español, Q\'eqchi\', Inglés';
+    langLabel.append(langInput);
+
+    const activeLabel = el('label', 'field-checkbox');
+    const activeCheck = el('input');
+    activeCheck.type = 'checkbox';
+    activeCheck.checked = guide ? guide.active !== false : true;
+    activeLabel.append(activeCheck, el('span', '', 'Guía activo para asignación en tours'));
+
+    const submitBtn = el('button', 'btn btn-primary', isEdit ? 'Guardar cambios' : 'Crear guía');
+    submitBtn.type = 'submit';
+
+    form.append(nameLabel, phoneLabel, langLabel, activeLabel, submitBtn);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      busy(submitBtn, true);
+      try {
+        const payload = {
+          name: nameInput.value.trim(),
+          phone: phoneInput.value.trim(),
+          languages: langInput.value.split(',').map(s => s.trim()).filter(Boolean),
+          active: activeCheck.checked
+        };
+        if (isEdit) {
+          await api(`/api/admin/guides/${encodeURIComponent(guide.id)}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          });
+          toast('Guía actualizado exitosamente.');
+        } else {
+          await api('/api/admin/guides', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          toast('Guía registrado exitosamente.');
+        }
+        closeModal();
+        loadGuides();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal(isEdit ? 'Editar Guía Turístico' : 'Nuevo Guía Turístico', form, { kicker: 'Guías' });
+  }
+
+  /* 2. Taquilla / POS Presencial de Tours */
+  async function openTourPosModal() {
+    setSync(true);
+    let tours = state.tours || [];
+    let guides = state.guides || [];
+    try {
+      if (!tours.length) {
+        const res = await api('/api/tours');
+        tours = (res.tours || []).filter(t => t.active !== false);
+        state.tours = tours;
+      }
+      if (!guides.length) {
+        const resG = await api('/api/admin/guides');
+        guides = (resG.guides || []).filter(g => g.active !== false);
+        state.guides = guides;
+      }
+    } catch (e) {
+      // Continue
+    } finally {
+      setSync(false);
+    }
+
+    if (!tours.length) {
+      toast('No hay tours activos configurados.');
+      return;
+    }
+
+    const form = el('form', 'stack-form');
+
+    const tourLabel = el('label', 'field');
+    tourLabel.append(el('span', '', 'Tour / Experiencia'));
+    const tourSelect = el('select', 'select-compact');
+    tours.forEach(t => {
+      const opt = el('option', '', `${t.name} (Q${Number(t.price).toFixed(2)})`);
+      opt.value = t.id;
+      tourSelect.append(opt);
+    });
+    tourLabel.append(tourSelect);
+
+    const dateLabel = el('label', 'field');
+    dateLabel.append(el('span', '', 'Fecha del recorrido'));
+    const dateInput = el('input');
+    dateInput.type = 'date';
+    dateInput.required = true;
+    dateInput.value = new Date().toISOString().slice(0, 10);
+    dateLabel.append(dateInput);
+
+    const timeLabel = el('label', 'field');
+    timeLabel.append(el('span', '', 'Horario'));
+    const timeSelect = el('select', 'select-compact');
+    timeLabel.append(timeSelect);
+
+    function updateTimes() {
+      timeSelect.replaceChildren();
+      const currentTour = tours.find(t => t.id === tourSelect.value);
+      if (currentTour && Array.isArray(currentTour.times)) {
+        currentTour.times.forEach(tm => {
+          const opt = el('option', '', tm);
+          opt.value = tm;
+          timeSelect.append(opt);
+        });
+      }
+    }
+    updateTimes();
+    tourSelect.addEventListener('change', () => {
+      updateTimes();
+      updateTotal();
+    });
+
+    const paxLabel = el('label', 'field');
+    paxLabel.append(el('span', '', 'Número de personas / Pax'));
+    const paxInput = el('input');
+    paxInput.type = 'number';
+    paxInput.min = '1';
+    paxInput.max = '50';
+    paxInput.value = '1';
+    paxInput.required = true;
+    paxLabel.append(paxInput);
+
+    const totalBox = el('div', 'panel-alert');
+    totalBox.style.background = 'rgba(47, 107, 87, 0.1)';
+    totalBox.style.padding = '12px 14px';
+    totalBox.style.borderRadius = '8px';
+    totalBox.style.marginBottom = '12px';
+    totalBox.style.fontWeight = 'bold';
+    totalBox.style.fontSize = '16px';
+    totalBox.style.color = 'var(--color-primary-dark, #1c4b3d)';
+
+    function updateTotal() {
+      const currentTour = tours.find(t => t.id === tourSelect.value);
+      const pax = parseInt(paxInput.value, 10) || 1;
+      const price = currentTour ? Number(currentTour.price) : 0;
+      const tot = price * pax;
+      totalBox.textContent = `Total a cobrar: ${money(tot)} (Q${price.toFixed(2)} × ${pax} pax)`;
+    }
+    updateTotal();
+    paxInput.addEventListener('input', updateTotal);
+
+    const nameLabel = el('label', 'field');
+    nameLabel.append(el('span', '', 'Nombre del cliente'));
+    const nameInput = el('input');
+    nameInput.type = 'text';
+    nameInput.value = 'Cliente Taquilla';
+    nameInput.required = true;
+    nameLabel.append(nameInput);
+
+    const phoneLabel = el('label', 'field');
+    phoneLabel.append(el('span', '', 'Teléfono'));
+    const phoneInput = el('input');
+    phoneInput.type = 'tel';
+    phoneInput.placeholder = '+502 ...';
+    phoneLabel.append(phoneInput);
+
+    const emailLabel = el('label', 'field');
+    emailLabel.append(el('span', '', 'Correo electrónico (opcional para comprobante)'));
+    const emailInput = el('input');
+    emailInput.type = 'email';
+    emailInput.placeholder = 'cliente@ejemplo.com';
+    emailLabel.append(emailInput);
+
+    const payLabel = el('label', 'field');
+    payLabel.append(el('span', '', 'Forma de pago'));
+    const paySelect = el('select', 'select-compact');
+    paySelect.innerHTML = `
+      <option value="cash">Efectivo</option>
+      <option value="card">Tarjeta de débito / crédito</option>
+      <option value="transfer">Transferencia bancaria</option>
+    `;
+    payLabel.append(paySelect);
+
+    const guideLabel = el('label', 'field');
+    guideLabel.append(el('span', '', 'Asignar guía turístico (opcional)'));
+    const guideSelect = el('select', 'select-compact');
+    const noGuideOpt = el('option', '', '— Sin guía asignado de momento —');
+    noGuideOpt.value = '';
+    guideSelect.append(noGuideOpt);
+    guides.forEach(g => {
+      const opt = el('option', '', `${g.name} (${(g.languages || []).join(', ')})`);
+      opt.value = g.id;
+      guideSelect.append(opt);
+    });
+    guideLabel.append(guideSelect);
+
+    const submitBtn = el('button', 'btn btn-primary', 'Emitir Venta y Generar Boleto');
+    submitBtn.type = 'submit';
+    submitBtn.style.marginTop = '12px';
+
+    form.append(tourLabel, dateLabel, timeLabel, paxLabel, totalBox, nameLabel, phoneLabel, emailLabel, payLabel, guideLabel, submitBtn);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      busy(submitBtn, true);
+      try {
+        const payload = {
+          tourId: tourSelect.value,
+          date: dateInput.value,
+          time: timeSelect.value,
+          participants: parseInt(paxInput.value, 10),
+          customerName: nameInput.value.trim(),
+          customerPhone: phoneInput.value.trim(),
+          customerEmail: emailInput.value.trim(),
+          paymentMethod: paySelect.value,
+          guideId: guideSelect.value || null
+        };
+        const res = await api('/api/admin/tours/pos/sale', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        toast(`Venta registrada. Código: ${res.reservation.code}`);
+        closeModal();
+        if (res.ticketUrl) {
+          window.open(res.ticketUrl, '_blank');
+        }
+        loadReservations();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal('Venta Presencial en Taquilla (POS Tours)', form, { kicker: 'Taquilla' });
+  }
+
+  /* 3. Gastos Operativos de Tours */
+  async function loadTourExpenses() {
+    setSync(true);
+    const from = $('#tourExpensesFrom')?.value || '';
+    const to = $('#tourExpensesTo')?.value || '';
+    const category = $('#tourExpensesCategory')?.value || 'all';
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (category !== 'all') params.set('category', category);
+
+    try {
+      const res = await api(`/api/admin/tours/expenses?${params}`);
+      state.tourExpenses = res.expenses || [];
+      renderTourExpenses(res.total || 0);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function renderTourExpenses(totalAmount = 0) {
+    const tbody = $('#tourExpensesTbody');
+    const totalEl = $('#tourExpensesTotal');
+    const countEl = $('#tourExpensesCount');
+    if (totalEl) totalEl.textContent = money(totalAmount);
+    if (countEl) countEl.textContent = `${state.tourExpenses.length} gastos registrados`;
+    if (!tbody) return;
+    tbody.replaceChildren();
+
+    if (!state.tourExpenses.length) {
+      const tr = el('tr');
+      tr.innerHTML = '<td colspan="8" class="table-empty">No hay gastos operativos registrados en este período.</td>';
+      tbody.append(tr);
+      return;
+    }
+
+    state.tourExpenses.forEach(exp => {
+      const tr = el('tr');
+      tr.innerHTML = `
+        <td><code>${exp.id}</code></td>
+        <td>${exp.expenseDate}</td>
+        <td><strong>${exp.concept}</strong></td>
+        <td><span class="badge badge-gray">${exp.category}</span></td>
+        <td style="text-align:right;font-weight:bold;color:#b91c1c;">${money(exp.amount)}</td>
+        <td>${exp.notes || '—'}</td>
+        <td>${exp.createdBy || 'Admin'}</td>
+      `;
+      const actionsTd = el('td', 'cell-right');
+      const delBtn = el('button', 'btn btn-outline btn-compact', 'Eliminar');
+      delBtn.type = 'button';
+      delBtn.style.color = '#b91c1c';
+      delBtn.addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar gasto "${exp.concept}" de ${money(exp.amount)}?`)) return;
+        busy(delBtn, true);
+        try {
+          await api(`/api/admin/tours/expenses/${encodeURIComponent(exp.id)}`, { method: 'DELETE' });
+          toast('Gasto eliminado.');
+          loadTourExpenses();
+        } catch (err) {
+          handleError(err);
+        } finally {
+          busy(delBtn, false);
+        }
+      });
+      actionsTd.append(delBtn);
+      tr.append(actionsTd);
+      tbody.append(tr);
+    });
+  }
+
+  function openTourExpenseModal() {
+    const form = el('form', 'stack-form');
+
+    const dateLabel = el('label', 'field');
+    dateLabel.append(el('span', '', 'Fecha del gasto'));
+    const dateInput = el('input');
+    dateInput.type = 'date';
+    dateInput.required = true;
+    dateInput.value = new Date().toISOString().slice(0, 10);
+    dateLabel.append(dateInput);
+
+    const conceptLabel = el('label', 'field');
+    conceptLabel.append(el('span', '', 'Concepto / Descripción'));
+    const conceptInput = el('input');
+    conceptInput.type = 'text';
+    conceptInput.required = true;
+    conceptInput.placeholder = 'Ej. Linternas de cabeza y pilas, honorarios de guía...';
+    conceptLabel.append(conceptInput);
+
+    const catLabel = el('label', 'field');
+    catLabel.append(el('span', '', 'Clasificación'));
+    const catSelect = el('select', 'select-compact');
+    catSelect.innerHTML = `
+      <option value="equipo">Equipo y seguridad</option>
+      <option value="guias">Honorarios de guías</option>
+      <option value="traslados">Transporte y traslados</option>
+      <option value="entradas">Entradas / permisos</option>
+      <option value="mantenimiento">Mantenimiento de ruta y cueva</option>
+      <option value="otros">Otros gastos operativos</option>
+    `;
+    catLabel.append(catSelect);
+
+    const amountLabel = el('label', 'field');
+    amountLabel.append(el('span', '', 'Monto (Q)'));
+    const amountInput = el('input');
+    amountInput.type = 'number';
+    amountInput.step = '0.01';
+    amountInput.min = '0.01';
+    amountInput.required = true;
+    amountInput.placeholder = '0.00';
+    amountLabel.append(amountInput);
+
+    const notesLabel = el('label', 'field');
+    notesLabel.append(el('span', '', 'Notas u observaciones adicionales'));
+    const notesInput = el('textarea');
+    notesInput.rows = 2;
+    notesLabel.append(notesInput);
+
+    const submitBtn = el('button', 'btn btn-primary', 'Registrar Gasto de Tour');
+    submitBtn.type = 'submit';
+
+    form.append(dateLabel, conceptLabel, catLabel, amountLabel, notesLabel, submitBtn);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      busy(submitBtn, true);
+      try {
+        await api('/api/admin/tours/expenses', {
+          method: 'POST',
+          body: JSON.stringify({
+            expenseDate: dateInput.value,
+            concept: conceptInput.value.trim(),
+            category: catSelect.value,
+            amount: parseFloat(amountInput.value),
+            notes: notesInput.value.trim()
+          })
+        });
+        toast('Gasto operativo registrado.');
+        closeModal();
+        loadTourExpenses();
+      } catch (err) {
+        handleError(err);
+      } finally {
+        busy(submitBtn, false);
+      }
+    });
+
+    openModal('Registrar Gasto Operativo de Tours', form, { kicker: 'Gastos Tours' });
+  }
+
+  /* 4. Reportes y Exportación de Tours */
+  async function loadTourReports() {
+    setSync(true);
+    const from = $('#tourReportsFrom')?.value || '';
+    const to = $('#tourReportsTo')?.value || '';
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+
+    try {
+      const res = await api(`/api/admin/tours/reports?${params}`);
+      state.tourReports = res;
+      renderTourReports(res);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function renderTourReports(data) {
+    if (!data) return;
+    const sum = data.summary || {};
+    const revEl = $('#tourKpiRevenue');
+    if (revEl) revEl.textContent = money(sum.totalRevenue || 0);
+    const bkEl = $('#tourKpiBookings');
+    if (bkEl) bkEl.textContent = `${sum.totalBookings || 0} reservas · ${sum.totalParticipants || 0} pax`;
+    const expEl = $('#tourKpiExpenses');
+    if (expEl) expEl.textContent = money(sum.totalExpenses || 0);
+    const expCountEl = $('#tourKpiExpensesCount');
+    if (expCountEl) expCountEl.textContent = `${sum.expenseCount || 0} gastos operativos`;
+    const netEl = $('#tourKpiNetProfit');
+    if (netEl) netEl.textContent = money(sum.netProfit || 0);
+    const margEl = $('#tourKpiMargin');
+    if (margEl) margEl.textContent = `${(sum.profitMargin || 0).toFixed(1)}% margen`;
+
+    // Rankings
+    const rankTbody = $('#tourRankingTbody');
+    if (rankTbody) {
+      rankTbody.replaceChildren();
+      const ranking = data.toursRanking || [];
+      if (!ranking.length) {
+        const tr = el('tr');
+        tr.innerHTML = '<td colspan="3" class="table-empty">Sin ventas en el período seleccionado.</td>';
+        rankTbody.append(tr);
+      } else {
+        ranking.forEach((rk, idx) => {
+          const tr = el('tr');
+          tr.innerHTML = `
+            <td><strong>#${idx + 1} ${rk.tourName}</strong></td>
+            <td style="text-align:right;">${rk.participants} pax (${rk.bookings} res)</td>
+            <td style="text-align:right;font-weight:bold;color:#27604e;">${money(rk.revenue)}</td>
+          `;
+          rankTbody.append(tr);
+        });
+      }
+    }
+
+    // Channels
+    const chanTbody = $('#tourChannelsTbody');
+    if (chanTbody) {
+      chanTbody.replaceChildren();
+      const ch = data.channels || {};
+      const web = ch.web || { bookings: 0, participants: 0, total: 0 };
+      const pos = ch.pos || { bookings: 0, participants: 0, total: 0 };
+
+      const trWeb = el('tr');
+      trWeb.innerHTML = `
+        <td><span class="badge badge-gray">Web / Online</span></td>
+        <td style="text-align:right;">${web.bookings}</td>
+        <td style="text-align:right;">${web.participants} pax</td>
+        <td style="text-align:right;font-weight:bold;">${money(web.total)}</td>
+      `;
+      const trPos = el('tr');
+      trPos.innerHTML = `
+        <td><span class="badge badge-green">Taquilla presencial (POS)</span></td>
+        <td style="text-align:right;">${pos.bookings}</td>
+        <td style="text-align:right;">${pos.participants} pax</td>
+        <td style="text-align:right;font-weight:bold;">${money(pos.total)}</td>
+      `;
+      chanTbody.append(trWeb, trPos);
+    }
+  }
+
+  function exportTourExcel() {
+    const from = $('#tourReportsFrom')?.value || '';
+    const to = $('#tourReportsTo')?.value || '';
+    window.location.href = `/api/admin/tours/reports/export?format=csv&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  }
+
+  function exportTourPdf() {
+    const from = $('#tourReportsFrom')?.value || '';
+    const to = $('#tourReportsTo')?.value || '';
+    window.open(`/api/admin/tours/reports/export?format=pdf&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, '_blank');
+  }
+
+  function bindTourEvents() {
+    $('#openTourPosBtn')?.addEventListener('click', openTourPosModal);
+    $('#refreshGuides')?.addEventListener('click', loadGuides);
+    $('#newGuideBtn')?.addEventListener('click', () => openGuideModal(null));
+    $('#filterTourExpenses')?.addEventListener('click', loadTourExpenses);
+    $('#tourExpensesCategory')?.addEventListener('change', loadTourExpenses);
+    $('#newTourExpenseBtn')?.addEventListener('click', () => openTourExpenseModal());
+    $('#filterTourReports')?.addEventListener('click', loadTourReports);
+    $('#tourExportExcel')?.addEventListener('click', exportTourExcel);
+    $('#tourExportPdf')?.addEventListener('click', exportTourPdf);
   }
 
   function init() {

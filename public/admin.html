@@ -38,6 +38,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 3v4M16 3v4M3 10h18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
           Reservas
         </button>
+        <button type="button" class="nav-item" data-view="guides">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          Guías
+        </button>
         <button type="button" class="nav-item" data-view="availability">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V9m5 11V4m5 16v-7m5 7V6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
           Disponibilidad
@@ -45,6 +49,14 @@
         <button type="button" class="nav-item" data-view="tours">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17 9 7l4 6 3-4 5 8H3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7" cy="6" r="1.6" fill="currentColor"/></svg></span>
           Tours
+        </button>
+        <button type="button" class="nav-item" data-view="tour-expenses">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Gastos Tours
+        </button>
+        <button type="button" class="nav-item" data-view="tour-reports">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          Reportes Tours
         </button>
         <p class="nav-label">Cafetería</p>
         <button type="button" class="nav-item" data-view="cafe-sales">
@@ -189,10 +201,39 @@
               <option value="expired">Expiradas</option>
             </select>
             <button class="btn btn-primary btn-compact" type="button" id="refreshReservations">Actualizar</button>
+            <button class="btn btn-outline btn-compact" type="button" id="openTourPosBtn">+ Venta en taquilla (POS)</button>
           </div>
           <div class="admin-card no-pad">
             <div class="list-head"><span id="reservationCount">—</span><span class="muted">Haz clic en una reserva para gestionarla.</span></div>
             <div class="table-wrap"><table class="data-table reservations-table" id="reservationsTable"></table></div>
+          </div>
+        </section>
+
+        <!-- Guías Turísticos -->
+        <section class="admin-view" id="view-guides" data-view-panel="guides" hidden>
+          <div class="toolbar">
+            <span class="toolbar-note" id="guidesNote">Equipo de guías autorizados para tours y recorridos en cuevas.</span>
+            <div class="toolbar-actions">
+              <button class="btn btn-outline btn-compact" type="button" id="refreshGuides">Actualizar</button>
+              <button class="btn btn-primary btn-compact" type="button" id="newGuideBtn">+ Nuevo guía</button>
+            </div>
+          </div>
+          <div class="admin-card no-pad">
+            <div class="list-head"><span id="guidesCount">—</span><span class="muted">Administra los guías disponibles para asignación a tours.</span></div>
+            <div class="table-wrap">
+              <table class="data-table" id="guidesTable">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Teléfono</th>
+                    <th>Idiomas</th>
+                    <th>Estado</th>
+                    <th style="text-align:right;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="guidesTbody"></tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -246,6 +287,111 @@
             <button type="button" data-tour-filter="featured" aria-pressed="false">Destacados</button>
           </div>
           <div class="tour-admin-grid" id="toursGrid"></div>
+        </section>
+
+        <!-- Gastos Operativos de Tours -->
+        <section class="admin-view" id="view-tour-expenses" data-view-panel="tour-expenses" hidden>
+          <div class="toolbar">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="date" id="tourExpensesFrom" class="select-compact">
+              <span>al</span>
+              <input type="date" id="tourExpensesTo" class="select-compact">
+              <select id="tourExpensesCategory" class="select-compact">
+                <option value="all">Todas las categorías</option>
+                <option value="equipo">Equipo y seguridad</option>
+                <option value="guias">Honorarios de guías</option>
+                <option value="traslados">Transporte y traslados</option>
+                <option value="entradas">Entradas / permisos</option>
+                <option value="mantenimiento">Mantenimiento de ruta</option>
+                <option value="otros">Otros</option>
+              </select>
+              <button class="btn btn-outline btn-compact" type="button" id="filterTourExpenses">Filtrar</button>
+            </div>
+            <button class="btn btn-primary btn-compact" type="button" id="newTourExpenseBtn">+ Registrar gasto</button>
+          </div>
+          <div class="admin-grid two" style="margin-bottom:20px;">
+            <div class="kpi-card">
+              <div class="kpi-label">Total Gastos Operativos de Tours</div>
+              <div class="kpi-value" id="tourExpensesTotal">Q0.00</div>
+              <div class="kpi-meta" id="tourExpensesCount">0 gastos registrados</div>
+            </div>
+          </div>
+          <div class="admin-card no-pad">
+            <div class="table-wrap">
+              <table class="data-table" id="tourExpensesTable">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Categoría</th>
+                    <th style="text-align:right;">Monto (Q)</th>
+                    <th>Notas</th>
+                    <th>Registrado por</th>
+                    <th style="text-align:right;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tourExpensesTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Reportes Cueva y Tours -->
+        <section class="admin-view" id="view-tour-reports" data-view-panel="tour-reports" hidden>
+          <div class="toolbar">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="date" id="tourReportsFrom" class="select-compact">
+              <span>al</span>
+              <input type="date" id="tourReportsTo" class="select-compact">
+              <button class="btn btn-outline btn-compact" type="button" id="filterTourReports">Filtrar</button>
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn btn-outline btn-compact" type="button" id="tourExportExcel">Exportar Excel (CSV)</button>
+              <button class="btn btn-primary btn-compact" type="button" id="tourExportPdf">Exportar PDF</button>
+            </div>
+          </div>
+          <div class="admin-grid three" style="margin-bottom:20px;">
+            <div class="kpi-card">
+              <div class="kpi-label">Ingresos Totales (Tours)</div>
+              <div class="kpi-value" id="tourKpiRevenue">Q0.00</div>
+              <div class="kpi-meta" id="tourKpiBookings">0 reservas confirmadas</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Gastos Operativos (Tours)</div>
+              <div class="kpi-value" id="tourKpiExpenses" style="color:#b91c1c;">Q0.00</div>
+              <div class="kpi-meta" id="tourKpiExpensesCount">0 gastos registrados</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Margen Operativo Neto</div>
+              <div class="kpi-value" id="tourKpiNetProfit">Q0.00</div>
+              <div class="kpi-meta" id="tourKpiMargin">0% margen</div>
+            </div>
+          </div>
+          <div class="admin-grid two" style="margin-bottom:20px;">
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Ranking</span><h2>Tours más vendidos</h2></div></div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Tour</th><th style="text-align:right;">Participantes</th><th style="text-align:right;">Ingresos (Q)</th></tr>
+                  </thead>
+                  <tbody id="tourRankingTbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="admin-card">
+              <div class="card-head"><div><span class="card-kicker">Canales</span><h2>Ventas por canal (Web vs Taquilla)</h2></div></div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Canal</th><th style="text-align:right;">Reservas</th><th style="text-align:right;">Participantes</th><th style="text-align:right;">Total (Q)</th></tr>
+                  </thead>
+                  <tbody id="tourChannelsTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Contenido -->

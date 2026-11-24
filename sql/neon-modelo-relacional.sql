@@ -459,6 +459,33 @@ CREATE TABLE IF NOT EXISTS kanba_rel.kanba_cafe_expenses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Cueva y Tours: Guías turísticos
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_guides (
+  id TEXT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  phone VARCHAR(40) DEFAULT '',
+  languages TEXT[] NOT NULL DEFAULT '{}',
+  notes TEXT DEFAULT '',
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cueva y Tours: Gastos operativos
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_tour_expenses (
+  id TEXT PRIMARY KEY,
+  concept VARCHAR(200) NOT NULL,
+  category VARCHAR(40) NOT NULL CHECK (category IN ('equipo','guias','traslados','entradas','mantenimiento','otros')),
+  amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  expense_date DATE NOT NULL,
+  notes TEXT DEFAULT '',
+  created_by TEXT DEFAULT 'admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE kanba_rel.reservations ADD COLUMN IF NOT EXISTS guide_id TEXT;
+ALTER TABLE kanba_rel.reservations ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'web';
+
 -- updated_at es responsabilidad del motor para las tablas que lo incluyen.
 CREATE OR REPLACE FUNCTION kanba_rel.touch_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at := now(); RETURN NEW; END;

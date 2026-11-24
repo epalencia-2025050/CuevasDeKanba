@@ -5,7 +5,7 @@ import { getRuntime } from './runtime.js';
 import { safeErrorMessage } from './safe-errors.js';
 import { readWebBody } from './web-http.js';
 import {
-  validateBookingPolicy, rotateReservationToken, saveUploadToDb,
+  validateBookingPolicy, rotateReservationToken, saveUploadToDb, deleteUploadFromDb,
   getDb, saveDb, publicSite, publicTour, buildAvailability, operatesOn, normalizeWeekday,
   createReservation, getReservation, findTour, closeExpiredHolds, seatsTaken,
   validateCustomer, dateToEpoch, formatDateLong, isoAddDays, todayISO, dayOfWeek,
@@ -13,7 +13,9 @@ import {
   nextCafeOrderCode, prepareCafeOrder, chargeCafeCard,
   getCafeProducts, getCafeSupplies, nextCafeMovementCode, nextCafeExpenseId, deductCafeInventory,
   registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared,
-  createUserSession, registerGoogleUser, linkGoogleAccount
+  createUserSession, registerGoogleUser, linkGoogleAccount,
+  getGuides, findGuide, saveGuide, deleteGuide, assignGuideToReservation,
+  createInPersonTourSale, getTourExpenses, nextTourExpenseId
 } from './store.js';
 import { hashPassword, verifyPassword, randomToken, safeEqual } from './security.js';
 import { paymentsEnabled, requireGateway, chargeAmount, refundLatePayment, refundReservation, verifiedEvent } from './gateway.js';
@@ -295,6 +297,9 @@ function reservationView(r, { admin = false } = {}) {
     unitPrice: r.unitPrice,
     total: r.total,
     currency: r.currency,
+    guideId: r.guideId || null,
+    guideName: r.guideName || '',
+    channel: r.channel || 'web',
     tour: tour ? {
       id: tour.id,
       name: tour.name,
@@ -641,6 +646,11 @@ function cleanContent(input) {
 async function handleApi(req, res, url) {
   const method = req.method;
   const p = url.pathname;
+
+  const csvEscape = (val) => {
+    const s = String(val ?? '').replace(/"/g, '""');
+    return /[",\n\r]/.test(s) ? `"${s}"` : s;
+  };
 
   /* ---------- Public ---------- */
   if (method === 'GET' && p === '/api/health') {
@@ -1210,6 +1220,431 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, grid });
   }
 
+  /* ---------- Cueva y Tours · Asignación de Guías y Taquilla ---------- */
+
+  // Asignar / Desasignar guía a reservación
+  m = p.match(/^\/api\/admin\/reservations\/([A-Za-z0-9-]+)\/guide$/);
+  if (method === 'PATCH' && m) {
+    const body = await readJson(req);
+    const code = m[1];
+    const guideId = body.guideId ? String(body.guideId).trim() : null;
+    const reservation = assignGuideToReservation(code, guideId);
+    return sendJson(res, 200, { ok: true, reservation: reservationView(reservation, { admin: true }) });
+  }
+
+  // Boleto / Comprobante imprimible de tour
+  m = p.match(/^\/api\/admin\/reservations\/([A-Za-z0-9-]+)\/ticket$/);
+  if (method === 'GET' && m) {
+    const r = getDb().reservations.find(x => x.code === m[1]);
+    if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Boleto de Ingreso · ${r.code}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; padding: 20px; margin: 0; }
+    .ticket-card { max-width: 420px; margin: 0 auto; background: #fff; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .header { text-align: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 16px; }
+    .header h1 { margin: 0; font-size: 20px; color: #0284c7; text-transform: uppercase; letter-spacing: 1px; }
+    .header p { margin: 4px 0 0; font-size: 13px; color: #64748b; }
+    .code-badge { display: inline-block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-weight: 700; font-size: 16px; padding: 6px 12px; border-radius: 6px; margin: 10px 0; }
+    .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+    .row .label { color: #64748b; }
+    .row .value { font-weight: 600; text-align: right; }
+    .total-box { background: #f8fafc; border-radius: 8px; padding: 12px; margin: 16px 0; border: 1px solid #e2e8f0; }
+    .total-box .row { margin: 0; font-size: 16px; font-weight: bold; color: #0f172a; }
+    .instructions { font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 16px; line-height: 1.4; text-align: center; }
+    .print-btn { display: block; width: 100%; margin-top: 16px; padding: 10px; background: #0284c7; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    @media print { .print-btn { display: none; } body { padding: 0; background: #fff; } .ticket-card { box-shadow: none; border-color: #000; } }
+  </style>
+</head>
+<body>
+  <div class="ticket-card">
+    <div class="header">
+      <h1>K’anba Cuevas Vivas</h1>
+      <p>Lanquín, Alta Verapaz · Boleto de Ingreso</p>
+      <div class="code-badge">${r.code}</div>
+      ${r.receipt?.number ? `<p style="font-size:12px;margin:2px 0;">Recibo Nº: <strong>${r.receipt.number}</strong></p>` : ''}
+    </div>
+    <div class="row"><span class="label">Tour:</span><span class="value">${r.tourName}</span></div>
+    <div class="row"><span class="label">Fecha:</span><span class="value">${r.date}</span></div>
+    <div class="row"><span class="label">Horario:</span><span class="value">${r.time}</span></div>
+    <div class="row"><span class="label">Participantes:</span><span class="value">${r.participants} persona(s)</span></div>
+    <div class="row"><span class="label">Titular:</span><span class="value">${r.customer.name}</span></div>
+    ${r.guideName ? `<div class="row"><span class="label">Guía:</span><span class="value">${r.guideName}</span></div>` : ''}
+    <div class="row"><span class="label">Canal:</span><span class="value">${r.channel === 'pos' ? 'Taquilla presencial' : 'Web en línea'}</span></div>
+    <div class="row"><span class="label">Medio de pago:</span><span class="value">${r.payment?.method || 'Tarjeta'}</span></div>
+    <div class="total-box">
+      <div class="row"><span>Total Pagado:</span><span>Q ${Number(r.total).toFixed(2)}</span></div>
+    </div>
+    <div class="instructions">
+      Presenta este comprobante al inicio del recorrido en la recepción de K’anba.<br>
+      Equipo incluido según tour (linterna, casco, chaleco). ¡Disfruta la experiencia!
+    </div>
+    <button class="print-btn" onclick="window.print()">Imprimir Boleto</button>
+  </div>
+</body>
+</html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.writeHead(200);
+    return res.end(html);
+  }
+
+  // Taquilla / POS: Venta presencial de tour
+  if (method === 'POST' && p === '/api/admin/tours/pos/sale') {
+    const body = await readJson(req);
+    const session = requireAdmin(req);
+    const reservation = createInPersonTourSale(body, { adminUser: session?.user });
+    return sendJson(res, 201, {
+      ok: true,
+      reservation: reservationView(reservation, { admin: true }),
+      receiptNumber: reservation.receipt?.number,
+      ticketUrl: `/api/admin/reservations/${encodeURIComponent(reservation.code)}/ticket`
+    });
+  }
+
+  // Guías Turísticos CRUD
+  if (method === 'GET' && p === '/api/admin/guides') {
+    return sendJson(res, 200, { ok: true, guides: getGuides() });
+  }
+
+  if (method === 'POST' && p === '/api/admin/guides') {
+    const body = await readJson(req);
+    const guide = saveGuide(body);
+    return sendJson(res, 201, { ok: true, guide });
+  }
+
+  m = p.match(/^\/api\/admin\/guides\/([A-Za-z0-9_-]+)$/);
+  if (method === 'PUT' && m) {
+    const body = await readJson(req);
+    const guide = saveGuide({ ...body, id: m[1] });
+    return sendJson(res, 200, { ok: true, guide });
+  }
+
+  if (method === 'DELETE' && m) {
+    const result = deleteGuide(m[1]);
+    return sendJson(res, 200, { ok: true, ...result });
+  }
+
+  // Gastos de Cueva y Tours CRUD
+  if (method === 'GET' && p === '/api/admin/tours/expenses') {
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    const category = url.searchParams.get('category');
+    let expenses = getTourExpenses();
+    if (from) expenses = expenses.filter(e => (e.expenseDate || e.date) >= from);
+    if (to) expenses = expenses.filter(e => (e.expenseDate || e.date) <= to);
+    if (category && category !== 'all') expenses = expenses.filter(e => e.category === category);
+    const total = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    return sendJson(res, 200, { ok: true, expenses, total: Math.round(total * 100) / 100 });
+  }
+
+  if (method === 'POST' && p === '/api/admin/tours/expenses') {
+    const body = await readJson(req);
+    const concept = String(body.concept || '').trim();
+    const category = String(body.category || 'otros').trim().toLowerCase();
+    const amount = Number(body.amount);
+    const expenseDate = String(body.expenseDate || body.date || todayISO()).trim();
+    const notes = String(body.notes || '').trim();
+
+    if (concept.length < 2) throw new AppError('El concepto del gasto es requerido.', 422, 'validation');
+    const validCats = ['equipo', 'guias', 'traslados', 'entradas', 'mantenimiento', 'otros'];
+    if (!validCats.includes(category)) {
+      throw new AppError(`Categoría de gasto no válida. Usa: ${validCats.join(', ')}.`, 422, 'validation');
+    }
+    if (!Number.isFinite(amount) || amount <= 0) throw new AppError('El monto debe ser un número positivo.', 422, 'validation');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) throw new AppError('Fecha inválida (YYYY-MM-DD).', 422, 'validation');
+
+    const d = getDb();
+    const id = nextTourExpenseId();
+    const expense = {
+      id,
+      concept,
+      category,
+      amount: Math.round(amount * 100) / 100,
+      expenseDate,
+      notes,
+      createdBy: 'admin',
+      createdAt: new Date().toISOString()
+    };
+    d.tourExpenses = d.tourExpenses || [];
+    d.tourExpenses.unshift(expense);
+    saveDb();
+    return sendJson(res, 201, { ok: true, expense });
+  }
+
+  m = p.match(/^\/api\/admin\/tours\/expenses\/([A-Za-z0-9_-]+)$/);
+  if (method === 'DELETE' && m) {
+    const d = getDb();
+    d.tourExpenses = d.tourExpenses || [];
+    const idx = d.tourExpenses.findIndex(e => e.id === m[1]);
+    if (idx === -1) throw new AppError('Gasto no encontrado.', 404, 'not_found');
+    d.tourExpenses.splice(idx, 1);
+    saveDb();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Reportes y Estadísticas de Cueva y Tours
+  if (method === 'GET' && p === '/api/admin/tours/reports') {
+    const d = getDb();
+    const from = url.searchParams.get('from') || `${todayISO().slice(0, 7)}-01`;
+    const to = url.searchParams.get('to') || todayISO();
+
+    const confirmed = (d.reservations || []).filter(r => {
+      const day = r.date || r.createdAt.slice(0, 10);
+      return day >= from && day <= to && r.status === 'confirmed';
+    });
+
+    const expenses = (d.tourExpenses || []).filter(e => {
+      const day = e.expenseDate || e.createdAt.slice(0, 10);
+      return day >= from && day <= to;
+    });
+
+    let totalIncome = 0;
+    let totalParticipants = 0;
+    const salesByChannel = {
+      pos: { count: 0, participants: 0, income: 0 },
+      web: { count: 0, participants: 0, income: 0 }
+    };
+    const toursMap = new Map();
+
+    for (const r of confirmed) {
+      const tot = Number(r.total) || 0;
+      const part = Number(r.participants) || 0;
+      totalIncome = Math.round((totalIncome + tot) * 100) / 100;
+      totalParticipants += part;
+
+      const ch = r.channel === 'pos' ? 'pos' : 'web';
+      salesByChannel[ch].count += 1;
+      salesByChannel[ch].participants += part;
+      salesByChannel[ch].income = Math.round((salesByChannel[ch].income + tot) * 100) / 100;
+
+      const current = toursMap.get(r.tourId) || { tourId: r.tourId, tourName: r.tourName, reservationsCount: 0, participantsCount: 0, totalIncome: 0 };
+      current.reservationsCount += 1;
+      current.participantsCount += part;
+      current.totalIncome = Math.round((current.totalIncome + tot) * 100) / 100;
+      toursMap.set(r.tourId, current);
+    }
+
+    const toursRanking = Array.from(toursMap.values()).sort((a, b) => b.totalIncome - a.totalIncome);
+
+    let totalExpenses = 0;
+    const expensesByCategory = { equipo: 0, guias: 0, traslados: 0, entradas: 0, mantenimiento: 0, otros: 0 };
+    for (const e of expenses) {
+      const amt = Number(e.amount) || 0;
+      totalExpenses = Math.round((totalExpenses + amt) * 100) / 100;
+      const cat = expensesByCategory[e.category] !== undefined ? e.category : 'otros';
+      expensesByCategory[cat] = Math.round((expensesByCategory[cat] + amt) * 100) / 100;
+    }
+
+    const netProfit = Math.round((totalIncome - totalExpenses) * 100) / 100;
+    const profitMargin = totalIncome > 0 ? Math.round((netProfit / totalIncome) * 1000) / 10 : 0;
+
+    return sendJson(res, 200, {
+      ok: true,
+      from,
+      to,
+      summary: {
+        totalIncome,
+        totalRevenue: totalIncome,
+        totalParticipants,
+        totalReservations: confirmed.length,
+        totalBookings: confirmed.length,
+        totalExpenses,
+        expenseCount: expenses.length,
+        netProfit,
+        profitMargin
+      },
+      toursRanking,
+      salesByChannel,
+      channels: {
+        web: { bookings: salesByChannel.web.count, participants: salesByChannel.web.participants, total: salesByChannel.web.income },
+        pos: { bookings: salesByChannel.pos.count, participants: salesByChannel.pos.participants, total: salesByChannel.pos.income }
+      },
+      expensesByCategory
+    });
+  }
+
+  // Exportación a Excel (CSV con UTF-8 BOM) y PDF (HTML Imprimible) de Cueva y Tours
+  if (method === 'GET' && p === '/api/admin/tours/reports/export') {
+    const d = getDb();
+    const format = url.searchParams.get('format') === 'html' || url.searchParams.get('format') === 'pdf' ? 'html' : 'csv';
+    const from = url.searchParams.get('from') || `${todayISO().slice(0, 7)}-01`;
+    const to = url.searchParams.get('to') || todayISO();
+
+    const confirmed = (d.reservations || []).filter(r => {
+      const day = r.date || r.createdAt.slice(0, 10);
+      return day >= from && day <= to && r.status === 'confirmed';
+    });
+
+    const expenses = (d.tourExpenses || []).filter(e => {
+      const day = e.expenseDate || e.createdAt.slice(0, 10);
+      return day >= from && day <= to;
+    });
+
+    let totalIncome = 0;
+    let totalParticipants = 0;
+    for (const r of confirmed) {
+      totalIncome += (Number(r.total) || 0);
+      totalParticipants += (Number(r.participants) || 0);
+    }
+    let totalExpenses = 0;
+    for (const e of expenses) {
+      totalExpenses += (Number(e.amount) || 0);
+    }
+    const netProfit = totalIncome - totalExpenses;
+
+    if (format === 'csv') {
+      let csv = '\uFEFF'; // UTF-8 BOM
+      csv += 'K’ANBA CUEVAS VIVAS · REPORTE OPERATIVO Y COMERCIAL DE TOURS\r\n';
+      csv += `Período: ${from} al ${to}\r\n\r\n`;
+
+      csv += 'RESUMEN EJECUTIVO\r\n';
+      csv += `Ingresos Totales por Tours (Q),${totalIncome.toFixed(2)}\r\n`;
+      csv += `Total Pasajeros Atendidos,${totalParticipants}\r\n`;
+      csv += `Reservas Confirmadas,${confirmed.length}\r\n`;
+      csv += `Gastos Operativos de Tours (Q),${totalExpenses.toFixed(2)}\r\n`;
+      csv += `Utilidad Neta del Período (Q),${netProfit.toFixed(2)}\r\n\r\n`;
+
+      csv += 'VENTAS DETALLADAS DE TOURS\r\n';
+      csv += 'Código,Fecha,Horario,Tour,Canal,Cliente,Teléfono,Participantes,Importe (Q),Comprobante,Guía\r\n';
+      for (const r of confirmed) {
+        csv += [
+          csvEscape(r.code),
+          csvEscape(r.date),
+          csvEscape(r.time),
+          csvEscape(r.tourName),
+          csvEscape(r.channel === 'pos' ? 'Taquilla' : 'Web'),
+          csvEscape(r.customer?.name || ''),
+          csvEscape(r.customer?.phone || ''),
+          csvEscape(r.participants),
+          csvEscape(Number(r.total).toFixed(2)),
+          csvEscape(r.receipt?.number || ''),
+          csvEscape(r.guideName || 'Sin asignar')
+        ].join(',') + '\r\n';
+      }
+
+      csv += '\r\nGASTOS OPERATIVOS DE TOURS\r\n';
+      csv += 'Código,Fecha,Concepto,Categoría,Monto (Q),Notas\r\n';
+      for (const e of expenses) {
+        csv += [
+          csvEscape(e.id),
+          csvEscape(e.expenseDate),
+          csvEscape(e.concept),
+          csvEscape(e.category),
+          csvEscape(Number(e.amount).toFixed(2)),
+          csvEscape(e.notes || '')
+        ].join(',') + '\r\n';
+      }
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="reporte-cueva-tours-${from}-${to}.csv"`);
+      res.writeHead(200);
+      return res.end(csv);
+    } else {
+      // PDF / HTML Imprimible
+      const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Reporte Cueva y Tours · ${from} al ${to}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 0; padding: 24px; font-size: 13px; }
+    .header { border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .header h1 { margin: 0 0 4px 0; font-size: 20px; color: #0f172a; }
+    .header p { margin: 0; color: #64748b; font-size: 13px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .kpi { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .kpi .label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600; }
+    .kpi .val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px; }
+    h2 { font-size: 15px; margin: 20px 0 8px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; color: #0369a1; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+    th, td { border: 1px solid #e2e8f0; padding: 6px 10px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; color: #334155; }
+    .text-right { text-align: right; }
+    .footer { margin-top: 30px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    @media print {
+      body { padding: 0; font-size: 11px; }
+      .no-print { display: none; }
+      th { background: #f8fafc !important; -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom: 16px; text-align: right;">
+    <button onclick="window.print()" style="padding: 8px 16px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Imprimir / Guardar como PDF</button>
+  </div>
+  <div class="header">
+    <div>
+      <h1>K’anba Cuevas Vivas</h1>
+      <p>Reporte Operativo y Comercial de Cueva y Tours</p>
+    </div>
+    <div style="text-align: right;">
+      <p><strong>Período:</strong> ${from} al ${to}</p>
+      <p style="font-size: 11px;">Generado el ${new Date().toLocaleString('es-GT')}</p>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">Ingresos Tours</div><div class="val">Q ${totalIncome.toFixed(2)}</div></div>
+    <div class="kpi"><div class="label">Pasajeros</div><div class="val">${totalParticipants}</div></div>
+    <div class="kpi"><div class="label">Gastos Operativos</div><div class="val">Q ${totalExpenses.toFixed(2)}</div></div>
+    <div class="kpi"><div class="label">Utilidad Neta</div><div class="val" style="color:${netProfit >= 0 ? '#166534' : '#991b1b'}">Q ${netProfit.toFixed(2)}</div></div>
+  </div>
+
+  <h2>Ventas y Reservas de Tours</h2>
+  <table>
+    <thead>
+      <tr><th>Código</th><th>Fecha</th><th>Horario</th><th>Tour</th><th>Canal</th><th>Cliente</th><th>Pasajeros</th><th>Guía</th><th class="text-right">Total</th></tr>
+    </thead>
+    <tbody>
+      ${confirmed.length === 0 ? '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No se registraron ventas en este período.</td></tr>' : confirmed.map(r => `
+        <tr>
+          <td><strong>${r.code}</strong></td>
+          <td>${r.date}</td>
+          <td>${r.time}</td>
+          <td>${r.tourName}</td>
+          <td>${r.channel === 'pos' ? 'Taquilla' : 'Web'}</td>
+          <td>${r.customer?.name || 'Cliente'}</td>
+          <td>${r.participants}</td>
+          <td>${r.guideName || '—'}</td>
+          <td class="text-right">Q ${Number(r.total).toFixed(2)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h2>Gastos Operativos de Tours</h2>
+  <table>
+    <thead>
+      <tr><th>Código</th><th>Fecha</th><th>Concepto</th><th>Categoría</th><th class="text-right">Monto</th><th>Notas</th></tr>
+    </thead>
+    <tbody>
+      ${expenses.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:#94a3b8;">No se registraron gastos en este período.</td></tr>' : expenses.map(e => `
+        <tr>
+          <td><strong>${e.id}</strong></td>
+          <td>${e.expenseDate}</td>
+          <td>${e.concept}</td>
+          <td style="text-transform: capitalize;">${e.category}</td>
+          <td class="text-right">Q ${Number(e.amount).toFixed(2)}</td>
+          <td>${e.notes || '—'}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    K’anba Cuevas Vivas · Sistema de Gestión Administrativa, Operativa y Comercial
+  </div>
+</body>
+</html>`;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.writeHead(200);
+      return res.end(html);
+    }
+  }
+
   if (method === 'GET' && p === '/api/admin/report') {
     return sendJson(res, 200, adminOverview());
   }
@@ -1289,12 +1724,91 @@ async function handleApi(req, res, url) {
     return sendJson(res, 201, { ok: true, url: `/uploads/${filename}`, size: buffer.length });
   }
 
-  /* ---------- Cafetería · Administración ---------- */
+  /* ---------- Galería y Medios · Administración ---------- */
 
-  const csvEscape = (val) => {
-    const s = String(val ?? '').replace(/"/g, '""');
-    return /[",\n\r]/.test(s) ? `"${s}"` : s;
-  };
+  if (method === 'POST' && p === '/api/admin/gallery') {
+    const body = await readJson(req);
+    const src = String(body.src || '').trim();
+    if (!src) throw new AppError('La URL de la imagen es obligatoria.', 422, 'validation');
+    const d = getDb();
+    d.content = d.content || {};
+    d.content.gallery = Array.isArray(d.content.gallery) ? d.content.gallery : [];
+    const item = {
+      id: body.id || `img_${Date.now()}_${d.content.gallery.length}`,
+      src,
+      caption: String(body.caption || '').slice(0, 200),
+      category: String(body.category || 'cueva').slice(0, 30),
+      credit: String(body.credit || '').slice(0, 160)
+    };
+    d.content.gallery.push(item);
+    saveDb();
+    return sendJson(res, 201, { ok: true, item, gallery: d.content.gallery });
+  }
+
+  if (method === 'DELETE' && p.startsWith('/api/admin/gallery/')) {
+    const rawId = p.replace('/api/admin/gallery/', '');
+    const id = decodeURIComponent(rawId).trim();
+    const d = getDb();
+    d.content = d.content || {};
+    d.content.gallery = Array.isArray(d.content.gallery) ? d.content.gallery : [];
+    const index = d.content.gallery.findIndex((item, i) => String(item.id || i) === id || String(item.src) === id);
+    if (index === -1) throw new AppError('Imagen no encontrada en la galería.', 404, 'not_found');
+    const [removed] = d.content.gallery.splice(index, 1);
+    if (removed?.src?.startsWith('/uploads/')) {
+      const filename = removed.src.replace(/^\/uploads\//, '');
+      try { await deleteUploadFromDb(filename); } catch {}
+    }
+    saveDb();
+    return sendJson(res, 200, { ok: true, gallery: d.content.gallery });
+  }
+
+  if (method === 'POST' && p === '/api/admin/videos') {
+    const body = await readJson(req);
+    const youtubeId = String(body.youtubeId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20);
+    if (!youtubeId || youtubeId.length < 6) throw new AppError('ID de YouTube inválido.', 422, 'validation');
+    const d = getDb();
+    d.content = d.content || {};
+    d.content.videos = Array.isArray(d.content.videos) ? d.content.videos : [];
+    const item = {
+      id: body.id || `vid_${Date.now()}_${d.content.videos.length}`,
+      youtubeId,
+      title: String(body.title || 'Video').slice(0, 140),
+      description: String(body.description || '').slice(0, 400),
+      category: String(body.category || 'Cueva').slice(0, 30)
+    };
+    const existingIndex = d.content.videos.findIndex(v => v.id === item.id);
+    if (existingIndex >= 0) d.content.videos[existingIndex] = item;
+    else d.content.videos.push(item);
+    saveDb();
+    return sendJson(res, 200, { ok: true, item, videos: d.content.videos });
+  }
+
+  if (method === 'DELETE' && p.startsWith('/api/admin/videos/')) {
+    const rawId = p.replace('/api/admin/videos/', '');
+    const id = decodeURIComponent(rawId).trim();
+    const d = getDb();
+    d.content = d.content || {};
+    d.content.videos = Array.isArray(d.content.videos) ? d.content.videos : [];
+    const index = d.content.videos.findIndex((v, i) => String(v.id || i) === id || String(v.youtubeId) === id);
+    if (index === -1) throw new AppError('Video no encontrado en la videoteca.', 404, 'not_found');
+    d.content.videos.splice(index, 1);
+    saveDb();
+    return sendJson(res, 200, { ok: true, videos: d.content.videos });
+  }
+
+  if (method === 'DELETE' && p.startsWith('/api/admin/media/')) {
+    const name = decodeURIComponent(p.replace('/api/admin/media/', '')).trim();
+    if (!name) throw new AppError('Nombre de archivo requerido.', 422, 'validation');
+    await deleteUploadFromDb(name);
+    const d = getDb();
+    if (d.content && Array.isArray(d.content.gallery)) {
+      d.content.gallery = d.content.gallery.filter(g => g.src !== `/uploads/${name}`);
+    }
+    saveDb();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  /* ---------- Cafetería · Administración ---------- */
 
   // 1. Catálogo de Productos
   if (method === 'GET' && p === '/api/admin/cafe/products') {

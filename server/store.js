@@ -136,12 +136,14 @@ export function createInitialStore() {
     users: [], sessions: {}, userSessions: {}, tours: [], content: { brand: {}, hero: {}, intro: {}, contact: {} },
     settings: { business: {}, booking: { ...DEFAULT_BOOKING_POLICY }, payments: {}, smtp: {} },
     reservations: [], emails: [], closures: [], refunds: [],
+    guides: [],
+    tourExpenses: [],
     cafeProducts: [],
     cafeSupplies: [],
     cafeInventoryMovements: [],
     cafeExpenses: [],
     cafeOrders: [],
-    counters: { reservation: 0, receipt: 0, cafeOrder: 100, cafeMovement: 0, cafeExpense: 0, cafeSupply: 0, cafeProduct: 0 }
+    counters: { reservation: 0, receipt: 0, cafeOrder: 100, cafeMovement: 0, cafeExpense: 0, cafeSupply: 0, cafeProduct: 0, tourExpense: 0, guide: 0 }
   };
 }
 
@@ -300,6 +302,11 @@ export async function saveUploadToDb(name, mime, buffer) {
   return transactionContext.getStore().saveUpload(name, mime, buffer);
 }
 export async function readUploadFromDb(name) { return getRuntime().database.readUpload(name); }
+export async function deleteUploadFromDb(name) {
+  const unit = transactionContext.getStore();
+  if (unit?.deleteUpload) return unit.deleteUpload(name);
+  return getRuntime().database.deleteUpload(name);
+}
 export async function rateLimitShared(key, max, windowMs) {
   return getRuntime().database.rateLimit(key, Math.max(1, Math.floor(windowMs)));
 }
@@ -864,4 +871,217 @@ export function closeExpiredHolds() {
   }
   if (expired.length) saveDb();
   return expired;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cueva y Tours · Guías Turísticos                                   */
+/* ------------------------------------------------------------------ */
+
+export function getGuides() {
+  const d = getDb();
+  return d.guides || [];
+}
+
+export function findGuide(id) {
+  return getGuides().find(g => g.id === id) || null;
+}
+
+export function nextGuideId() {
+  const d = getDb();
+  d.counters = d.counters || {};
+  d.counters.guide = (Number(d.counters.guide) || 0) + 1;
+  return `GUI-${String(d.counters.guide).padStart(4, '0')}`;
+}
+
+export function saveGuide(input) {
+  const d = getDb();
+  d.guides = d.guides || [];
+  const name = String(input.name || '').trim();
+  if (name.length < 2) throw new AppError('El nombre del guía es obligatorio.', 422, 'validation');
+  const phone = String(input.phone || '').trim();
+  const languages = Array.isArray(input.languages)
+    ? input.languages.map(l => String(l).trim()).filter(Boolean)
+    : String(input.languages || '').split(',').map(l => l.trim()).filter(Boolean);
+  const notes = String(input.notes || '').trim();
+  const active = input.active !== false && input.active !== 'false';
+  const now = new Date().toISOString();
+
+  let guide;
+  if (input.id) {
+    const idx = d.guides.findIndex(g => g.id === input.id);
+    if (idx < 0) throw new AppError('Guía no encontrado.', 404, 'not_found');
+    guide = {
+      ...d.guides[idx],
+      name,
+      phone,
+      languages: languages.length ? languages : (d.guides[idx].languages || ['Español']),
+      notes,
+      active,
+      updatedAt: now
+    };
+    d.guides[idx] = guide;
+  } else {
+    guide = {
+      id: nextGuideId(),
+      name,
+      phone,
+      languages: languages.length ? languages : ['Español', 'Q’eqchi’'],
+      notes,
+      active,
+      createdAt: now,
+      updatedAt: now
+    };
+    d.guides.push(guide);
+  }
+  saveDb();
+  return guide;
+}
+
+export function deleteGuide(id) {
+  const d = getDb();
+  d.guides = d.guides || [];
+  const idx = d.guides.findIndex(g => g.id === id);
+  if (idx < 0) throw new AppError('Guía no encontrado.', 404, 'not_found');
+  const isAssigned = (d.reservations || []).some(r => r.guideId === id && r.status === 'confirmed');
+  if (isAssigned) {
+    d.guides[idx].active = false;
+    d.guides[idx].updatedAt = new Date().toISOString();
+    saveDb();
+    return { deleted: false, deactivated: true, guide: d.guides[idx] };
+  }
+  const [removed] = d.guides.splice(idx, 1);
+  saveDb();
+  return { deleted: true, guide: removed };
+}
+
+export function assignGuideToReservation(code, guideId) {
+  const d = getDb();
+  const r = (d.reservations || []).find(x => x.code === code);
+  if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
+  const now = new Date().toISOString();
+  if (guideId) {
+    const guide = (d.guides || []).find(g => g.id === guideId);
+    if (!guide) throw new AppError('Guía no encontrado.', 404, 'not_found');
+    r.guideId = guide.id;
+    r.guideName = guide.name;
+    r.history = r.history || [];
+    r.history.push({ at: now, type: 'guide_assigned', label: `Guía asignado: ${guide.name}` });
+  } else {
+    r.guideId = null;
+    r.guideName = '';
+    r.history = r.history || [];
+    r.history.push({ at: now, type: 'guide_unassigned', label: 'Guía desasignado' });
+  }
+  r.updatedAt = now;
+  saveDb();
+  return r;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cueva y Tours · Taquilla / Venta Presencial (POS)                  */
+/* ------------------------------------------------------------------ */
+
+export function createInPersonTourSale(input, { adminUser = null } = {}) {
+  const d = getDb();
+  const tourId = String(input.tourId || '').trim();
+  const tour = findTour(tourId);
+  if (!tour || tour.active === false) throw new AppError('Tour no encontrado o inactivo.', 404, 'not_found');
+  const date = String(input.date || '').trim();
+  const time = String(input.time || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError('Fecha inválida (YYYY-MM-DD).', 422, 'validation');
+  if (!tour.times.includes(time)) throw new AppError('Horario no disponible para este tour.', 422, 'validation');
+  const participants = parseInt(input.participants, 10);
+  if (!Number.isInteger(participants) || participants < 1 || participants > tour.maxParticipants) {
+    throw new AppError(`Este tour admite entre 1 y ${tour.maxParticipants} participantes.`, 422, 'validation');
+  }
+
+  // Comprobación de cupos compartidos en tiempo real
+  const taken = seatsTaken(tour.id, date, time);
+  const left = Math.max(0, tour.capacity - taken);
+  if (participants > left) {
+    throw new AppError(`No hay cupos suficientes. Disponibles: ${left}, solicitados: ${participants}.`, 409, 'sold_out');
+  }
+
+  const nowIso = new Date().toISOString();
+  d.counters = d.counters || {};
+  d.counters.reservation = (Number(d.counters.reservation) || 0) + 1;
+  const code = `KB-${String(d.counters.reservation).padStart(6, '0')}`;
+  const receiptNum = nextReceiptNumber();
+  const customerName = String(input.customerName || 'Cliente Taquilla').trim();
+  const customerEmail = String(input.customerEmail || '').trim();
+  const customerPhone = String(input.customerPhone || '').trim();
+  const paymentMethod = ['cash', 'card', 'transfer'].includes(input.paymentMethod) ? input.paymentMethod : 'cash';
+  const unitPrice = Number(tour.price);
+  const total = Math.round(unitPrice * participants * 100) / 100;
+  const guideId = input.guideId ? String(input.guideId).trim() : null;
+  const guide = guideId ? (d.guides || []).find(g => g.id === guideId) : null;
+  const notes = String(input.notes || '').trim();
+
+  const reservation = {
+    code,
+    tourId: tour.id,
+    tourName: tour.name,
+    userId: adminUser?.id || null,
+    channel: 'pos',
+    date,
+    time,
+    participants,
+    participantNames: Array.isArray(input.participantNames) && input.participantNames.length ? input.participantNames : [customerName],
+    unitPrice,
+    total,
+    currency: 'GTQ',
+    status: 'confirmed',
+    paidAt: nowIso,
+    guideId: guide?.id || null,
+    guideName: guide?.name || '',
+    token: randomToken(16),
+    customer: {
+      name: customerName,
+      email: customerEmail,
+      phone: customerPhone,
+      country: String(input.customerCountry || 'Guatemala').trim(),
+      document: String(input.customerDocument || '').trim(),
+      notes
+    },
+    payment: {
+      intentId: `taquilla_${code}`,
+      provider: 'Taquilla K’anba',
+      method: paymentMethod,
+      status: 'paid',
+      amount: total,
+      currency: 'GTQ',
+      paidAt: nowIso,
+      reference: input.paymentReference || (paymentMethod === 'cash' ? 'Efectivo en taquilla' : paymentMethod === 'card' ? 'Terminal POS físico' : 'Transferencia bancaria')
+    },
+    receipt: {
+      number: receiptNum,
+      issuedAt: nowIso,
+      method: paymentMethod
+    },
+    history: [
+      { at: nowIso, type: 'created', label: 'Venta presencial emitida en taquilla K’anba' },
+      { at: nowIso, type: 'paid', label: `Pago completado en taquilla (${paymentMethod}) · Recibo ${receiptNum}` }
+    ]
+  };
+
+  d.reservations = d.reservations || [];
+  d.reservations.unshift(reservation);
+  saveDb();
+  return reservation;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cueva y Tours · Gastos Operativos                                  */
+/* ------------------------------------------------------------------ */
+
+export function getTourExpenses() {
+  const d = getDb();
+  return d.tourExpenses || [];
+}
+
+export function nextTourExpenseId() {
+  const d = getDb();
+  d.counters = d.counters || {};
+  d.counters.tourExpense = (Number(d.counters.tourExpense) || 0) + 1;
+  return `EXP-TOUR-${new Date().getFullYear()}-${String(d.counters.tourExpense).padStart(5, '0')}`;
 }
