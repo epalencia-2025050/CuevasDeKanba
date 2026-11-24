@@ -346,27 +346,40 @@
         <!-- Gastos Operativos de Tours -->
         <section class="admin-view" id="view-tour-expenses" data-view-panel="tour-expenses" hidden>
           <div class="toolbar">
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-              <input type="date" id="tourExpensesFrom" class="select-compact">
-              <span>al</span>
-              <input type="date" id="tourExpensesTo" class="select-compact">
-              <select id="tourExpensesCategory" class="select-compact">
-                <option value="all">Todas las categorías</option>
-                <option value="equipo">Equipo y seguridad</option>
-                <option value="guias">Honorarios de guías</option>
-                <option value="traslados">Transporte y traslados</option>
-                <option value="entradas">Entradas / permisos</option>
-                <option value="mantenimiento">Mantenimiento de ruta</option>
-                <option value="otros">Otros</option>
-              </select>
+            <div class="toolbar-filter-group">
+              <label class="filter-field">
+                <span class="filter-label">Desde</span>
+                <input type="date" id="tourExpensesFrom" class="select-compact">
+              </label>
+              <label class="filter-field">
+                <span class="filter-label">Hasta</span>
+                <input type="date" id="tourExpensesTo" class="select-compact">
+              </label>
+              <label class="filter-field">
+                <span class="filter-label">Categoría</span>
+                <select id="tourExpensesCategory" class="select-compact">
+                  <option value="all">Todas las categorías</option>
+                  <option value="equipo">Equipo y seguridad</option>
+                  <option value="guias">Honorarios de guías</option>
+                  <option value="traslados">Transporte y traslados</option>
+                  <option value="entradas">Entradas / permisos</option>
+                  <option value="mantenimiento">Mantenimiento de ruta</option>
+                  <option value="otros">Otros</option>
+                </select>
+              </label>
               <button class="btn btn-outline btn-compact" type="button" id="filterTourExpenses">Filtrar</button>
             </div>
-            <button class="btn btn-primary btn-compact" type="button" id="newTourExpenseBtn">+ Registrar gasto</button>
+            <div class="toolbar-actions">
+              <button class="btn btn-primary btn-compact" type="button" id="newTourExpenseBtn">+ Registrar gasto</button>
+            </div>
           </div>
-          <div class="admin-grid two" style="margin-bottom:20px;">
-            <div class="kpi-card">
-              <div class="kpi-label">Total Gastos Operativos de Tours</div>
-              <div class="kpi-value" id="tourExpensesTotal">Q0.00</div>
+          <div class="tour-expenses-summary-bar">
+            <div class="kpi-card kpi-card-expense">
+              <div class="kpi-card-header">
+                <span class="kpi-label">Total Gastos Operativos de Tours</span>
+                <span class="kpi-badge kpi-badge-expense">Egresos</span>
+              </div>
+              <div class="kpi-value text-danger" id="tourExpensesTotal">Q0.00</div>
               <div class="kpi-meta" id="tourExpensesCount">0 gastos registrados</div>
             </div>
           </div>
@@ -394,10 +407,15 @@
         <!-- Reportes Cueva y Tours -->
         <section class="admin-view" id="view-tour-reports" data-view-panel="tour-reports" hidden>
           <div class="toolbar">
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-              <input type="date" id="tourReportsFrom" class="select-compact">
-              <span>al</span>
-              <input type="date" id="tourReportsTo" class="select-compact">
+            <div class="toolbar-filter-group">
+              <label class="filter-field">
+                <span class="filter-label">Desde</span>
+                <input type="date" id="tourReportsFrom" class="select-compact">
+              </label>
+              <label class="filter-field">
+                <span class="filter-label">Hasta</span>
+                <input type="date" id="tourReportsTo" class="select-compact">
+              </label>
               <button class="btn btn-outline btn-compact" type="button" id="filterTourReports">Filtrar</button>
             </div>
             <div class="toolbar-actions">
@@ -406,19 +424,28 @@
             </div>
           </div>
           <div class="admin-grid three" style="margin-bottom:20px;">
-            <div class="kpi-card">
-              <div class="kpi-label">Ingresos Totales (Tours)</div>
-              <div class="kpi-value" id="tourKpiRevenue">Q0.00</div>
+            <div class="kpi-card kpi-card-revenue">
+              <div class="kpi-card-header">
+                <span class="kpi-label">Ingresos Totales (Tours)</span>
+                <span class="kpi-badge kpi-badge-revenue">Ventas</span>
+              </div>
+              <div class="kpi-value text-success" id="tourKpiRevenue">Q0.00</div>
               <div class="kpi-meta" id="tourKpiBookings">0 reservas confirmadas</div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Gastos Operativos (Tours)</div>
-              <div class="kpi-value" id="tourKpiExpenses" style="color:#b91c1c;">Q0.00</div>
+            <div class="kpi-card kpi-card-expense">
+              <div class="kpi-card-header">
+                <span class="kpi-label">Gastos Operativos (Tours)</span>
+                <span class="kpi-badge kpi-badge-expense">Egresos</span>
+              </div>
+              <div class="kpi-value text-danger" id="tourKpiExpenses">Q0.00</div>
               <div class="kpi-meta" id="tourKpiExpensesCount">0 gastos registrados</div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Margen Operativo Neto</div>
-              <div class="kpi-value" id="tourKpiNetProfit">Q0.00</div>
+            <div class="kpi-card kpi-card-profit">
+              <div class="kpi-card-header">
+                <span class="kpi-label">Margen Operativo Neto</span>
+                <span class="kpi-badge kpi-badge-profit">Utilidad</span>
+              </div>
+              <div class="kpi-value text-profit" id="tourKpiNetProfit">Q0.00</div>
               <div class="kpi-meta" id="tourKpiMargin">0% margen</div>
             </div>
           </div>

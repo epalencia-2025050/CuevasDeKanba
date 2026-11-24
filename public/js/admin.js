@@ -4171,7 +4171,11 @@
 
   /* 3. Gastos Operativos de Tours */
   async function loadTourExpenses() {
-    renderTableSkeleton($('#tourExpensesTbody'), 7, 4);
+    renderTableSkeleton($('#tourExpensesTbody'), 8, 4);
+    const totalEl = $('#tourExpensesTotal');
+    const countEl = $('#tourExpensesCount');
+    if (totalEl) totalEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:120px;height:24px;border-radius:6px;"></span>';
+    if (countEl) countEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:130px;height:13px;border-radius:4px;"></span>';
     setSync(true);
     const from = $('#tourExpensesFrom')?.value || '';
     const to = $('#tourExpensesTo')?.value || '';
@@ -4186,6 +4190,8 @@
       state.tourExpenses = res.expenses || [];
       renderTourExpenses(res.total || 0);
     } catch (err) {
+      if (totalEl) totalEl.textContent = 'Q0.00';
+      if (countEl) countEl.textContent = '0 gastos registrados';
       handleError(err);
     } finally {
       setSync(false);
@@ -4326,6 +4332,18 @@
   async function loadTourReports() {
     renderTableSkeleton($('#tourRankingTbody'), 3, 3);
     renderTableSkeleton($('#tourChannelsTbody'), 4, 2);
+    const revEl = $('#tourKpiRevenue');
+    const bkEl = $('#tourKpiBookings');
+    const expEl = $('#tourKpiExpenses');
+    const expCountEl = $('#tourKpiExpensesCount');
+    const netEl = $('#tourKpiNetProfit');
+    const margEl = $('#tourKpiMargin');
+    if (revEl) revEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:110px;height:24px;border-radius:6px;"></span>';
+    if (bkEl) bkEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:140px;height:13px;border-radius:4px;"></span>';
+    if (expEl) expEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:110px;height:24px;border-radius:6px;"></span>';
+    if (expCountEl) expCountEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:130px;height:13px;border-radius:4px;"></span>';
+    if (netEl) netEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:110px;height:24px;border-radius:6px;"></span>';
+    if (margEl) margEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:80px;height:13px;border-radius:4px;"></span>';
     setSync(true);
     const from = $('#tourReportsFrom')?.value || '';
     const to = $('#tourReportsTo')?.value || '';
@@ -4338,6 +4356,12 @@
       state.tourReports = res;
       renderTourReports(res);
     } catch (err) {
+      if (revEl) revEl.textContent = 'Q0.00';
+      if (bkEl) bkEl.textContent = '0 reservas confirmadas';
+      if (expEl) expEl.textContent = 'Q0.00';
+      if (expCountEl) expCountEl.textContent = '0 gastos registrados';
+      if (netEl) netEl.textContent = 'Q0.00';
+      if (margEl) margEl.textContent = '0% margen';
       handleError(err);
     } finally {
       setSync(false);

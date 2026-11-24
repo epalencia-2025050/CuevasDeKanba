@@ -2558,6 +2558,8 @@
       if (tours) tours.replaceChildren(el('p', { className: 'loading-line', text: 'No pudimos cargar el contenido. Verifica tu conexión y recarga la página.' }));
       const gallery = $('#galleryGrid');
       if (gallery) gallery.replaceChildren(el('p', { className: 'loading-line', text: 'La galería no está disponible en este momento.' }));
+      renderAccordions('policiesAccordion', null, true);
+      renderAccordions('faqAccordion', null, false);
       toast('No pudimos cargar el contenido del sitio.');
       console.error(error);
     }
