@@ -1392,7 +1392,23 @@ svg { display: block; }
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
-  .reveal { opacity: 1; transform: none; }
+  .skeleton,
+  .skeleton-dark {
+    animation: none !important;
+    background: rgba(14, 36, 32, 0.08) !important;
+  }
+  .skeleton-dark {
+    background: rgba(246, 241, 230, 0.08) !important;
+  }
+  .reveal { opacity: 1 !important; transform: none !important; }
+  .hero-media img { transform: none !important; animation: none !important; }
+  .hero-glow { animation: none !important; }
+  .hero-fireflies i { animation: none !important; opacity: .4 !important; }
+  .marquee-track { animation: none !important; }
+  .intro-stamp { animation: none !important; }
+  .timeline-item { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .gallery-item { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .dialog-panel, .lightbox, .video-modal { animation: none !important; opacity: 1 !important; }
 }
 
 /* ---------- Scroll progress ---------- */

@@ -587,3 +587,15 @@ body.login-page {
   text-transform: uppercase;
   color: rgba(246, 241, 230, .45);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .login-glow, .cave-glow { animation: none !important; }
+  .login-fireflies i, .cave-fireflies i { animation: none !important; opacity: .3 !important; }
+  .login-panel { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .skeleton, .skeleton-dark { animation: none !important; background: rgba(246, 241, 230, 0.08) !important; }
+}

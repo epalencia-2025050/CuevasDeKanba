@@ -282,8 +282,23 @@
     const nav = $('#mainNav');
     const toggle = $('#navToggle');
     if (header) {
-      const onScroll = () => header.classList.toggle('is-scrolled', window.scrollY > 24);
-      onScroll();
+      let isScrolled = false;
+      let ticking = false;
+      const update = () => {
+        const scrolled = window.scrollY > 24;
+        if (scrolled !== isScrolled) {
+          isScrolled = scrolled;
+          header.classList.toggle('is-scrolled', isScrolled);
+        }
+        ticking = false;
+      };
+      const onScroll = () => {
+        if (!ticking) {
+          ticking = true;
+          requestAnimationFrame(update);
+        }
+      };
+      update();
       window.addEventListener('scroll', onScroll, { passive: true });
     }
     if (!nav || !toggle) return;

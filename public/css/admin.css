@@ -567,7 +567,22 @@
 .tour-preview { aspect-ratio: 16 / 9; background: #edf1e8; object-fit: contain; }
 .admin-body .field .inline-check { display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: .65rem; }
 .admin-body .field .inline-check input[type=checkbox] { width: 1rem; height: 1rem; margin: 0; padding: 0; flex: none; }
-@media (prefers-reduced-motion: reduce) { .kpi { transition: none; } .kpi:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .skeleton,
+  .skeleton-dark {
+    animation: none !important;
+    background: rgba(14, 36, 32, 0.08) !important;
+  }
+  .admin-view { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .modal-dialog { animation: none !important; transform: none !important; }
+  .kpi { transition: none !important; }
+  .kpi:hover { transform: none !important; }
+}
 .tour-filter-bar { display: flex; flex-wrap: wrap; gap: .4rem; margin: .75rem 0 1.25rem; }
 .tour-filter-bar button { background: #fbfcf8; border: 1px solid #c4d2c3; border-radius: 99px; padding: .5rem .9rem; color: #214d3b; cursor: pointer; font: inherit; font-size: .83rem; }
 .tour-filter-bar button[aria-pressed=true] { color: white; background: #214d3b; }
