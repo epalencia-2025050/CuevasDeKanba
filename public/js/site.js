@@ -401,11 +401,11 @@
       const img1 = $('#introImage');
       const img2 = $('#introImage2');
       if (img1 && intro.image) {
-        const cleanImg1 = intro.image.replace(/^\/assets\/img\/kanba-cave-04\.jpg$/, 'images/kanba-waterfall-nature.jpg');
+        const cleanImg1 = intro.image.replace(/^\/assets\/img\/kanba-cave-04\.jpg$/, 'images/kanba-intro-main.jpg');
         img1.src = cleanImg1;
       }
       if (img2 && intro.image2) {
-        const cleanImg2 = intro.image2.replace(/^\/assets\/img\/kanba-river-01\.jpg$/, 'images/kanba-river-valley.jpg');
+        const cleanImg2 = intro.image2.replace(/^\/assets\/img\/kanba-river-01\.jpg$/, 'images/kanba-intro-river.jpg');
         img2.src = cleanImg2;
       }
       const stats = $('#stats');
