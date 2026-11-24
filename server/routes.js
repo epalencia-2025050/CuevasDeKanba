@@ -691,21 +691,48 @@ async function handleApi(req, res, url) {
       }
     });
 
-    const result = chargeCafeCard(body.card || {}, prepared.total);
-    if (!result.approved) {
-      return sendJson(res, 402, {
-        ok: false,
-        code: result.code,
-        message: result.message,
-        fields: result.errors || null
-      });
-    }
-
+    const paymentMethod = (body.paymentMethod === 'cash' || body.payment?.method === 'cash') ? 'cash' : 'card';
     const now = new Date().toISOString();
     const code = nextCafeOrderCode();
     const receiptNumber = nextReceiptNumber();
     const net = Math.round((prepared.total / 1.12) * 100) / 100;
     const tax = Math.round((prepared.total - net) * 100) / 100;
+
+    let payment;
+    if (paymentMethod === 'cash') {
+      payment = {
+        method: 'cash',
+        provider: 'Efectivo en Caja',
+        status: 'paid',
+        brand: 'Efectivo',
+        last4: '—',
+        reference: `CASH-${randomToken(4).toUpperCase()}`,
+        paidAt: now
+      };
+    } else {
+      const result = chargeCafeCard(body.card || {}, prepared.total);
+      if (!result.approved) {
+        return sendJson(res, 402, {
+          ok: false,
+          code: result.code,
+          message: result.message,
+          fields: result.errors || null
+        });
+      }
+      payment = {
+        method: 'card',
+        provider: result.provider || 'Pasarela KanbaPay',
+        status: 'paid',
+        brand: result.brand || 'Tarjeta',
+        last4: result.last4 || '4242',
+        reference: result.reference || `PAY-${randomToken(4).toUpperCase()}`,
+        paidAt: now
+      };
+    }
+
+    const cleanNotes = (prepared.customer.notes && prepared.customer.notes !== 'null') ? String(prepared.customer.notes).trim() : '';
+    const cleanPhone = (prepared.customer.phone && prepared.customer.phone !== 'null') ? String(prepared.customer.phone).trim() : '';
+    const cleanEmail = (prepared.customer.email && prepared.customer.email !== 'null') ? String(prepared.customer.email).trim() : '';
 
     const order = {
       id: `cfo_${randomToken(6)}`,
@@ -715,21 +742,19 @@ async function handleApi(req, res, url) {
       createdAt: now,
       paidAt: now,
       userId: session?.user?.id || null,
-      customer: prepared.customer,
+      customer: {
+        name: prepared.customer.name || '',
+        email: cleanEmail,
+        phone: cleanPhone,
+        serviceType: prepared.customer.serviceType || 'En mesa · Cafetería',
+        notes: cleanNotes
+      },
       items: prepared.items,
       subtotal: net,
       tax,
       total: prepared.total,
       currency: prepared.currency,
-      payment: {
-        method: 'card',
-        provider: result.provider,
-        status: 'paid',
-        brand: result.brand || 'Tarjeta',
-        last4: result.last4 || '4242',
-        reference: result.reference,
-        paidAt: now
-      },
+      payment,
       receipt: {
         number: receiptNumber,
         issuedAt: now

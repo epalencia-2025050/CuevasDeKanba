@@ -2735,13 +2735,19 @@
     const meta = el('div');
     meta.style.fontSize = '12px';
     meta.style.lineHeight = '1.6';
+    const custPhone = (order.customer?.phone && order.customer.phone !== 'null') ? String(order.customer.phone).trim() : '';
+    const custNotes = (order.customer?.notes && order.customer.notes !== 'null') ? String(order.customer.notes).trim() : '';
+    const custService = (order.customer?.serviceType && order.customer.serviceType !== 'null') ? order.customer.serviceType : 'En mesa · Cafetería';
+    const payMethodName = order.payment?.method === 'cash' || order.payment?.brand === 'Efectivo' ? 'Efectivo' : (order.payment?.brand || 'Tarjeta');
+    const payProviderName = (order.payment?.provider && order.payment.provider !== 'null') ? ` (${order.payment.provider})` : '';
+
     meta.innerHTML = `
       <div><strong>Fecha:</strong> ${new Date(order.createdAt).toLocaleString('es-GT')}</div>
       <div><strong>Cliente:</strong> ${order.customer?.name || 'Cliente en barra'}</div>
-      ${order.customer?.phone ? `<div><strong>Teléfono:</strong> ${order.customer.phone}</div>` : ''}
-      <div><strong>Servicio:</strong> ${order.customer?.serviceType || 'En mesa · Cafetería'}</div>
-      ${order.customer?.notes ? `<div><strong>Notas/Mesa:</strong> ${order.customer.notes}</div>` : ''}
-      <div><strong>Forma de Pago:</strong> ${order.payment?.brand || order.payment?.method || 'Tarjeta'} (${order.payment?.provider || ''})</div>
+      ${custPhone ? `<div><strong>Teléfono:</strong> ${custPhone}</div>` : ''}
+      <div><strong>Servicio:</strong> ${custService}</div>
+      ${custNotes ? `<div><strong>Notas/Mesa:</strong> ${custNotes}</div>` : ''}
+      <div><strong>Forma de Pago:</strong> ${payMethodName}${payProviderName}</div>
     `;
 
     const tableWrap = el('div', 'table-wrap');

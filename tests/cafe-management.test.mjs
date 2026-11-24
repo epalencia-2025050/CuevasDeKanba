@@ -166,6 +166,7 @@ test('cafeteria: public menu serves active products and supports online ordering
   assert(order.code.startsWith('CAFE-'));
   assert(order.receipt?.number?.startsWith('REC-'));
   assert.equal(order.total, 20); // 10 * 2 = 20
+  assert.equal(order.payment?.method, 'card');
 
   // Verify inventory deduction in store
   await database.transaction(async (unit) => {
@@ -177,6 +178,25 @@ test('cafeteria: public menu serves active products and supports online ordering
     assert.equal(mov.movementType, 'sale');
     assert.equal(mov.quantity, -2);
   });
+
+  // 3. Order online with cash (no card required)
+  const cashOrderRes = await request('/api/cafe/orders', '', 'POST', {
+    paymentMethod: 'cash',
+    items: [{ id: 'cafe', quantity: 1 }],
+    customer: {
+      name: 'Lucía Efectivo',
+      phone: '+502 9876 5432',
+      serviceType: 'Para llevar'
+    }
+  });
+
+  assert.equal(cashOrderRes.status, 201);
+  const { order: cashOrder } = await cashOrderRes.json();
+  assert(cashOrder.code.startsWith('CAFE-'));
+  assert.equal(cashOrder.payment?.method, 'cash');
+  assert.equal(cashOrder.payment?.brand, 'Efectivo');
+  assert.equal(cashOrder.customer.notes, '');
+  assert.notEqual(cashOrder.customer.notes, 'null');
 });
 
 test('cafeteria: admin security guards require admin role', async () => {

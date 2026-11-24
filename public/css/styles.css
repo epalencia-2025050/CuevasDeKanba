@@ -2271,6 +2271,42 @@ svg { display: block; }
   color: var(--muted);
   line-height: 1.5;
 }
+.cafe-pay-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+.cafe-method-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: 1.5px solid var(--line, rgba(0,0,0,.15));
+  background: var(--surface, #fff);
+  color: var(--deep, #142823);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.cafe-method-btn svg {
+  flex-shrink: 0;
+}
+.cafe-method-btn:hover {
+  border-color: var(--moss, #2f6b57);
+}
+.cafe-method-btn.is-active {
+  border-color: var(--moss, #2f6b57);
+  background: rgba(47, 107, 87, .1);
+  color: var(--moss, #2f6b57);
+  font-weight: 800;
+}
+.cafe-pay-block {
+  animation: fadeIn 0.2s ease;
+}
 .cafe-pay-submit {
   width: 100%;
   justify-content: center;

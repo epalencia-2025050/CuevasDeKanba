@@ -1908,6 +1908,8 @@
       setText('cafeSubtotal', `${net.toFixed(2)} Q`);
       setText('cafeTax', `${tax.toFixed(2)} Q`);
       setText('cafeTotal', formatQ(totalAmount));
+      setText('cafeCardSubmitBtnText', `Pagar con tarjeta · ${formatQ(totalAmount)}`);
+      setText('cafeCashSubmitBtnText', `Confirmar pedido en efectivo · ${formatQ(totalAmount)}`);
       setText('cafePayBtnText', `Continuar al pago · ${formatQ(totalAmount)}`);
     }
 
@@ -1922,21 +1924,133 @@
     const customerNameInput = document.getElementById('cafeCustomerName');
     customerNameInput?.addEventListener('input', () => setCafeFieldError('customerName', ''));
 
+    // Alternar método de pago: Tarjeta vs Efectivo
+    let selectedPaymentMethod = 'card';
+    const btnPayCard = document.getElementById('btnPayCard');
+    const btnPayCash = document.getElementById('btnPayCash');
+    const cardBlock = document.getElementById('cafeCardBlock');
+    const cashBlock = document.getElementById('cafeCashBlock');
+
+    function setPaymentMethod(method) {
+      selectedPaymentMethod = method;
+      if (method === 'card') {
+        btnPayCard?.classList.add('is-active');
+        btnPayCash?.classList.remove('is-active');
+        if (cardBlock) cardBlock.hidden = false;
+        if (cashBlock) cashBlock.hidden = true;
+      } else {
+        btnPayCash?.classList.add('is-active');
+        btnPayCard?.classList.remove('is-active');
+        if (cardBlock) cardBlock.hidden = true;
+        if (cashBlock) cashBlock.hidden = false;
+      }
+      ['number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
+      const errBox = document.getElementById('cafePayError');
+      if (errBox) errBox.hidden = true;
+    }
+
+    btnPayCard?.addEventListener('click', () => setPaymentMethod('card'));
+    btnPayCash?.addEventListener('click', () => setPaymentMethod('cash'));
+
+    // Formateo y validación de tarjeta
+    const cardNumber = document.getElementById('cafeCardNumber');
+    const cardName = document.getElementById('cafeCardName');
+    const cardExpiry = document.getElementById('cafeCardExpiry');
+    const cardCvc = document.getElementById('cafeCardCvc');
+
+    cardNumber?.addEventListener('input', () => {
+      const digits = cardNumber.value.replace(/\D/g, '').slice(0, 19);
+      cardNumber.value = digits.replace(/(.{4})/g, '$1 ').trim();
+      setCafeFieldError('number', '');
+    });
+    cardExpiry?.addEventListener('input', () => {
+      let digits = cardExpiry.value.replace(/\D/g, '').slice(0, 4);
+      if (digits.length >= 3) digits = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+      cardExpiry.value = digits;
+      setCafeFieldError('expiry', '');
+    });
+    cardCvc?.addEventListener('input', () => {
+      cardCvc.value = cardCvc.value.replace(/\D/g, '').slice(0, 4);
+      setCafeFieldError('cvc', '');
+    });
+    cardName?.addEventListener('input', () => setCafeFieldError('name', ''));
+
+    document.getElementById('cafeFillDemoCard')?.addEventListener('click', () => {
+      if (cardNumber) cardNumber.value = '4242 4242 4242 4242';
+      if (cardName && !cardName.value.trim()) {
+        cardName.value = customerNameInput?.value.trim() || state.user?.name || 'Visitante K’anba';
+      }
+      if (cardExpiry) cardExpiry.value = '12/29';
+      if (cardCvc) cardCvc.value = '123';
+      ['number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
+      toast('Tarjeta de prueba cargada.');
+    });
+
     function setCafeFieldError(field, message) {
       const errNode = orderPanel.querySelector(`[data-cafe-error="${field}"]`);
       if (errNode) errNode.textContent = message || '';
     }
 
+    function luhnCheck(num) {
+      const digits = String(num || '').replace(/\D/g, '');
+      if (digits.length < 13 || digits.length > 19) return false;
+      let sum = 0;
+      let alt = false;
+      for (let i = digits.length - 1; i >= 0; i--) {
+        let d = Number(digits[i]);
+        if (alt) {
+          d *= 2;
+          if (d > 9) d -= 9;
+        }
+        sum += d;
+        alt = !alt;
+      }
+      return sum % 10 === 0;
+    }
+
     function validateCafeCheckout() {
-      setCafeFieldError('customerName', '');
+      ['customerName', 'number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
       let valid = true;
 
       const custName = customerNameInput?.value.trim() || '';
-
       if (custName.length < 2) {
         setCafeFieldError('customerName', 'Escribe tu nombre para el pedido.');
         valid = false;
       }
+
+      if (selectedPaymentMethod === 'card') {
+        const num = cardNumber?.value.replace(/\s/g, '') || '';
+        const holder = cardName?.value.trim() || '';
+        const exp = cardExpiry?.value.trim() || '';
+        const cvc = cardCvc?.value.trim() || '';
+
+        if (!luhnCheck(num)) {
+          setCafeFieldError('number', 'Número de tarjeta inválido.');
+          valid = false;
+        }
+        if (holder.length < 3) {
+          setCafeFieldError('name', 'Escribe el nombre del titular.');
+          valid = false;
+        }
+        if (!/^\d{2}\s*\/\s*\d{2}$/.test(exp)) {
+          setCafeFieldError('expiry', 'Formato MM/AA.');
+          valid = false;
+        } else {
+          const [mm, yy] = exp.split('/').map((x) => Number(x.trim()));
+          if (mm < 1 || mm > 12) {
+            setCafeFieldError('expiry', 'Mes inválido.');
+            valid = false;
+          } else if (new Date(2000 + yy, mm, 1).getTime() <= Date.now()) {
+            setCafeFieldError('expiry', 'Tarjeta vencida.');
+            valid = false;
+          }
+        }
+        if (!/^\d{3,4}$/.test(cvc)) {
+          setCafeFieldError('cvc', 'CVV inválido.');
+          valid = false;
+        }
+      }
+
       return valid;
     }
 
@@ -1950,27 +2064,62 @@
       if (emptyNode) emptyNode.hidden = true;
       receiptBox.hidden = false;
 
-      setText('cafeReceiptCode', order.code);
-      setText('cafeReceiptMeta', `Comprobante ${order.receipt?.number || '—'} · Ref. ${order.payment?.reference || '—'}`);
-      setText('cafeReceiptTotal', formatQ(order.total));
+      setText('cafeReceiptCode', order?.code || '—');
+      const recNumber = order?.receipt?.number || order?.receiptNumber || '';
+      const refCode = order?.payment?.reference || '';
+      const metaParts = [];
+      if (recNumber && recNumber !== 'null') metaParts.push(`Comprobante ${recNumber}`);
+      if (refCode && refCode !== 'null') metaParts.push(`Ref. ${refCode}`);
+      setText('cafeReceiptMeta', metaParts.length ? metaParts.join(' · ') : 'Comprobante emitido');
+      setText('cafeReceiptTotal', formatQ(order?.total || 0));
 
       const details = document.getElementById('cafeReceiptDetails');
       if (details) {
-        details.replaceChildren(
-          el('div', {}, [el('strong', { text: 'Cliente: ' }), document.createTextNode(order.customer?.name || '—')]),
-          el('div', {}, [el('strong', { text: 'Entrega: ' }), document.createTextNode(order.customer?.serviceType || 'En mesa · Cafetería')]),
-          order.customer?.notes ? el('div', {}, [el('strong', { text: 'Notas: ' }), document.createTextNode(order.customer.notes)]) : null,
-          el('div', {}, [el('strong', { text: 'Pago: ' }), document.createTextNode(`${order.payment?.brand || 'Tarjeta'} ****${order.payment?.last4 || '4242'}`)])
-        );
+        const rows = [];
+        const cust = order?.customer || {};
+        const custName = (cust.name && cust.name !== 'null') ? cust.name : '';
+        if (custName) {
+          rows.push(el('div', {}, [el('strong', { text: 'Cliente: ' }), document.createTextNode(custName)]));
+        }
+
+        const phone = (cust.phone && cust.phone !== 'null') ? cust.phone : '';
+        if (phone) {
+          rows.push(el('div', {}, [el('strong', { text: 'Teléfono: ' }), document.createTextNode(phone)]));
+        }
+
+        const serviceType = (cust.serviceType && cust.serviceType !== 'null') ? cust.serviceType : '';
+        if (serviceType) {
+          rows.push(el('div', {}, [el('strong', { text: 'Entrega: ' }), document.createTextNode(serviceType)]));
+        }
+
+        const notes = (cust.notes && cust.notes !== 'null') ? String(cust.notes).trim() : '';
+        if (notes) {
+          rows.push(el('div', {}, [el('strong', { text: 'Notas: ' }), document.createTextNode(notes)]));
+        }
+
+        const payment = order?.payment || {};
+        const isCash = payment.method === 'cash' || payment.brand === 'Efectivo';
+        let payLabel = '';
+        if (isCash) {
+          payLabel = 'Efectivo';
+        } else {
+          const brand = (payment.brand && payment.brand !== 'null') ? payment.brand : 'Tarjeta';
+          const last4 = (payment.last4 && payment.last4 !== 'null' && payment.last4 !== '—') ? ` ****${payment.last4}` : '';
+          payLabel = `${brand}${last4}`;
+        }
+        rows.push(el('div', {}, [el('strong', { text: 'Pago: ' }), document.createTextNode(payLabel || 'Confirmado')]));
+
+        details.replaceChildren(...rows);
       }
 
       const itemsList = document.getElementById('cafeReceiptItems');
       if (itemsList) {
         itemsList.replaceChildren();
-        (order.items || []).forEach((item) => {
+        (order?.items || []).forEach((item) => {
+          const name = item.displayName || item.name || 'Producto';
           itemsList.append(el('li', {}, [
-            el('span', { text: `${item.quantity} × ${item.displayName || item.name}` }),
-            el('strong', { text: formatQ(item.subtotal) })
+            el('span', { text: `${item.quantity || 1} × ${name}` }),
+            el('strong', { text: formatQ(item.subtotal || 0) })
           ]));
         });
       }
@@ -1989,12 +2138,16 @@
       }
       if (!validateCafeCheckout()) return;
 
-      const payBtn = document.getElementById('cafePayBtn');
-      busy(payBtn, true);
+      const submitBtn = selectedPaymentMethod === 'cash'
+        ? document.getElementById('cafeCashSubmitBtn')
+        : document.getElementById('cafeCardSubmitBtn');
+      busy(submitBtn, true);
 
       try {
         const custName = customerNameInput?.value.trim() || '';
+        const isCash = selectedPaymentMethod === 'cash';
         const payload = {
+          paymentMethod: selectedPaymentMethod,
           items: cart.map((item) => ({
             id: item.id,
             quantity: item.quantity
@@ -2005,14 +2158,17 @@
             phone: document.getElementById('cafeCustomerPhone')?.value.trim() || '',
             serviceType: document.getElementById('cafeServiceType')?.value || 'En mesa · Cafetería',
             notes: document.getElementById('cafeOrderNotes')?.value.trim() || ''
-          },
-          card: {
-            number: '4242424242424242',
-            name: custName || 'Visitante K’anba',
-            expiry: '12/29',
-            cvc: '123'
           }
         };
+
+        if (!isCash) {
+          payload.card = {
+            number: cardNumber?.value.replace(/\s/g, '') || '',
+            name: cardName?.value.trim() || custName,
+            expiry: cardExpiry?.value.trim() || '',
+            cvc: cardCvc?.value.trim() || ''
+          };
+        }
 
         let orderObj = null;
         try {
@@ -2024,12 +2180,12 @@
         } catch (err) {
           if (err.status) throw err;
           // Modo local / sin servidor activo: procesar en sandbox local con las mismas reglas
-          const digits = payload.card.number.replace(/\D/g, '');
-          const last4 = digits.slice(-4);
-          if (last4 === '0002') {
+          const digits = (payload.card?.number || '').replace(/\D/g, '');
+          const last4 = isCash ? '—' : (digits.slice(-4) || '4242');
+          if (!isCash && last4 === '0002') {
             throw new Error('La pasarela rechazó el pago: fondos insuficientes. Prueba otra tarjeta.');
           }
-          if (last4 === '0003') {
+          if (!isCash && last4 === '0003') {
             throw new Error('La pasarela solicita autenticación adicional. Usa otra tarjeta de prueba.');
           }
           const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -2039,9 +2195,10 @@
             customer: payload.customer,
             items: cart.map((i) => ({ ...i, subtotal: i.price * i.quantity })),
             payment: {
-              brand: /^4/.test(digits) ? 'Visa' : /^5/.test(digits) ? 'Mastercard' : 'Tarjeta',
+              method: isCash ? 'cash' : 'card',
+              brand: isCash ? 'Efectivo' : (/^4/.test(digits) ? 'Visa' : /^5/.test(digits) ? 'Mastercard' : 'Tarjeta'),
               last4,
-              reference: `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}`
+              reference: isCash ? `CASH-${Date.now().toString(36).toUpperCase().slice(-6)}` : `PAY-${Date.now().toString(36).toUpperCase().slice(-6)}`
             },
             receipt: {
               number: `REC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 89999 + 10000))}`
@@ -2053,7 +2210,7 @@
         saveCart();
         renderCafeCart();
         renderCafeReceipt(orderObj);
-        toast(`¡Pago aprobado! Pedido ${orderObj.code} confirmado.`);
+        toast(`¡Pedido ${orderObj.code} confirmado con éxito!`);
       } catch (error) {
         if (errorBox) {
           errorBox.textContent = error.message;
@@ -2063,7 +2220,7 @@
           Object.entries(error.fields).forEach(([field, msg]) => setCafeFieldError(field, msg));
         }
       } finally {
-        busy(payBtn, false);
+        busy(submitBtn, false);
       }
     });
 
