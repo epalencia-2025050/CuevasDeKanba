@@ -317,12 +317,20 @@ function plainText({ title, body }) {
   return `${title}\n\n${body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}\n\nK’anba Cuevas Vivas · Lanquín, Alta Verapaz, Guatemala\n`;
 }
 
-function isPermanentSmtpError(errMsg = '') {
+function isPermanentSmtpError(errMsg = '', error = null) {
+  const code = error?.code || '';
+  if (code === 'MAIL_AUTH_FAILED' || code === 'MAIL_DOMAIN_UNVERIFIED' || code === 'MAIL_CONFIG_ERROR' || code === 'MAIL_REJECTED') {
+    return true;
+  }
+  if (error?.status === 401 || error?.status === 403 || error?.status === 422) {
+    return true;
+  }
   const msg = String(errMsg).toLowerCase();
   // Códigos 5xx típicos de error permanente (535 credenciales, 550 usuario inexistente, 501 sintaxis, etc.)
   if (/smtp (500|501|502|503|504|530|535|550|551|552|553|554)/.test(msg)) return true;
   if (msg.includes('bad credentials') || msg.includes('authentication failed') || msg.includes('auth fail')) return true;
   if (msg.includes('recipient rejected') || msg.includes('user not found') || msg.includes('mailbox unavailable')) return true;
+  if (msg.includes('mail_auth_failed') || msg.includes('mail_domain_unverified') || msg.includes('mail_config_error') || msg.includes('transport not configured')) return true;
   return false;
 }
 
@@ -488,14 +496,15 @@ export async function processEmailRetryQueue(shouldContinue = () => true) {
         if (!record || record.claimId !== claim.record.claimId) return;
         delete record.leaseExpiresAt;
         delete record.claimId;
+        const providerName = getConfig().MAIL_API_URL ? 'https' : 'smtp';
+        record.provider = providerName;
         if (!failure) {
           record.status = 'sent';
-          record.provider = getConfig().MAIL_API_URL ? 'https' : 'smtp';
           record.error = null;
           record.sentAt = new Date().toISOString();
         } else {
           record.error = safeErrorMessage(failure);
-          record.permanentFailed = isPermanentSmtpError(failure.message);
+          record.permanentFailed = isPermanentSmtpError(failure.message, failure);
           record.status = record.permanentFailed || record.attempts >= 5 ? 'failed' : 'queued';
           record.nextAttemptAt = new Date(Date.now() + record.attempts ** 2 * 60000).toISOString();
         }

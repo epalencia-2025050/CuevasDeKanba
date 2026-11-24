@@ -379,11 +379,12 @@ function isClosed(date, tourId) {
 }
 
 function activeHolds() {
+  closeExpiredHolds();
   const d = getDb();
   const now = Date.now();
   return d.reservations.filter((r) =>
     (r.status === 'confirmed') ||
-    (r.status === 'pending_payment' && dateToEpoch(r.date, r.time) > now && new Date(r.holdExpiresAt).getTime() > now)
+    (r.status === 'pending_payment' && dateToEpoch(r.date, r.time) > now && Date.parse(r.holdExpiresAt) > now)
   );
 }
 
@@ -735,6 +736,7 @@ export function findTour(id) {
 }
 
 export function getReservation(code, token = null) {
+  closeExpiredHolds();
   const d = getDb();
   const r = d.reservations.find((x) => x.code === code);
   if (!r) throw new AppError('Reserva no encontrada.', 404, 'not_found');
@@ -753,6 +755,7 @@ export function rotateReservationToken(reservation) {
 }
 
 export function createReservation(input, { user = null } = {}) {
+  closeExpiredHolds();
   const d = getDb();
   if (!user?.id) throw new AppError('Inicia sesión para reservar.', 401, 'login_required');
   const requestId = String(input.requestId || '');
@@ -861,10 +864,13 @@ export function closeExpiredHolds() {
   const now = Date.now();
   const expired = [];
   for (const r of d.reservations) {
-    if (r.status === 'pending_payment' && new Date(r.holdExpiresAt).getTime() <= now) {
+    const expires = Date.parse(r.holdExpiresAt);
+    const tourPassed = dateToEpoch(r.date, r.time) <= now;
+    if (r.status === 'pending_payment' && (!Number.isFinite(expires) || expires <= now || tourPassed)) {
       r.status = 'expired';
       r.updatedAt = new Date(now).toISOString();
-      r.payment = { ...r.payment, status: 'expired' };
+      if (r.payment) r.payment = { ...r.payment, status: 'expired' };
+      if (!Array.isArray(r.history)) r.history = [];
       r.history.push({ at: new Date(now).toISOString(), type: 'expired', label: 'Plazo de pago vencido · cupos liberados automáticamente' });
       expired.push(r);
     }
@@ -982,6 +988,7 @@ export function assignGuideToReservation(code, guideId) {
 /* ------------------------------------------------------------------ */
 
 export function createInPersonTourSale(input, { adminUser = null } = {}) {
+  closeExpiredHolds();
   const d = getDb();
   const tourId = String(input.tourId || '').trim();
   const tour = findTour(tourId);

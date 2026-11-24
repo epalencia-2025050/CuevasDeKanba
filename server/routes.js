@@ -204,6 +204,7 @@ function requireUser(req) {
 }
 
 function readReservation(req, code, token) {
+  closeExpiredHolds();
   const reservation = getDb().reservations.find(item => item.code === code);
   const owner = getSessionUser(req);
   if (reservation && (getSession(req) || (owner && reservation.userId === owner.user.id))) return reservation;
@@ -460,6 +461,7 @@ function cancelReservation(reservation, { reason, by = 'customer', refundAmount 
 }
 
 function adminOverview() {
+  closeExpiredHolds();
   const d = getDb();
   const now = Date.now();
   const confirmed = d.reservations.filter((r) => r.status === 'confirmed');
@@ -887,6 +889,7 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'GET' && p === '/api/availability') {
+    closeExpiredHolds();
     const tourId = url.searchParams.get('tour') || null;
     const from = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('from') || '') ? url.searchParams.get('from') : todayISO();
     const days = Math.max(1, Math.min(45, Number(url.searchParams.get('days')) || 21));
@@ -1049,6 +1052,7 @@ async function handleApi(req, res, url) {
   }
 
   if (method === 'GET' && p === '/api/admin/reservations') {
+    closeExpiredHolds();
     const status = url.searchParams.get('status');
     const q = (url.searchParams.get('q') || '').toLowerCase();
     let list = [...getDb().reservations];
@@ -1103,6 +1107,23 @@ async function handleApi(req, res, url) {
   if (method === 'GET' && p === '/api/admin/emails') {
     const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 100));
     return sendJson(res, 200, { ok: true, emails: getDb().emails.slice(0, limit) });
+  }
+
+  m = p.match(/^\/api\/admin\/emails\/([A-Za-z0-9_-]+)\/retry$/);
+  if (method === 'POST' && m) {
+    const id = m[1];
+    const email = getDb().emails.find(item => item.id === id);
+    if (!email) throw new AppError('Correo no encontrado.', 404, 'not_found');
+    email.status = 'queued';
+    email.attempts = 0;
+    email.error = null;
+    email.permanentFailed = false;
+    delete email.claimId;
+    delete email.leaseExpiresAt;
+    email.nextAttemptAt = null;
+    saveDb();
+    await processEmailRetryQueue();
+    return sendJson(res, 200, { ok: true, email });
   }
 
   if (method === 'GET' && p === '/api/admin/refunds') {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { withRuntime } from './runtime.js';
 import { createHandlers } from './routes.js';
 import { webRequest, webReply, readWebBody, validateRequest } from './web-http.js';
-import { withStoreTransaction, AppError, closeExpiredHolds } from './store.js';
+import { withStoreTransaction, AppError, closeExpiredHolds, getDb } from './store.js';
 import { startCheckout } from './gateway.js';
 import { RequestSecurityError, parseJsonObject } from './request-security.js';
 import { notifyExpired, processEmailRetryQueue } from './mailer.js';
@@ -91,7 +91,16 @@ export function createApp(services) {
 export async function runMaintenance(services) {
   return withRuntime(services, async () => {
     await withStoreTransaction(async () => {
-      for (const reservation of closeExpiredHolds()) await notifyExpired(reservation);
+      closeExpiredHolds();
+      const d = getDb();
+      const needsNotification = d.reservations.filter(r => r.status === 'expired' && !d.emails.some(mail => mail.reservationCode === r.code && mail.template === 'expired'));
+      for (const reservation of needsNotification) {
+        try {
+          await notifyExpired(reservation);
+        } catch (err) {
+          console.error('[mantenimiento] no se pudo enviar correo de expiración:', safeErrorMessage(err));
+        }
+      }
       createHandlers(services.config).cleanupSessions();
     });
     await processEmailRetryQueue();

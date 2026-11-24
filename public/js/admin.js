@@ -716,7 +716,7 @@
       });
       mailRow.append(templateSelect, send);
       mailSection.append(mailRow);
-      mailSection.append(el('div', 'modal-note', 'Los correos se guardan en la bandeja de salida y en data/outbox. Si el SMTP está configurado, también se envían.'));
+      mailSection.append(el('div', 'modal-note', 'Los correos se guardan en la bandeja de salida (base de datos). Si el SMTP o la API de correo están configurados, también se envían.'));
       body.append(mailSection);
 
       /* Asignación de Guía */
@@ -2095,6 +2095,24 @@
       item.append(el('b', '', `${label}: `), document.createTextNode(value || '—'));
       meta.append(item);
     });
+    if (email.status === 'failed' || email.status === 'queued') {
+      const retryBtn = el('button', 'button secondary', 'Reintentar envío');
+      retryBtn.style.marginTop = '10px';
+      retryBtn.addEventListener('click', async () => {
+        busy(retryBtn, true);
+        try {
+          const res = await api(`/api/admin/emails/${encodeURIComponent(email.id)}/retry`, { method: 'POST' });
+          toast(res.email?.status === 'sent' ? 'Correo enviado exitosamente.' : 'Reintento programado.');
+          closeModal();
+          loadEmails();
+        } catch (err) {
+          handleError(err);
+        } finally {
+          busy(retryBtn, false);
+        }
+      });
+      meta.append(retryBtn);
+    }
     const preview = el('div', 'email-preview');
     const frame = el('iframe');
     frame.setAttribute('sandbox', '');
@@ -2328,7 +2346,7 @@
           banner.style.color = '#8e3b25';
           banner.style.border = '1px solid rgba(189, 96, 65, 0.25)';
           banner.innerHTML = `<strong>SMTP no configurado</strong><br>` +
-            `Los correos se guardan localmente en la bandeja de salida y <code>data/outbox/</code>.`;
+            `Los correos se guardan de forma persistente en la bandeja de salida de la base de datos.`;
         }
       }
 
