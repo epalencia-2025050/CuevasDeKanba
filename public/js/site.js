@@ -1908,7 +1908,7 @@
       setText('cafeSubtotal', `${net.toFixed(2)} Q`);
       setText('cafeTax', `${tax.toFixed(2)} Q`);
       setText('cafeTotal', formatQ(totalAmount));
-      setText('cafePayBtnText', `Pedir y pagar · ${formatQ(totalAmount)}`);
+      setText('cafePayBtnText', `Continuar al pago · ${formatQ(totalAmount)}`);
     }
 
     // Vaciar carrito
@@ -1919,107 +1919,22 @@
       toast('Pedido vaciado.');
     });
 
-    // Formateo de tarjeta y botón de tarjeta de prueba
-    const cardNumber = document.getElementById('cafeCardNumber');
-    const cardName = document.getElementById('cafeCardName');
-    const cardExpiry = document.getElementById('cafeCardExpiry');
-    const cardCvc = document.getElementById('cafeCardCvc');
     const customerNameInput = document.getElementById('cafeCustomerName');
-
-    cardNumber?.addEventListener('input', () => {
-      const digits = cardNumber.value.replace(/\D/g, '').slice(0, 19);
-      cardNumber.value = digits.replace(/(.{4})/g, '$1 ').trim();
-      setCafeFieldError('number', '');
-    });
-    cardExpiry?.addEventListener('input', () => {
-      let digits = cardExpiry.value.replace(/\D/g, '').slice(0, 4);
-      if (digits.length >= 3) digits = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-      cardExpiry.value = digits;
-      setCafeFieldError('expiry', '');
-    });
-    cardCvc?.addEventListener('input', () => {
-      cardCvc.value = cardCvc.value.replace(/\D/g, '').slice(0, 4);
-      setCafeFieldError('cvc', '');
-    });
-    cardName?.addEventListener('input', () => setCafeFieldError('name', ''));
     customerNameInput?.addEventListener('input', () => setCafeFieldError('customerName', ''));
-    document.getElementById('cafeCustomerEmail')?.addEventListener('input', () => setCafeFieldError('customerEmail', ''));
-
-    document.getElementById('cafeFillDemoCard')?.addEventListener('click', () => {
-      if (cardNumber) cardNumber.value = '4242 4242 4242 4242';
-      if (cardName && !cardName.value.trim()) {
-        cardName.value = customerNameInput?.value.trim() || state.user?.name || 'Visitante K’anba';
-      }
-      if (cardExpiry) cardExpiry.value = '12/29';
-      if (cardCvc) cardCvc.value = '123';
-      ['number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
-      toast('Tarjeta de prueba cargada.');
-    });
 
     function setCafeFieldError(field, message) {
       const errNode = orderPanel.querySelector(`[data-cafe-error="${field}"]`);
       if (errNode) errNode.textContent = message || '';
     }
 
-    function luhnCheck(num) {
-      const digits = String(num || '').replace(/\D/g, '');
-      if (digits.length < 13 || digits.length > 19) return false;
-      let sum = 0;
-      let alt = false;
-      for (let i = digits.length - 1; i >= 0; i--) {
-        let d = Number(digits[i]);
-        if (alt) {
-          d *= 2;
-          if (d > 9) d -= 9;
-        }
-        sum += d;
-        alt = !alt;
-      }
-      return sum % 10 === 0;
-    }
-
     function validateCafeCheckout() {
-      ['customerName', 'customerEmail', 'number', 'name', 'expiry', 'cvc'].forEach((f) => setCafeFieldError(f, ''));
+      setCafeFieldError('customerName', '');
       let valid = true;
 
       const custName = customerNameInput?.value.trim() || '';
-      const custEmail = document.getElementById('cafeCustomerEmail')?.value.trim() || '';
-      const num = cardNumber?.value.replace(/\s/g, '') || '';
-      const holder = cardName?.value.trim() || '';
-      const exp = cardExpiry?.value.trim() || '';
-      const cvc = cardCvc?.value.trim() || '';
 
       if (custName.length < 2) {
         setCafeFieldError('customerName', 'Escribe tu nombre para el pedido.');
-        valid = false;
-      }
-      if (custEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(custEmail)) {
-        setCafeFieldError('customerEmail', 'Correo electrónico inválido.');
-        valid = false;
-      }
-      if (!luhnCheck(num)) {
-        setCafeFieldError('number', 'Número de tarjeta inválido.');
-        valid = false;
-      }
-      if (holder.length < 3) {
-        setCafeFieldError('name', 'Escribe el nombre del titular.');
-        valid = false;
-      }
-      if (!/^\d{2}\s*\/\s*\d{2}$/.test(exp)) {
-        setCafeFieldError('expiry', 'Formato MM/AA.');
-        valid = false;
-      } else {
-        const [mm, yy] = exp.split('/').map((x) => Number(x.trim()));
-        if (mm < 1 || mm > 12) {
-          setCafeFieldError('expiry', 'Mes inválido.');
-          valid = false;
-        } else if (new Date(2000 + yy, mm, 1).getTime() <= Date.now()) {
-          setCafeFieldError('expiry', 'Tarjeta vencida.');
-          valid = false;
-        }
-      }
-      if (!/^\d{3,4}$/.test(cvc)) {
-        setCafeFieldError('cvc', 'CVV inválido.');
         valid = false;
       }
       return valid;
@@ -2078,23 +1993,24 @@
       busy(payBtn, true);
 
       try {
+        const custName = customerNameInput?.value.trim() || '';
         const payload = {
           items: cart.map((item) => ({
             id: item.id,
             quantity: item.quantity
           })),
           customer: {
-            name: customerNameInput?.value.trim() || '',
-            email: document.getElementById('cafeCustomerEmail')?.value.trim() || '',
+            name: custName,
+            email: state.user?.email || '',
             phone: document.getElementById('cafeCustomerPhone')?.value.trim() || '',
             serviceType: document.getElementById('cafeServiceType')?.value || 'En mesa · Cafetería',
             notes: document.getElementById('cafeOrderNotes')?.value.trim() || ''
           },
           card: {
-            number: cardNumber?.value.replace(/\s/g, '') || '',
-            name: cardName?.value.trim() || '',
-            expiry: cardExpiry?.value.trim() || '',
-            cvc: cardCvc?.value.trim() || ''
+            number: '4242424242424242',
+            name: custName || 'Visitante K’anba',
+            expiry: '12/29',
+            cvc: '123'
           }
         };
 
@@ -2301,13 +2217,9 @@
   function prefillCafeUser() {
     if (!state.user) return;
     const nameInput = document.getElementById('cafeCustomerName');
-    const emailInput = document.getElementById('cafeCustomerEmail');
     const phoneInput = document.getElementById('cafeCustomerPhone');
-    const cardName = document.getElementById('cafeCardName');
     if (nameInput && !nameInput.value) nameInput.value = state.user.name || '';
-    if (emailInput && !emailInput.value) emailInput.value = state.user.email || '';
     if (phoneInput && !phoneInput.value) phoneInput.value = state.user.phone || '';
-    if (cardName && !cardName.value) cardName.value = state.user.name || '';
   }
 
   /* ------------------------------------------------------------------ */

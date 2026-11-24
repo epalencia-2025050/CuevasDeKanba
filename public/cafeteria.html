@@ -188,17 +188,10 @@
                       <input type="text" id="cafeCustomerName" name="customerName" placeholder="Ej. Ana Lucía Pérez" required>
                       <small class="field-error" data-cafe-error="customerName"></small>
                     </label>
-                    <div class="cafe-form-row">
-                      <label class="field">
-                        <span>Correo (opcional)</span>
-                        <input type="email" id="cafeCustomerEmail" name="customerEmail" placeholder="correo@ejemplo.com">
-                        <small class="field-error" data-cafe-error="customerEmail"></small>
-                      </label>
-                      <label class="field">
-                        <span>Teléfono (opcional)</span>
-                        <input type="tel" id="cafeCustomerPhone" name="customerPhone" placeholder="+502 5555 0000">
-                      </label>
-                    </div>
+                    <label class="field">
+                      <span>Teléfono (opcional)</span>
+                      <input type="tel" id="cafeCustomerPhone" name="customerPhone" placeholder="+502 5555 0000">
+                    </label>
                     <label class="field">
                       <span>Modalidad de entrega</span>
                       <select id="cafeServiceType" name="serviceType">
@@ -215,40 +208,17 @@
 
                   <div class="cafe-form-section">
                     <div class="cafe-pay-header">
-                      <h4>2. Pago con tarjeta</h4>
-                      <button type="button" class="btn-demo-card" id="cafeFillDemoCard">Usar tarjeta de prueba</button>
-                    </div>
-                    <label class="field">
-                      <span>Número de tarjeta <em>*</em></span>
-                      <input type="text" id="cafeCardNumber" name="number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" maxlength="23" required>
-                      <small class="field-error" data-cafe-error="number"></small>
-                    </label>
-                    <label class="field">
-                      <span>Nombre en la tarjeta <em>*</em></span>
-                      <input type="text" id="cafeCardName" name="name" autocomplete="cc-name" placeholder="Como aparece en la tarjeta" required>
-                      <small class="field-error" data-cafe-error="name"></small>
-                    </label>
-                    <div class="cafe-form-row">
-                      <label class="field">
-                        <span>Vencimiento <em>*</em></span>
-                        <input type="text" id="cafeCardExpiry" name="expiry" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/AA" maxlength="5" required>
-                        <small class="field-error" data-cafe-error="expiry"></small>
-                      </label>
-                      <label class="field">
-                        <span>CVV <em>*</em></span>
-                        <input type="password" id="cafeCardCvc" name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" required>
-                        <small class="field-error" data-cafe-error="cvc"></small>
-                      </label>
+                      <h4>2. Pago seguro</h4>
                     </div>
                     <p class="cafe-sandbox-hint">
-                      Pasarela segura <strong>KanbaPay</strong>. En modo demo puedes usar <code>4242 4242 4242 4242</code> o pulsar <em>“Usar tarjeta de prueba”</em>.
+                      Procesa tu pedido de forma segura a través de nuestra pasarela de pagos.
                     </p>
                   </div>
 
                   <div class="form-error" id="cafePayError" role="alert" hidden></div>
 
                   <button type="submit" class="btn btn-primary btn-lg cafe-pay-submit" id="cafePayBtn">
-                    <span id="cafePayBtnText">Pedir y pagar ahora</span>
+                    <span id="cafePayBtnText">Continuar al pago</span>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   </button>
                 </form>
