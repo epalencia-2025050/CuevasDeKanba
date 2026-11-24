@@ -620,6 +620,53 @@
     }
   }
 
+  function renderAccordionsSkeleton(id, count = 4, dark = false) {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+    wrap.replaceChildren();
+    if (dark) wrap.classList.add('accordion-dark');
+    for (let i = 0; i < count; i++) {
+      const item = el('div', { className: `skeleton-accordion-item${dark ? ' dark' : ''}` }, [
+        el('div', { className: 'skeleton-accordion-lines' }, [
+          el('div', { className: `skeleton${dark ? ' skeleton-dark' : ''}`, style: `height: 18px; width: ${60 + (i % 3) * 15}%; border-radius: 4px;` }),
+          el('div', { className: `skeleton${dark ? ' skeleton-dark' : ''}`, style: `height: 11px; width: ${35 + (i % 2) * 20}%; border-radius: 3px;` })
+        ]),
+        el('div', { className: `skeleton skeleton-accordion-icon${dark ? ' skeleton-dark' : ''}` })
+      ]);
+      wrap.appendChild(item);
+    }
+  }
+
+  function renderInfoListSkeleton(id, count = 4) {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+    wrap.replaceChildren();
+    for (let i = 0; i < count; i++) {
+      const item = el('li', { className: 'skeleton-list-item' }, [
+        el('span', { className: 'skeleton skeleton-bullet' }),
+        el('span', { className: 'skeleton', style: `height: 12px; width: ${70 + (i % 3) * 10}%; border-radius: 4px;` })
+      ]);
+      wrap.appendChild(item);
+    }
+  }
+
+  function renderCafeMenuSkeleton(wrap, count = 6) {
+    if (!wrap) return;
+    wrap.replaceChildren();
+    for (let i = 0; i < count; i++) {
+      const card = el('div', { className: 'skeleton-cafe-card' }, [
+        el('div', { className: 'skeleton skeleton-cafe-media' }),
+        el('div', { className: 'skeleton-cafe-body' }, [
+          el('div', { className: 'skeleton', style: 'height: 12px; width: 35%;' }),
+          el('div', { className: 'skeleton', style: 'height: 18px; width: 70%;' }),
+          el('div', { className: 'skeleton', style: 'height: 13px; width: 90%;' }),
+          el('div', { className: 'skeleton', style: 'height: 38px; border-radius: 8px; margin-top: 6px;' })
+        ])
+      ]);
+      wrap.appendChild(card);
+    }
+  }
+
   /* ------------------------------------------------------------------ */
   /* Tours                                                              */
   /* ------------------------------------------------------------------ */
@@ -1437,12 +1484,88 @@
   /* Acordeones                                                         */
   /* ------------------------------------------------------------------ */
 
+  const DEFAULT_POLICIES = [
+    {
+      id: 'puntualidad',
+      title: '1. Horarios de salida y registro previo (Check-in)',
+      summary: 'Llegada anticipada y tolerancia horaria.',
+      items: [
+        'Presentarse con 20 minutos de anticipación en la taquilla de K’anba para validar tu comprobante de reserva (código RES-... impreso o digital).',
+        'Por respeto a los demás viajeros y a la seguridad del recorrido, la tolerancia máxima de salida es de 10 minutos.',
+        'En caso de retraso no imputable a K’anba, el acceso queda sujeto a disponibilidad de cupo en los siguientes grupos del mismo día sin garantía de horario.'
+      ]
+    },
+    {
+      id: 'clima-seguridad',
+      title: '2. Clima, caudal del río y decisiones de seguridad',
+      summary: 'Cuidado del visitante y protocolo de crecidas.',
+      items: [
+        'El descenso acuático depende de los niveles de agua de la cuenca del río Cahabón.',
+        'Si los monitores hidrológicos detectan crecidas o alertas climáticas que comprometan la seguridad, la actividad se suspende de inmediato.',
+        'Toda cancelación por fuerza mayor u orden del guía q’eqchi’ otorga derecho automático a reprogramación sin costo o reembolso del 100%.'
+      ]
+    },
+    {
+      id: 'aptitud-fisica',
+      title: '3. Salud física, edad y carta de responsabilidad',
+      summary: 'Requisitos corporales para un descenso seguro.',
+      items: [
+        'Edad mínima obligatoria: 8 años cumplidos. Menores de edad (8 a 17 años) deben ingresar acompañados por un adulto responsable.',
+        'Es indispensable saber flotar o tener nociones básicas de natación; el uso del chaleco salvavidas y casco provistos es obligatorio durante todo el trayecto.',
+        'No apto para personas con afecciones cardiovasculares severas, lesiones graves de columna, movilidad reducida o embarazo avanzado.'
+      ]
+    },
+    {
+      id: 'reembolsos-proceso',
+      title: '4. Tramitación de reembolsos y plazos de acreditación',
+      summary: 'Procedimiento bancario y canales autorizados.',
+      items: [
+        'Las solicitudes de cancelación se gestionan directamente a través del portal “Mi reserva” o enviando un correo con tu número de reserva.',
+        'Los reembolsos aprobados se emiten hacia el método de pago original (tarjeta o transferencia) en un plazo de 5 a 10 días hábiles bancarios.',
+        'Por seguridad antifraude, no se realizan devoluciones en efectivo de reservas pagadas en línea ni transferencias a cuentas de terceros.'
+      ]
+    }
+  ];
+
+  const DEFAULT_FAQ = [
+    {
+      q: '¿Qué tan profunda es el agua dentro de la cueva?',
+      a: 'El recorrido combina tramos poco profundos donde el agua llega a los tobillos o las rodillas, con pozas profundas donde es necesario nadar. En todo momento el uso del chaleco salvavidas es obligatorio y vas acompañado por guías locales capacitados que asisten en cada poza.'
+    },
+    {
+      q: '¿Puedo entrar a K’anba si no sé nadar muy bien?',
+      a: 'Sí, siempre que te sientas cómodo en el agua con chaleco salvavidas y sigas las instrucciones del guía. El chaleco garantiza flotación total sin esfuerzo y en los tramos más hondos hay cuerdas de apoyo y asistencia cercana de tu guía q’eqchi’.'
+    },
+    {
+      q: '¿Cómo se ilumina el interior durante el recorrido?',
+      a: 'La tradición de K’anba es cruzar la caverna llevando una vela de cera encendida en la mano, lo que crea una atmósfera mística e inolvidable. Adicionalmente, los guías llevan linternas acuáticas profesionales de respaldo para garantizar visibilidad en cascadas y pasos de roca.'
+    },
+    {
+      q: '¿Hay casilleros para guardar mochilas, teléfonos y pertenencias?',
+      a: 'Sí. En la recepción y cafetería antes de descender al río contamos con casilleros seguros y resguardo de equipaje. Recomendamos no ingresar a la cueva con celulares o cámaras que no sean 100% sumergibles con cordón de seguridad.'
+    },
+    {
+      q: '¿Qué ropa y calzado se recomienda llevar?',
+      a: 'Ropa cómoda que se pueda mojar por completo (licra, traje de baño, camiseta de secado rápido) y calzado acuático cerrado o zapatillas deportivas con buen agarre. Por seguridad están estrictamente prohibidas las sandalias abiertas, chanclas o entrar descalzo.'
+    },
+    {
+      q: '¿Qué ocurre si llueve el día de mi tour?',
+      a: 'Una lluvia tropical ligera no suspende la actividad. Sin embargo, si se presentan crecidas extraordinarias del río Cahabón que alteren el caudal de la cueva, la seguridad es primero: el acceso se suspende y se te ofrece reprogramar tu fecha sin costo o el reembolso íntegro del 100%.'
+    }
+  ];
+
   function renderAccordions(id, items, dark) {
     const wrap = document.getElementById(id);
-    if (!wrap || !Array.isArray(items)) return;
+    if (!wrap) return;
+    let list = Array.isArray(items) && items.length > 0 ? items : null;
+    if (!list) {
+      if (id === 'policiesAccordion') list = DEFAULT_POLICIES;
+      else if (id === 'faqAccordion') list = DEFAULT_FAQ;
+    }
+    if (!list) return;
     wrap.replaceChildren();
     if (dark) wrap.classList.add('accordion-dark');
-    items.forEach((item, index) => {
+    list.forEach((item, index) => {
       const title = item.title || item.q || '';
       const meta = item.summary || '';
       const bullets = Array.isArray(item.items) ? item.items : null;
@@ -1452,13 +1575,13 @@
       const panel = el('div', { className: 'accordion-panel' }, [body]);
       const trigger = el('button', {
         className: 'accordion-trigger',
-        attrs: { type: 'button', 'aria-expanded': 'false' }
+        attrs: { type: 'button', 'aria-expanded': index === 0 ? 'true' : 'false' }
       }, [
         el('span', {}, [
           el('h3', { text: title }),
           meta ? el('span', { className: 'trigger-meta', text: meta }) : null
         ]),
-        el('span', { className: 'accordion-icon' })
+        el('span', { className: 'accordion-icon', attrs: { 'aria-hidden': 'true' } })
       ]);
       const wrapper = el('div', { className: 'accordion-item' }, [trigger, panel]);
       trigger.addEventListener('click', () => toggleAccordion(wrapper));
@@ -2239,6 +2362,7 @@
     async function loadDynamicMenu() {
       const menuBody = document.getElementById('hopeMenuBody');
       const tabsWrap = document.getElementById('cafeCategoryTabs');
+      if (menuBody) renderCafeMenuSkeleton(menuBody, 6);
       try {
         const res = await api('/api/cafe/menu');
         const items = res?.items;
@@ -2417,6 +2541,8 @@
     setText('year', String(new Date().getFullYear()));
     renderToursSkeleton();
     renderGallerySkeleton();
+    renderAccordionsSkeleton('policiesAccordion', 4, true);
+    renderAccordionsSkeleton('faqAccordion', 5, false);
     await loadAuth();
     prefillCafeUser();
 

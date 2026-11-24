@@ -72,26 +72,76 @@
     <section class="section policies-section" id="politicas">
       <div class="container policies-layout">
         <div class="policies-intro">
-          <p class="eyebrow"><span class="line"></span><span id="policiesKicker">Transparencia</span></p>
-          <h2 class="display" id="policiesTitle">Políticas de reserva, cancelación y reembolso</h2>
-          <p id="policiesText">Reservar en línea implica aceptar estas condiciones. Están diseñadas para proteger al visitante, al equipo local y al ecosistema.</p>
-          <div class="policies-highlight">
-            <strong>Reembolso 100%</strong>
-            <span>hasta 72 horas antes del tour</span>
+          <p class="eyebrow"><span class="line"></span><span id="policiesKicker">Transparencia y tranquilidad</span></p>
+          <h1 class="display" id="policiesTitle">Políticas de reserva, cancelación y reembolso</h1>
+          <p class="policies-lede" id="policiesText">Condiciones claras, predecibles y justas. Diseñadas para cuidar al visitante, garantizar el sustento digno del equipo comunitario q’eqchi’ y operar con absoluta responsabilidad sobre el río.</p>
+
+          <!-- Tramos de reembolso visuales -->
+          <div class="refund-tier-group" aria-label="Escala de cancelación y reembolso">
+            <h3 class="tier-group-title">Escala de reembolsos por anticipación</h3>
+            
+            <article class="refund-tier-card tier-full">
+              <div class="tier-badge">
+                <span class="tier-pct">100%</span>
+                <span class="tier-label">Reembolso total</span>
+              </div>
+              <div class="tier-content">
+                <strong>72 horas o más antes del tour</strong>
+                <p>Cancelación sin penalización con reintegro íntegro al método de pago original.</p>
+              </div>
+            </article>
+
+            <article class="refund-tier-card tier-half">
+              <div class="tier-badge">
+                <span class="tier-pct">50%</span>
+                <span class="tier-label">Reembolso parcial</span>
+              </div>
+              <div class="tier-content">
+                <strong>Entre 24 y 72 horas antes</strong>
+                <p>Deducción del 50% por bloqueo de cupo y programación previa de guías en sitio.</p>
+              </div>
+            </article>
+
+            <article class="refund-tier-card tier-none">
+              <div class="tier-badge">
+                <span class="tier-pct">0%</span>
+                <span class="tier-label">No reembolsable</span>
+              </div>
+              <div class="tier-content">
+                <strong>Menos de 24 horas o no presentación</strong>
+                <p>Logística y personal asignados en caverna. No sujeto a reembolso monetario.</p>
+              </div>
+            </article>
           </div>
-          <div class="policy-detail">
-            <p>Se aplican las siguientes condiciones de cancelación y reembolso:</p>
-            <ul class="policy-list">
-              <li><strong>100%</strong> de reembolso si la cancelación se realiza con 72 horas o más de antelación al inicio del tour.</li>
-              <li><strong>50%</strong> de reembolso si la cancelación se realiza entre 24 y 72 horas antes del tour.</li>
-              <li><strong>0%</strong> de reembolso si la cancelación se realiza con menos de 24 horas de antelación, o en caso de no presentación.</li>
-              <li>Las cancelaciones solicitudes por el administrador están sujetas a revisión y el reembolso se procesa en un máximo de 10 días hábiles.</li>
-              <li>En caso de cancelación por parte de K’anba (mantenimiento, crecida del río, clima extremo), se ofrece reagendamiento o reembolso del 100%.</li>
-            </ul>
+
+          <!-- Nota de garantía por clima o fuerza mayor -->
+          <div class="policy-guarantee-box">
+            <span class="guarantee-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div class="guarantee-text">
+              <strong>Garantía K’anba por clima y caudal</strong>
+              <p>Si el descenso se suspende por crecida del río Cahabón o alerta climática, tienes derecho automático a reprogramar sin costo o recibir el <strong>100% de reembolso</strong>.</p>
+            </div>
           </div>
-          <a class="text-link light-link" href="mi-reserva.html">Gestionar mi reserva <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></a>
+
+          <div class="policies-actions">
+            <a class="btn btn-primary" href="mi-reserva.html">
+              <span>Gestionar mi reserva</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </a>
+            <a class="text-link light-link" href="informacion.html#faq">Ver preguntas frecuentes</a>
+          </div>
         </div>
-        <div class="accordion accordion-dark" id="policiesAccordion"></div>
+
+        <div class="policies-column-right">
+          <div class="policies-column-head">
+            <span class="column-eyebrow">Detalle de normativas</span>
+            <h2 class="column-title">Condiciones operativas y de seguridad</h2>
+            <p class="column-desc">Haz clic en cada sección para conocer los protocolos aplicables durante tu visita.</p>
+          </div>
+          <div class="accordion accordion-dark" id="policiesAccordion"></div>
+        </div>
       </div>
     </section>
   </main>
