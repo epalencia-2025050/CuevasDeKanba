@@ -483,6 +483,29 @@ CREATE TABLE IF NOT EXISTS kanba_rel.kanba_tour_expenses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Cueva y Tours: Reservas de Guías con Grupo
+CREATE TABLE IF NOT EXISTS kanba_rel.kanba_guide_group_bookings (
+  id TEXT PRIMARY KEY,
+  reservation_id TEXT REFERENCES kanba_rel.reservations(id) ON DELETE CASCADE,
+  reservation_code VARCHAR(40) NOT NULL UNIQUE,
+  tour_id TEXT NOT NULL REFERENCES kanba_rel.tours(id) ON DELETE RESTRICT,
+  local_date DATE NOT NULL,
+  local_time TIME WITHOUT TIME ZONE NOT NULL,
+  tourists_count INTEGER NOT NULL CHECK (tourists_count > 0),
+  guide_name VARCHAR(120) NOT NULL,
+  guide_email VARCHAR(254) NOT NULL,
+  guide_phone VARCHAR(40),
+  agency_name VARCHAR(160) DEFAULT '',
+  status VARCHAR(24) NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment','confirmed','cancelled','expired')),
+  hold_expires_at TIMESTAMPTZ,
+  notes VARCHAR(600),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS guide_group_slot_idx ON kanba_rel.kanba_guide_group_bookings (tour_id, local_date, local_time, status);
+CREATE INDEX IF NOT EXISTS guide_group_code_idx ON kanba_rel.kanba_guide_group_bookings (reservation_code);
+CREATE INDEX IF NOT EXISTS guide_group_agency_idx ON kanba_rel.kanba_guide_group_bookings (lower(agency_name));
+
 ALTER TABLE kanba_rel.reservations ADD COLUMN IF NOT EXISTS guide_id TEXT;
 ALTER TABLE kanba_rel.reservations ADD COLUMN IF NOT EXISTS channel VARCHAR(20) DEFAULT 'web';
 

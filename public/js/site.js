@@ -261,6 +261,8 @@
     date: null,
     time: null,
     pax: 1,
+    isGuideGroup: false,
+    guideAgency: '',
     step: 1,
     gallery: [],
     galleryFilter: 'all',
@@ -399,8 +401,7 @@
       const img = $('#heroImage');
       if (img && hero.image) {
         const cleanHeroImg = hero.image
-          .replace(/^\/assets\/img\/kanba-cave-02\.jpg$/, 'images/kanba-hero.jpg')
-          .replace(/^images\/image_12\.png$/, 'images/kanba-hero.jpg');
+          .replace(/(?:^|\/)(?:kanba-cave-02\.jpg|image_12\.png)$/, 'images/kanba-hero.jpg');
         img.src = cleanHeroImg;
         img.alt = hero.imageAlt || img.alt;
       }
@@ -904,15 +905,20 @@
 
   function renderTimes() {
     const wrap = $('#timeSlots');
-    if (!wrap) return;
-    wrap.replaceChildren();
+    const guideSelect = $('#guideScheduleSelect');
+    if (!wrap && !guideSelect) return;
+    if (wrap) wrap.replaceChildren();
+    if (guideSelect) {
+      guideSelect.replaceChildren();
+      guideSelect.appendChild(el('option', { value: '', text: state.date ? 'Selecciona un horario disponible' : 'Selecciona fecha primero' }));
+    }
     if (!state.date) {
-      wrap.append(el('p', { className: 'loading-line', text: 'Elige una fecha para ver los horarios.' }));
+      if (wrap) wrap.append(el('p', { className: 'loading-line', text: 'Elige una fecha para ver los horarios.' }));
       return;
     }
     const entry = tourEntryFor(state.date);
     if (!entry) {
-      wrap.append(el('p', { className: 'loading-line', text: 'No hay horarios para esta fecha.' }));
+      if (wrap) wrap.append(el('p', { className: 'loading-line', text: 'No hay horarios para esta fecha.' }));
       return;
     }
     entry.departures.forEach((departure) => {
@@ -922,19 +928,35 @@
       else if (departure.status === 'closed') label = 'Cerrado';
       else if (departure.status === 'soldout' || departure.left <= 0) label = 'Agotado';
       else if (departure.status === 'last') label = `Últimos ${departure.left}`;
-      const button = el('button', {
-        className: `time-slot${state.time === departure.time ? ' selected' : ''}`,
-        attrs: { type: 'button', disabled, 'aria-pressed': String(state.time === departure.time) },
-        dataset: { time: departure.time }
-      }, [
-        el('strong', { text: departure.time }),
-        el('small', { text: label })
-      ]);
-      if (!disabled) {
-        button.addEventListener('click', () => selectTime(departure.time));
+      if (wrap) {
+        const button = el('button', {
+          className: `time-slot${state.time === departure.time ? ' selected' : ''}`,
+          attrs: { type: 'button', disabled, 'aria-pressed': String(state.time === departure.time) },
+          dataset: { time: departure.time }
+        }, [
+          el('strong', { text: departure.time }),
+          el('small', { text: label })
+        ]);
+        if (!disabled) {
+          button.addEventListener('click', () => selectTime(departure.time));
+        }
+        wrap.append(button);
       }
-      wrap.append(button);
+
+      if (guideSelect) {
+        const opt = el('option', {
+          value: departure.time,
+          text: `${departure.time} · ${departure.left} ${departure.left === 1 ? 'cupo' : 'cupos'}${disabled ? ' (' + label + ')' : ''}`
+        });
+        if (disabled) opt.disabled = true;
+        if (state.time === departure.time) opt.selected = true;
+        guideSelect.appendChild(opt);
+      }
     });
+
+    if (state.isGuideGroup) {
+      syncGuidePax();
+    }
   }
 
   function selectTime(time) {
@@ -946,11 +968,71 @@
       const max = Math.max(1, Math.min(tour.maxParticipants, departure.left));
       if (state.pax > max) state.pax = max;
     }
+    const guideSelect = $('#guideScheduleSelect');
+    if (guideSelect && guideSelect.value !== time) {
+      guideSelect.value = time || '';
+    }
     renderTimes();
-    updatePaxControls();
+    if (state.isGuideGroup) {
+      syncGuidePax();
+    } else {
+      updatePaxControls();
+    }
     renderSummary();
     updateToStep3();
     hideAvailabilityNote();
+  }
+
+  function syncGuidePax() {
+    const val = $('#guidePaxValue');
+    const minus = $('#minusGuidePax');
+    const plus = $('#plusGuidePax');
+    const hint = $('#guidePaxHint');
+    const tour = currentTour();
+    const left = selectedDepartureLeft();
+    const max = Math.max(1, Math.min(tour ? tour.maxParticipants : 12, left === null ? 12 : left));
+    if (left !== null && state.pax > max) {
+      state.pax = max;
+    }
+    if (val) val.textContent = String(state.pax);
+    if (minus) minus.disabled = state.pax <= 1;
+    if (plus) plus.disabled = left === null || state.pax >= max;
+    if (hint) {
+      if (left === null) {
+        hint.textContent = 'Selecciona un horario para consultar los cupos disponibles.';
+      } else if (left <= 0) {
+        hint.textContent = 'Este horario está agotado. Elige otro horario para tu grupo.';
+      } else {
+        hint.textContent = `Cupos libres en este horario: ${left}. Máximo por grupo: ${max} turistas.`;
+      }
+    }
+    const scheduleHint = $('#guideScheduleHint');
+    if (scheduleHint) {
+      scheduleHint.textContent = state.time && left !== null
+        ? `Horario ${state.time} seleccionado (${left} cupos libres).`
+        : 'Cupos disponibles calculados en tiempo real.';
+    }
+  }
+
+  function syncGuideToggle(active) {
+    state.isGuideGroup = Boolean(active);
+    const guideCheckbox = $('#isGuideGroupCheckbox');
+    if (guideCheckbox && guideCheckbox.checked !== state.isGuideGroup) {
+      guideCheckbox.checked = state.isGuideGroup;
+    }
+    const guideFields = $('#guideGroupFields');
+    if (guideFields) guideFields.hidden = !state.isGuideGroup;
+    const standardRow = $('#standardPaxRow');
+    if (standardRow) standardRow.hidden = state.isGuideGroup;
+    if (state.isGuideGroup) {
+      const guideSelect = $('#guideScheduleSelect');
+      if (guideSelect && state.time) guideSelect.value = state.time;
+      syncGuidePax();
+    } else {
+      updatePaxControls();
+    }
+    renderSummary();
+    updateToStep3();
   }
 
   function currentTour() {
@@ -1003,7 +1085,9 @@
     const left = selectedDepartureLeft();
     const valid = Boolean(tour && state.date && state.time && left !== null && left >= state.pax && state.pax >= 1);
     button.disabled = !valid || !state.user;
-    if (tour && left !== null && left < state.pax) {
+    if (state.isGuideGroup && tour && left !== null && left < state.pax) {
+      showAvailabilityNote(`Tu grupo tiene ${state.pax} turistas, pero este horario solo tiene ${left} cupos disponibles. Reduce la cantidad de turistas o elige otro horario.`);
+    } else if (tour && left !== null && left < state.pax) {
       showAvailabilityNote(`Solo quedan ${left} cupos en ese horario. Reduce los participantes o elige otro horario.`);
     }
   }
@@ -1041,13 +1125,30 @@
       while (names.children.length > state.pax - 1 && names.lastElementChild) names.lastElementChild.remove();
       while (names.children.length < state.pax - 1) {
         const number = names.children.length + 2;
+        const labelText = state.isGuideGroup
+          ? 'Nombre del turista ' + number
+          : 'Nombre del participante ' + number;
         names.append(el('label', { className: 'field' }, [
-          el('span', { text: 'Nombre del participante ' + number }),
+          el('span', { text: labelText }),
           el('input', { attrs: { name: 'guestName', required: true, maxlength: 120 } })
         ]));
       }
     }
-    setText('summaryPax', String(state.pax || 1));
+    const recapGuide = $('#recapGuideBadge');
+    if (recapGuide) {
+      recapGuide.hidden = !state.isGuideGroup;
+      if (state.isGuideGroup) {
+        recapGuide.replaceChildren();
+        recapGuide.append(
+          el('svg', { attrs: { viewBox: '0 0 24 24', width: '13', height: '13', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' } }, [
+            el('path', { attrs: { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' } }),
+            el('circle', { attrs: { cx: '9', cy: '7', r: '4' } })
+          ]),
+          document.createTextNode(` Guía con grupo (${state.pax} turistas)`)
+        );
+      }
+    }
+    setText('summaryPax', state.isGuideGroup ? `${state.pax || 1} turistas` : String(state.pax || 1));
     setText('summaryUnit', `${money(tour.price)} × ${state.pax || 1}`);
     setText('summaryTotal', money(tour.price * (state.pax || 1)));
 
@@ -1122,6 +1223,48 @@
       renderSummary();
       updateToStep3();
     });
+
+    const guideToggle = $('#isGuideGroupCheckbox');
+    if (guideToggle) {
+      guideToggle.addEventListener('change', (e) => syncGuideToggle(e.target.checked));
+    }
+    const guideSchedule = $('#guideScheduleSelect');
+    if (guideSchedule) {
+      guideSchedule.addEventListener('change', (e) => {
+        if (e.target.value) selectTime(e.target.value);
+      });
+    }
+    const minusGuide = $('#minusGuidePax');
+    const plusGuide = $('#plusGuidePax');
+    if (minusGuide) {
+      minusGuide.addEventListener('click', () => {
+        state.pax = Math.max(1, state.pax - 1);
+        syncGuidePax();
+        renderSummary();
+        updateToStep3();
+      });
+    }
+    if (plusGuide) {
+      plusGuide.addEventListener('click', () => {
+        const tour = currentTour();
+        const left = selectedDepartureLeft();
+        const max = Math.max(1, Math.min(tour ? tour.maxParticipants : 12, left === null ? 12 : left));
+        if (state.pax < max) {
+          state.pax = Math.min(max, state.pax + 1);
+          syncGuidePax();
+          renderSummary();
+          updateToStep3();
+        } else if (left !== null && state.pax >= left) {
+          showAvailabilityNote(`No puedes agregar más turistas: este horario solo tiene ${left} cupos disponibles.`);
+        }
+      });
+    }
+    const guideAgency = $('#guideAgencyName');
+    if (guideAgency) {
+      guideAgency.addEventListener('input', () => {
+        state.guideAgency = guideAgency.value.trim();
+      });
+    }
 
     const strip = $('#dateStrip');
     const prev = $('#datePrev');
@@ -1235,23 +1378,42 @@
       };
       const participantNames = [customer.name, ...Array.from(form.querySelectorAll('[name="guestName"]'), input => input.value.trim())];
       if (participantNames.some(name => !name)) { toast('Completa el nombre de cada participante.'); return; }
-      const requestFingerprint = JSON.stringify({ tourId: tour.id, date: state.date, time: state.time, participants: state.pax, customer, participantNames });
+      const bookingPayload = {
+        requestId: state.bookingRequestId,
+        tourId: tour.id,
+        date: state.date,
+        time: state.time,
+        participants: state.pax,
+        participantNames,
+        customer
+      };
+      if (state.isGuideGroup) {
+        const agency = ($('#guideAgencyName')?.value || '').trim();
+        bookingPayload.guideGroup = {
+          isGuide: true,
+          tourists: state.pax,
+          agency: agency || 'Guía independiente'
+        };
+      }
+      const requestFingerprint = JSON.stringify({
+        tourId: tour.id,
+        date: state.date,
+        time: state.time,
+        participants: state.pax,
+        customer,
+        participantNames,
+        guideGroup: state.isGuideGroup ? bookingPayload.guideGroup : undefined
+      });
       if (state.bookingFingerprint !== requestFingerprint) {
         state.bookingFingerprint = requestFingerprint;
         state.bookingRequestId = crypto.randomUUID();
+        bookingPayload.requestId = state.bookingRequestId;
       }
       let data;
       try {
         data = await api('/api/reservations', {
           method: 'POST',
-          body: JSON.stringify({
-            requestId: state.bookingRequestId,
-            tourId: tour.id,
-            date: state.date,
-            time: state.time,
-            participants: state.pax, participantNames,
-            customer
-          })
+          body: JSON.stringify(bookingPayload)
         });
       } catch (error) {
         if (error.status === 401) {

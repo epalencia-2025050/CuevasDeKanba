@@ -138,6 +138,7 @@ export function createInitialStore() {
     reservations: [], emails: [], closures: [], refunds: [],
     guides: [],
     tourExpenses: [],
+    guideGroupBookings: [],
     cafeProducts: [],
     cafeSupplies: [],
     cafeInventoryMovements: [],
@@ -763,7 +764,28 @@ export function createReservation(input, { user = null } = {}) {
   if (!user?.id) throw new AppError('Inicia sesión para reservar.', 401, 'login_required');
   const requestId = String(input.requestId || '');
   if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new AppError('Identificador de solicitud inválido.', 422, 'request_id_required');
-  const requestDigest = crypto.createHash('sha256').update(JSON.stringify({ tourId: input.tourId, date: input.date, time: input.time, participants: Number(input.participants), customer: input.customer, participantNames: input.participantNames })).digest('hex');
+
+  let guideGroup = undefined;
+  if (input.guideGroup && (input.guideGroup.isGuide === true || Number(input.guideGroup.tourists) > 0)) {
+    const tourists = Math.max(1, Math.min(Number(input.participants) || 1, Number(input.guideGroup.tourists) || Number(input.participants) || 1));
+    const agency = String(input.guideGroup.agency || '').trim().slice(0, 120);
+    guideGroup = {
+      isGuide: true,
+      tourists,
+      agency: agency || 'Guía independiente'
+    };
+  }
+
+  const digestPayload = {
+    tourId: input.tourId,
+    date: input.date,
+    time: input.time,
+    participants: Number(input.participants),
+    customer: input.customer,
+    participantNames: input.participantNames
+  };
+  if (guideGroup) digestPayload.guideGroup = guideGroup;
+  const requestDigest = crypto.createHash('sha256').update(JSON.stringify(digestPayload)).digest('hex');
   const previous = d.reservations.find(r => r.userId === user.id && r.requestId === requestId);
   if (previous) {
     if (previous.requestDigest !== requestDigest) throw new AppError('La solicitud ya se usó con otros datos.', 409, 'idempotency_conflict');
@@ -831,6 +853,7 @@ export function createReservation(input, { user = null } = {}) {
     currency: policy.currency,
     customer,
     participantNames: participantNames.map(name => name.trim()),
+    ...(guideGroup ? { guideGroup } : {}),
     status: 'pending_payment',
     userId: user ? user.id : null,
     createdByRole: user ? user.role : null,
@@ -850,8 +873,36 @@ export function createReservation(input, { user = null } = {}) {
       paidAt: null
     },
     receipt: null,
-    history: [{ at: new Date(now).toISOString(), type: 'created', label: `Reserva creada · cupos bloqueados por ${holdMinutes} minutos` }]
+    history: [{ at: new Date(now).toISOString(), type: 'created', label: guideGroup ? `Reserva creada (Guía con ${guideGroup.tourists} turistas) · cupos bloqueados por ${holdMinutes} minutos` : `Reserva creada · cupos bloqueados por ${holdMinutes} minutos` }]
   };
+
+  if (guideGroup) {
+    if (!Array.isArray(d.guideGroupBookings)) d.guideGroupBookings = [];
+    const guideRecord = {
+      id: `gg_${reservation.code}`,
+      reservationCode: reservation.code,
+      tourId: reservation.tourId,
+      tourName: reservation.tourName,
+      date: reservation.date,
+      time: reservation.time,
+      touristsCount: guideGroup.tourists,
+      guideName: reservation.customer.name,
+      guideEmail: reservation.customer.email,
+      guidePhone: reservation.customer.phone || '',
+      agencyName: guideGroup.agency || '',
+      status: reservation.status,
+      holdExpiresAt: reservation.holdExpiresAt,
+      notes: reservation.customer.notes || '',
+      createdAt: reservation.createdAt,
+      updatedAt: reservation.updatedAt
+    };
+    const existingIdx = d.guideGroupBookings.findIndex(g => g.reservationCode === reservation.code);
+    if (existingIdx >= 0) {
+      d.guideGroupBookings[existingIdx] = guideRecord;
+    } else {
+      d.guideGroupBookings.unshift(guideRecord);
+    }
+  }
 
   d.reservations.unshift(reservation);
   saveDb();
@@ -861,6 +912,42 @@ export function createReservation(input, { user = null } = {}) {
 /* ------------------------------------------------------------------ */
 /* Availability guards for admin                                     */
 /* ------------------------------------------------------------------ */
+
+export function syncGuideGroupStatus(code, status, at = new Date().toISOString()) {
+  const d = getDb();
+  if (!Array.isArray(d.guideGroupBookings)) return;
+  const gg = d.guideGroupBookings.find(g => g.reservationCode === code);
+  if (gg) {
+    gg.status = status;
+    gg.updatedAt = at;
+  }
+}
+
+export function getGuideGroupBookings({ tourId, date, status, q } = {}) {
+  closeExpiredHolds();
+  const d = getDb();
+  let list = [...(d.guideGroupBookings || [])];
+  if (tourId) list = list.filter(g => g.tourId === tourId);
+  if (date) list = list.filter(g => g.date === date);
+  if (status && status !== 'all') list = list.filter(g => g.status === status);
+  if (q) {
+    const term = q.toLowerCase();
+    list = list.filter(g =>
+      (g.reservationCode && g.reservationCode.toLowerCase().includes(term)) ||
+      (g.guideName && g.guideName.toLowerCase().includes(term)) ||
+      (g.guideEmail && g.guideEmail.toLowerCase().includes(term)) ||
+      (g.agencyName && g.agencyName.toLowerCase().includes(term)) ||
+      (g.tourName && g.tourName.toLowerCase().includes(term))
+    );
+  }
+  list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return list;
+}
+
+export function findGuideGroupByReservation(code) {
+  const d = getDb();
+  return (d.guideGroupBookings || []).find(g => g.reservationCode === code) || null;
+}
 
 export function closeExpiredHolds() {
   const d = getDb();
@@ -876,6 +963,7 @@ export function closeExpiredHolds() {
       if (!Array.isArray(r.history)) r.history = [];
       r.history.push({ at: new Date(now).toISOString(), type: 'expired', label: 'Plazo de pago vencido · cupos liberados automáticamente' });
       expired.push(r);
+      syncGuideGroupStatus(r.code, 'expired', r.updatedAt);
     }
   }
   if (expired.length) saveDb();

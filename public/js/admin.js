@@ -22,6 +22,7 @@
     contentTab: 'brand',
     charts: [],
     guides: [],
+    guideGroups: [],
     tourExpenses: [],
     tourReports: null
   };
@@ -29,6 +30,7 @@
   const VIEW_META = {
     overview: ['Operación', 'Resumen'],
     reservations: ['Operación', 'Reservas'],
+    'guide-groups': ['Operación', 'Guías con Grupo'],
     guides: ['Operación', 'Guías Turísticos'],
     availability: ['Operación', 'Disponibilidad'],
     tours: ['Operación', 'Tours'],
@@ -270,6 +272,7 @@
     const loaders = {
       overview: loadOverview,
       reservations: loadReservations,
+      'guide-groups': loadGuideGroups,
       guides: loadGuides,
       availability: loadAvailability,
       tours: loadTours,
@@ -607,6 +610,10 @@
 
         const customer = el('td');
         customer.append(el('span', 'cell-strong', r.customer?.name || '—'), el('span', 'cell-sub', r.customer?.email || '—'));
+        if (r.guideGroup?.isGuide) {
+          const guideBadge = el('span', 'badge-guide-tag', `Guía (${r.guideGroup.tourists} turistas${r.guideGroup.agency ? ` · ${r.guideGroup.agency}` : ''})`);
+          customer.append(guideBadge);
+        }
         row.append(customer);
 
         row.append(el('td', '', r.tour?.name || '—'));
@@ -654,15 +661,27 @@
       const statusRow = el('div', 'row');
       statusRow.append(statusBadge(r.status));
       if (r.payment?.status) statusRow.append(statusBadge(r.payment.status, `Pago: ${STATUS_LABEL[r.payment.status] || r.payment.status}`));
+      if (r.guideGroup?.isGuide) {
+        statusRow.append(el('span', 'badge-guide-tag', `Guía con grupo (${r.guideGroup.tourists} turistas)`));
+      }
       summary.append(statusRow);
       summary.append(el('div', 'mt'));
-      summary.append(detailList([
+      const details = [
         ['Experiencia', r.tour?.name || r.tourId],
         ['Canal', r.channel === 'pos' ? 'Taquilla presencial (POS)' : 'Reserva Web'],
         ['Guía asignado', r.guideName || 'Sin asignar'],
         ['Fecha', r.dateLong || r.date],
         ['Horario', r.time],
-        ['Participantes', `${r.participants}`],
+        ['Participantes', `${r.participants}`]
+      ];
+      if (r.guideGroup?.isGuide) {
+        details.push(
+          ['Modalidad', 'Guía con grupo de turistas'],
+          ['Turistas a cargo', `${r.guideGroup.tourists} personas`],
+          ['Agencia / Acreditación', r.guideGroup.agency || 'Guía independiente']
+        );
+      }
+      details.push(
         ['Precio unitario', money(r.unitPrice)],
         ['Total', money(r.total)],
         ['Titular', r.customer?.name],
@@ -676,7 +695,8 @@
         ['Pagada el', longDateTime(r.paidAt)],
         ['Comprobante', r.receipt?.number || '—'],
         ['Notas del cliente', r.customer?.notes, true]
-      ]));
+      );
+      summary.append(detailList(details));
       if (r.cancellation) {
         const note = el('div', 'modal-note danger');
         note.textContent = `Cancelada el ${longDateTime(r.cancelledAt)} por ${r.cancellation.by === 'admin' ? 'administración' : 'el cliente'} · ${r.cancellation.reason} · reembolso ${money(r.cancellation.refundAmount)}`;
@@ -4444,6 +4464,193 @@
     window.open(`/api/admin/tours/reports/export?format=pdf&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, '_blank');
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Cueva y Tours · Consulta y Gestión de Guías con Grupo              */
+  /* ------------------------------------------------------------------ */
+
+  async function populateGuideGroupTours() {
+    const select = $('#guideGroupsTour');
+    if (!select) return;
+    if (!state.tours || !state.tours.length) {
+      try {
+        const data = await api('/api/admin/tours');
+        state.tours = data.tours || [];
+      } catch {
+        /* fallback silencioso */
+      }
+    }
+    const current = select.value;
+    select.innerHTML = '<option value="">Todos los tours</option>';
+    (state.tours || []).forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      select.appendChild(opt);
+    });
+    if (current && (state.tours || []).some((t) => t.id === current)) {
+      select.value = current;
+    }
+  }
+
+  async function loadGuideGroups() {
+    const tbody = $('#guideGroupsTbody');
+    const countEl = $('#guideGroupsCount');
+    if (tbody) renderTableSkeleton(tbody, 8, 4);
+    if (countEl) countEl.innerHTML = '<span class="skeleton" style="display:inline-block;width:150px;height:14px;border-radius:4px;"></span>';
+    setSync(true);
+
+    await populateGuideGroupTours();
+
+    const search = $('#guideGroupsSearch')?.value.trim() || '';
+    const tourId = $('#guideGroupsTour')?.value || '';
+    const date = $('#guideGroupsDate')?.value || '';
+    const status = $('#guideGroupsStatus')?.value || 'all';
+
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (tourId) params.set('tourId', tourId);
+    if (date) params.set('date', date);
+    if (status && status !== 'all') params.set('status', status);
+
+    try {
+      const res = await api(`/api/admin/tours/guide-groups?${params}`);
+      state.guideGroups = res.guideGroups || [];
+      renderGuideGroups();
+    } catch (err) {
+      if (countEl) countEl.textContent = '0 grupos registrados';
+      if (tbody) {
+        tbody.replaceChildren();
+        const tr = el('tr');
+        const td = el('td');
+        td.colSpan = 8;
+        td.style.textAlign = 'center';
+        td.style.padding = '30px 15px';
+        const msg = el('div');
+        const strong = el('strong', '', 'No se pudieron cargar los registros de guías con grupo');
+        strong.style.display = 'block';
+        strong.style.color = '#8e3b25';
+        strong.style.marginBottom = '4px';
+        const sub = el('span', '', 'Error de conexión o permisos insuficientes al consultar el servidor.');
+        sub.style.fontSize = '9px';
+        sub.style.color = 'var(--muted)';
+        msg.append(strong, sub);
+        td.append(msg);
+        tr.append(td);
+        tbody.append(tr);
+      }
+      handleError(err);
+    } finally {
+      setSync(false);
+    }
+  }
+
+  function renderGuideGroups() {
+    const tbody = $('#guideGroupsTbody');
+    const countEl = $('#guideGroupsCount');
+    if (!tbody) return;
+    tbody.replaceChildren();
+
+    const list = state.guideGroups || [];
+    const totalTourists = list.reduce((sum, g) => sum + (Number(g.touristsCount) || 0), 0);
+    if (countEl) {
+      countEl.textContent = list.length === 0
+        ? 'No hay registros de guías con grupo'
+        : `${list.length} ${list.length === 1 ? 'grupo' : 'grupos'} · ${totalTourists} ${totalTourists === 1 ? 'turista' : 'turistas'} en total`;
+    }
+
+    if (!list.length) {
+      const tr = el('tr');
+      const td = el('td');
+      td.colSpan = 8;
+      td.style.textAlign = 'center';
+      td.style.padding = '30px 15px';
+      const strong = el('strong', '', 'No hay registros de guías con grupo para este filtro');
+      strong.style.display = 'block';
+      strong.style.marginBottom = '4px';
+      const sub = el('span', '', 'Prueba cambiando de fecha, tour, estado o limpiando la búsqueda.');
+      sub.style.fontSize = '9px';
+      sub.style.color = 'var(--muted)';
+      td.append(strong, sub);
+      tr.append(td);
+      tbody.append(tr);
+      return;
+    }
+
+    list.forEach((g) => {
+      const row = el('tr', 'clickable');
+      row.addEventListener('click', () => openReservation(g.reservationCode));
+
+      // 1. Código
+      const codeCell = el('td', 'cell-code');
+      codeCell.append(el('span', 'cell-strong', g.reservationCode || '—'), el('span', 'cell-sub', shortDate(g.createdAt)));
+      row.append(codeCell);
+
+      // 2. Tour
+      const tourCell = el('td');
+      tourCell.append(el('span', 'cell-strong', g.tourName || '—'));
+      row.append(tourCell);
+
+      // 3. Fecha y Horario
+      const dateCell = el('td', 'cell-nowrap');
+      dateCell.append(el('span', '', g.date || '—'), el('span', 'cell-sub', g.time ? `${g.time} hrs` : '—'));
+      row.append(dateCell);
+
+      // 4. Turistas
+      const touristsCell = el('td');
+      touristsCell.style.textAlign = 'center';
+      const badge = el('span', 'badge-guide-tag', `${g.touristsCount} ${g.touristsCount === 1 ? 'turista' : 'turistas'}`);
+      touristsCell.append(badge);
+      row.append(touristsCell);
+
+      // 5. Guía
+      const guideCell = el('td');
+      guideCell.append(
+        el('span', 'cell-strong', g.guideName || '—'),
+        el('span', 'cell-sub', g.guideEmail || (g.guidePhone || '—'))
+      );
+      row.append(guideCell);
+
+      // 6. Agencia
+      const agencyCell = el('td');
+      agencyCell.append(el('span', '', g.agencyName || 'Guía independiente'));
+      row.append(agencyCell);
+
+      // 7. Estado
+      const statusCell = el('td');
+      statusCell.append(statusBadge(g.status));
+      row.append(statusCell);
+
+      // 8. Retención / Plazo
+      const holdCell = el('td', 'cell-sub');
+      if (g.status === 'pending_payment' && g.holdExpiresAt) {
+        const msLeft = Date.parse(g.holdExpiresAt) - Date.now();
+        const minsLeft = Math.ceil(msLeft / 60000);
+        if (minsLeft > 0) {
+          holdCell.textContent = `${minsLeft} min restantes`;
+          holdCell.style.color = 'var(--rust)';
+          holdCell.style.fontWeight = '700';
+        } else {
+          holdCell.textContent = 'Hold vencido';
+          holdCell.style.color = '#8e3b25';
+        }
+      } else if (g.status === 'confirmed') {
+        holdCell.textContent = 'Cupos confirmados';
+        holdCell.style.color = '#27604e';
+      } else if (g.status === 'cancelled') {
+        holdCell.textContent = 'Cancelado';
+        holdCell.style.color = '#8e3b25';
+      } else if (g.status === 'expired') {
+        holdCell.textContent = 'Expirado (liberado)';
+        holdCell.style.color = '#8e3b25';
+      } else {
+        holdCell.textContent = '—';
+      }
+      row.append(holdCell);
+
+      tbody.append(row);
+    });
+  }
+
   function bindTourEvents() {
     $('#openTourPosBtn')?.addEventListener('click', openTourPosModal);
     $('#refreshGuides')?.addEventListener('click', loadGuides);
@@ -4454,6 +4661,30 @@
     $('#filterTourReports')?.addEventListener('click', loadTourReports);
     $('#tourExportExcel')?.addEventListener('click', exportTourExcel);
     $('#tourExportPdf')?.addEventListener('click', exportTourPdf);
+
+    // Eventos de Guías con Grupo
+    $('#filterGuideGroups')?.addEventListener('click', loadGuideGroups);
+    $('#refreshGuideGroups')?.addEventListener('click', loadGuideGroups);
+    $('#guideGroupsTour')?.addEventListener('change', loadGuideGroups);
+    $('#guideGroupsDate')?.addEventListener('change', loadGuideGroups);
+    $('#guideGroupsStatus')?.addEventListener('change', loadGuideGroups);
+    $('#guideGroupsSearch')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        loadGuideGroups();
+      }
+    });
+    $('#clearGuideGroupsFilters')?.addEventListener('click', () => {
+      const search = $('#guideGroupsSearch');
+      const tour = $('#guideGroupsTour');
+      const date = $('#guideGroupsDate');
+      const status = $('#guideGroupsStatus');
+      if (search) search.value = '';
+      if (tour) tour.value = '';
+      if (date) date.value = '';
+      if (status) status.value = 'all';
+      loadGuideGroups();
+    });
   }
 
   function init() {

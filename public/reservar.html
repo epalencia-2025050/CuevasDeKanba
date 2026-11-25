@@ -121,7 +121,59 @@
                 <div class="time-slots" id="timeSlots"></div>
               </div>
               <div class="inline-note" role="status" id="availabilityNote" hidden></div>
-              <div class="participants-row">
+
+              <div class="guide-group-card" id="guideGroupCard">
+                <div class="guide-group-toggle-wrap">
+                  <label class="guide-toggle-switch" for="isGuideGroupCheckbox">
+                    <input type="checkbox" id="isGuideGroupCheckbox" name="isGuideGroup" aria-controls="guideGroupFields">
+                    <span class="guide-toggle-slider" aria-hidden="true"></span>
+                    <span class="guide-toggle-copy">
+                      <span class="guide-toggle-title">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                        ¿Vienes como guía con grupo?
+                      </span>
+                      <span class="guide-toggle-desc">Opción para guías acreditados, coordinadores o agencias que viajan con un grupo de turistas.</span>
+                    </span>
+                  </label>
+                </div>
+
+                <div class="guide-group-fields" id="guideGroupFields" hidden>
+                  <div class="guide-fields-grid">
+                    <div class="field">
+                      <label for="guideScheduleSelect"><span>Horario para el grupo <em>*</em></span></label>
+                      <select id="guideScheduleSelect" class="guide-select">
+                        <option value="">Selecciona fecha primero</option>
+                      </select>
+                      <small class="guide-hint" id="guideScheduleHint">Cupos disponibles calculados en tiempo real.</small>
+                    </div>
+
+                    <div class="field">
+                      <label for="guidePaxCount"><span>Cantidad de turistas que llevas <em>*</em></span></label>
+                      <div class="stepper stepper-guide" role="group" aria-label="Cantidad de turistas que lleva el guía">
+                        <button type="button" id="minusGuidePax" aria-label="Restar turista">−</button>
+                        <output id="guidePaxValue" aria-live="polite">1</output>
+                        <button type="button" id="plusGuidePax" aria-label="Sumar turista">+</button>
+                      </div>
+                      <small class="guide-hint" id="guidePaxHint">No puede superar los cupos disponibles de la salida.</small>
+                    </div>
+
+                    <div class="field field-full">
+                      <label for="guideAgencyName"><span>Nombre de agencia o acreditación <small>(opcional)</small></span></label>
+                      <input type="text" id="guideAgencyName" name="guideAgencyName" placeholder="Ej. Acreditación INGUAT, agencia o grupo comunitario" maxlength="120">
+                    </div>
+                  </div>
+
+                  <div class="guide-info-banner" id="guideInfoBanner">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 16v-4M12 8h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <div>
+                      <strong>Modalidad de Guía con Grupo</strong>
+                      <p>Tu reserva quedará registrada y etiquetada en taquilla y administración para agilizar la entrega de boletos y la logística del grupo.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="participants-row" id="standardPaxRow">
                 <div>
                   <h4>¿Cuántos son?</h4>
                   <p id="participantHelp">Selecciona una salida.</p>
@@ -155,6 +207,7 @@
                   <span><strong>Horario:</strong> <span id="recapTime">—</span></span>
                   <span><strong>Participantes:</strong> <span id="recapPax">1</span></span>
                   <span class="recap-total"><strong>Total:</strong> <span id="recapTotal">—</span></span>
+                  <span class="recap-guide-badge" id="recapGuideBadge" hidden><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Guía con grupo</span>
                 </div>
               </div>
 

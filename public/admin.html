@@ -92,6 +92,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 3v4M16 3v4M3 10h18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
           Reservas
         </button>
+        <button type="button" class="nav-item" data-view="guide-groups">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          Guías con Grupo
+        </button>
         <button type="button" class="nav-item" data-view="guides">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="9" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
           Guías
@@ -260,6 +264,53 @@
           <div class="admin-card no-pad">
             <div class="list-head"><span id="reservationCount">—</span><span class="muted">Haz clic en una reserva para gestionarla.</span></div>
             <div class="table-wrap"><table class="data-table reservations-table" id="reservationsTable"></table></div>
+          </div>
+        </section>
+
+        <!-- Guías con Grupo -->
+        <section class="admin-view" id="view-guide-groups" data-view-panel="guide-groups" hidden>
+          <div class="toolbar">
+            <div class="toolbar-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <input type="search" id="guideGroupsSearch" placeholder="Buscar agencia, guía o código…" autocomplete="off">
+            </div>
+            <select id="guideGroupsTour" class="select-compact" aria-label="Filtrar por tour">
+              <option value="">Todos los tours</option>
+            </select>
+            <input type="date" id="guideGroupsDate" class="select-compact" aria-label="Filtrar por fecha">
+            <select id="guideGroupsStatus" class="select-compact" aria-label="Filtrar por estado">
+              <option value="all">Todos los estados</option>
+              <option value="pending_payment">Retención (pago pendiente)</option>
+              <option value="confirmed">Confirmadas</option>
+              <option value="cancelled">Canceladas</option>
+              <option value="expired">Expiradas</option>
+            </select>
+            <button class="btn btn-primary btn-compact" type="button" id="filterGuideGroups">Filtrar</button>
+            <button class="btn btn-outline btn-compact" type="button" id="clearGuideGroupsFilters">Limpiar</button>
+            <button class="btn btn-outline btn-compact" type="button" id="refreshGuideGroups" title="Recargar datos">Actualizar</button>
+          </div>
+          <div class="admin-card no-pad">
+            <div class="list-head">
+              <span id="guideGroupsCount">—</span>
+              <span class="muted">Haz clic en cualquier registro para ver o gestionar la reserva completa.</span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="guideGroupsTable">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Tour</th>
+                    <th>Fecha y Horario</th>
+                    <th style="text-align:center;">Turistas</th>
+                    <th>Guía Titular</th>
+                    <th>Agencia / Acreditación</th>
+                    <th>Estado</th>
+                    <th>Retención / Plazo</th>
+                  </tr>
+                </thead>
+                <tbody id="guideGroupsTbody"></tbody>
+              </table>
+            </div>
           </div>
         </section>
 

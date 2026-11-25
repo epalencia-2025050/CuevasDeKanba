@@ -49,7 +49,7 @@ body.login-page {
 .cave-bg-image {
   position: absolute;
   inset: 0;
-  background-image: url('../images/image_12.png');
+  background-image: url('../images/kanba-hero.jpg');
   background-size: cover;
   background-position: center center;
   filter: saturate(.88) contrast(1.08) brightness(.7);

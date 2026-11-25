@@ -324,3 +324,145 @@ test('tours: reports and exports (Excel CSV with UTF-8 BOM and printable PDF)', 
   assert.ok(pdfHtml.includes('Reporte Operativo y Comercial'));
   assert.ok(pdfHtml.includes('Grupo Caminantes'));
 });
+
+test('tour booking: guide group booking records tourists count and agency, validates capacity and shows in admin', async () => {
+  const { request, login } = setup();
+  const adminCookie = await login('admin');
+  const userCookie = await login('user');
+
+  // 1. Normal reservation without guideGroup
+  const normalRes = await request('/api/reservations', userCookie, 'POST', {
+    requestId: 'req_normal_guide_test_001',
+    tourId: 'cueva-rio-sagrado',
+    date: '2026-12-25',
+    time: '10:00',
+    participants: 2,
+    participantNames: ['Visitante Uno', 'Visitante Dos'],
+    customer: {
+      name: 'Viajero Normal',
+      email: 'viajero@example.invalid',
+      phone: '55551111',
+      country: 'Guatemala',
+      acceptPolicies: true,
+      acceptTerms: true
+    }
+  });
+  assert.equal(normalRes.status, 201);
+  const normalJson = await normalRes.json();
+  assert.ok(normalJson.code);
+  assert.equal(normalJson.guideGroup, undefined);
+
+  // 2. Guide reservation with 5 tourists and agency
+  const guideRes = await request('/api/reservations', userCookie, 'POST', {
+    requestId: 'req_guide_group_test_002',
+    tourId: 'cueva-rio-sagrado',
+    date: '2026-12-25',
+    time: '10:00',
+    participants: 5,
+    participantNames: ['Turista 1', 'Turista 2', 'Turista 3', 'Turista 4', 'Turista 5'],
+    customer: {
+      name: 'Guía Carlos Pop',
+      email: 'guia.carlos@example.invalid',
+      phone: '55552222',
+      country: 'Guatemala',
+      acceptPolicies: true,
+      acceptTerms: true
+    },
+    guideGroup: {
+      isGuide: true,
+      tourists: 5,
+      agency: 'Rutas Kanba Aventura'
+    }
+  });
+  assert.equal(guideRes.status, 201);
+  const guideJson = await guideRes.json();
+  assert.ok(guideJson.code);
+  assert.equal(guideJson.guideGroup?.isGuide, true);
+  assert.equal(guideJson.guideGroup?.tourists, 5);
+  assert.equal(guideJson.guideGroup?.agency, 'Rutas Kanba Aventura');
+
+  // Check departure availability: initial capacity 20 - 2 (normal) - 5 (guide) = 13 left
+  const availRes = await request('/api/availability?tour=cueva-rio-sagrado&from=2026-12-25&days=1');
+  assert.equal(availRes.status, 200);
+  const availJson = await availRes.json();
+  const dep = availJson.daysList?.[0]?.tours?.[0]?.departures?.find((d) => d.time === '10:00');
+  assert.ok(dep);
+  assert.equal(dep.taken, 7);
+  assert.equal(dep.left, 13);
+
+  // 3. Exceeding capacity check: requesting 14 seats when only 13 are left should fail with 409
+  const overbookRes = await request('/api/reservations', userCookie, 'POST', {
+    requestId: 'req_guide_group_overbook_003',
+    tourId: 'cueva-rio-sagrado',
+    date: '2026-12-25',
+    time: '10:00',
+    participants: 14,
+    participantNames: Array.from({ length: 14 }, (_, i) => `Turista ${i + 1}`),
+    customer: {
+      name: 'Otro Guía',
+      email: 'guia2@example.invalid',
+      phone: '55553333',
+      country: 'Guatemala',
+      acceptPolicies: true,
+      acceptTerms: true
+    },
+    guideGroup: {
+      isGuide: true,
+      tourists: 14,
+      agency: 'Tour Operador Exceso'
+    }
+  });
+  assert.equal(overbookRes.status, 409);
+
+  // 4. Admin search and detail verification
+  const searchAgencyRes = await request('/api/admin/reservations?q=Kanba+Aventura', adminCookie);
+  assert.equal(searchAgencyRes.status, 200);
+  const searchJson = await searchAgencyRes.json();
+  assert.equal(searchJson.total, 1);
+  assert.equal(searchJson.reservations[0].code, guideJson.code);
+  assert.equal(searchJson.reservations[0].guideGroup?.agency, 'Rutas Kanba Aventura');
+  assert.equal(searchJson.reservations[0].guideGroup?.tourists, 5);
+
+  const detailRes = await request(`/api/admin/reservations/${guideJson.code}`, adminCookie);
+  assert.equal(detailRes.status, 200);
+  const detailJson = await detailRes.json();
+  assert.equal(detailJson.reservation.guideGroup?.isGuide, true);
+  assert.equal(detailJson.reservation.guideGroup?.tourists, 5);
+  assert.equal(detailJson.reservation.guideGroup?.agency, 'Rutas Kanba Aventura');
+
+  // Normal reservation detail in admin should not have guideGroup
+  const normalDetailRes = await request(`/api/admin/reservations/${normalJson.code}`, adminCookie);
+  assert.equal(normalDetailRes.status, 200);
+  const normalDetailJson = await normalDetailRes.json();
+  assert.equal(normalDetailJson.reservation.guideGroup, undefined);
+
+  // 5. Dedicated guide groups endpoint and status synchronization
+  const nonAdminGroupsRes = await request('/api/admin/tours/guide-groups', userCookie);
+  assert.equal(nonAdminGroupsRes.status, 403, 'Acceso denegado a usuarios no administradores');
+
+  const adminGroupsRes = await request('/api/admin/tours/guide-groups?q=Kanba+Aventura', adminCookie);
+  assert.equal(adminGroupsRes.status, 200);
+  const adminGroupsJson = await adminGroupsRes.json();
+  assert.equal(adminGroupsJson.ok, true);
+  assert.equal(adminGroupsJson.total, 1);
+  const groupRecord = adminGroupsJson.guideGroups[0];
+  assert.equal(groupRecord.reservationCode, guideJson.code);
+  assert.equal(groupRecord.tourId, 'cueva-rio-sagrado');
+  assert.equal(groupRecord.date, '2026-12-25');
+  assert.equal(groupRecord.time, '10:00');
+  assert.equal(groupRecord.touristsCount, 5);
+  assert.equal(groupRecord.agencyName, 'Rutas Kanba Aventura');
+  assert.equal(groupRecord.status, 'pending_payment');
+
+  // Cancel reservation and verify status synchronization in dedicated guide group record
+  const cancelRes = await request(`/api/admin/reservations/${guideJson.code}/cancel`, adminCookie, 'POST', {
+    reason: 'Cancelado por solicitud del guía'
+  });
+  assert.equal(cancelRes.status, 200);
+
+  const updatedGroupsRes = await request(`/api/admin/tours/guide-groups?tourId=cueva-rio-sagrado`, adminCookie);
+  assert.equal(updatedGroupsRes.status, 200);
+  const updatedGroupsJson = await updatedGroupsRes.json();
+  assert.equal(updatedGroupsJson.total, 1);
+  assert.equal(updatedGroupsJson.guideGroups[0].status, 'cancelled');
+});

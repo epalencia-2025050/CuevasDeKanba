@@ -230,6 +230,31 @@ export const RELATIONAL_SCHEMA = `
     created_at timestamptz NOT NULL DEFAULT now()
   );
 
+  -- 16. Cueva y Tours · Reservas de Guías con Grupo
+  CREATE TABLE IF NOT EXISTS kanba_guide_group_bookings (
+    id text PRIMARY KEY,
+    reservation_code text NOT NULL UNIQUE REFERENCES kanba_reservations(code) ON DELETE CASCADE,
+    tour_id text NOT NULL REFERENCES kanba_tours(id) ON UPDATE CASCADE,
+    tour_name text NOT NULL,
+    date date NOT NULL,
+    time text NOT NULL,
+    tourists_count integer NOT NULL CHECK (tourists_count > 0),
+    guide_name text NOT NULL,
+    guide_email text NOT NULL,
+    guide_phone text DEFAULT '',
+    agency_name text DEFAULT '',
+    status text NOT NULL CHECK (status IN ('pending_payment', 'confirmed', 'cancelled', 'expired')),
+    hold_expires_at timestamptz,
+    notes text DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_guide_group_bookings_slot ON kanba_guide_group_bookings (tour_id, date, time, status);
+  CREATE INDEX IF NOT EXISTS idx_guide_group_bookings_code ON kanba_guide_group_bookings (reservation_code);
+  CREATE INDEX IF NOT EXISTS idx_guide_group_bookings_agency ON kanba_guide_group_bookings (lower(agency_name));
+  CREATE INDEX IF NOT EXISTS idx_guide_group_bookings_date ON kanba_guide_group_bookings (date, time);
+
   ALTER TABLE kanba_reservations ADD COLUMN IF NOT EXISTS guide_id text;
   ALTER TABLE kanba_reservations ADD COLUMN IF NOT EXISTS channel text DEFAULT 'web';
 `;
@@ -498,6 +523,35 @@ async function importDocument(client, d) {
           e.notes || '', e.createdBy || 'admin', e.createdAt || new Date().toISOString()
         ]
       );
+    }
+  }
+
+  // 14. Cueva y Tours · Reservas de Guías con Grupo
+  if (Array.isArray(d.reservations)) {
+    for (const r of d.reservations) {
+      if (r.guideGroup && r.guideGroup.isGuide) {
+        await client.query(
+          `INSERT INTO kanba_guide_group_bookings (
+             id, reservation_code, tour_id, tour_name, date, time,
+             tourists_count, guide_name, guide_email, guide_phone,
+             agency_name, status, hold_expires_at, notes, created_at, updated_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           ON CONFLICT (reservation_code) DO UPDATE SET
+             status = EXCLUDED.status,
+             tourists_count = EXCLUDED.tourists_count,
+             agency_name = EXCLUDED.agency_name,
+             notes = EXCLUDED.notes,
+             updated_at = now()`,
+          [
+            `gg_${r.code}`, r.code, r.tourId, r.tourName, r.date, r.time,
+            r.guideGroup.tourists || r.participants, r.customer?.name || '',
+            r.customer?.email || '', r.customer?.phone || '',
+            r.guideGroup.agency || '', r.status || 'pending_payment',
+            r.holdExpiresAt || null, r.customer?.notes || '',
+            r.createdAt || new Date().toISOString(), r.updatedAt || new Date().toISOString()
+          ]
+        );
+      }
     }
   }
 

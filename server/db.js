@@ -89,8 +89,54 @@ export function createRepository(sql, schema = 'public', controlSql = sql) {
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_media')} (name text PRIMARY KEY,mime text NOT NULL,size integer NOT NULL,data bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now())`;
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_rate_limits')} (key text PRIMARY KEY,window_start timestamptz NOT NULL,count integer NOT NULL)`;
         await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_oauth_states')} (state text PRIMARY KEY,next text NOT NULL,expires_at timestamptz NOT NULL,browser_hash text NOT NULL)`;
+        await tx`CREATE TABLE IF NOT EXISTS ${table('kanba_guide_group_bookings')} (
+          id text PRIMARY KEY,
+          reservation_code text NOT NULL UNIQUE,
+          tour_id text NOT NULL,
+          tour_name text NOT NULL,
+          date date NOT NULL,
+          time text NOT NULL,
+          tourists_count integer NOT NULL CHECK(tourists_count > 0),
+          guide_name text NOT NULL,
+          guide_email text NOT NULL,
+          guide_phone text DEFAULT '',
+          agency_name text DEFAULT '',
+          status text NOT NULL CHECK(status IN ('pending_payment', 'confirmed', 'cancelled', 'expired')),
+          hold_expires_at timestamptz,
+          notes text DEFAULT '',
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )`;
+        await tx`CREATE INDEX IF NOT EXISTS idx_guide_groups_slot ON ${table('kanba_guide_group_bookings')} (tour_id, date, time, status)`;
+        await tx`CREATE INDEX IF NOT EXISTS idx_guide_groups_code ON ${table('kanba_guide_group_bookings')} (reservation_code)`;
+        await tx`CREATE INDEX IF NOT EXISTS idx_guide_groups_agency ON ${table('kanba_guide_group_bookings')} (lower(agency_name))`;
         if (document) await tx`INSERT INTO ${table('kanba_store')} (id,doc) VALUES (1,${tx.json(JSON.parse(serializeStore(document)))}::jsonb)`;
       });
+    },
+    async saveGuideGroupBooking(booking) {
+      await sql`INSERT INTO ${table('kanba_guide_group_bookings')} (
+        id, reservation_code, tour_id, tour_name, date, time, tourists_count,
+        guide_name, guide_email, guide_phone, agency_name, status, hold_expires_at, notes, created_at, updated_at
+      ) VALUES (
+        ${booking.id}, ${booking.reservationCode}, ${booking.tourId}, ${booking.tourName},
+        ${booking.date}, ${booking.time}, ${booking.touristsCount}, ${booking.guideName},
+        ${booking.guideEmail}, ${booking.guidePhone || ''}, ${booking.agencyName || ''},
+        ${booking.status}, ${booking.holdExpiresAt ? new Date(booking.holdExpiresAt) : null},
+        ${booking.notes || ''}, ${booking.createdAt ? new Date(booking.createdAt) : new Date()},
+        ${booking.updatedAt ? new Date(booking.updatedAt) : new Date()}
+      ) ON CONFLICT (reservation_code) DO UPDATE SET
+        status = EXCLUDED.status,
+        tourists_count = EXCLUDED.tourists_count,
+        agency_name = EXCLUDED.agency_name,
+        notes = EXCLUDED.notes,
+        updated_at = now()`;
+    },
+    async listGuideGroupBookings({ date, tourId, status } = {}) {
+      return sql`SELECT * FROM ${table('kanba_guide_group_bookings')}
+        WHERE (${date || null}::date IS NULL OR date = ${date})
+          AND (${tourId || null}::text IS NULL OR tour_id = ${tourId})
+          AND (${status || null}::text IS NULL OR status = ${status})
+        ORDER BY date ASC, time ASC`;
     },
     async close() { await Promise.all([sql.end({ timeout: 5 }), ...(controlSql !== sql ? [controlSql.end({ timeout: 5 })] : [])]); }
   };

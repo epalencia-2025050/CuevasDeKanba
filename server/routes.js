@@ -15,7 +15,8 @@ import {
   registerUser, loginUser, getUserSession, logoutUser, findUserByEmail, rateLimitShared,
   createUserSession, registerGoogleUser, linkGoogleAccount,
   getGuides, findGuide, saveGuide, deleteGuide, assignGuideToReservation,
-  createInPersonTourSale, getTourExpenses, nextTourExpenseId
+  createInPersonTourSale, getTourExpenses, nextTourExpenseId,
+  getGuideGroupBookings, syncGuideGroupStatus
 } from './store.js';
 import { hashPassword, verifyPassword, randomToken, safeEqual } from './security.js';
 import { paymentsEnabled, requireGateway, chargeAmount, refundLatePayment, refundReservation, verifiedEvent } from './gateway.js';
@@ -319,6 +320,11 @@ function reservationView(r, { admin = false } = {}) {
       document: admin ? r.customer.document : (r.customer.document ? '••••' + String(r.customer.document).slice(-4) : ''),
       notes: admin ? r.customer.notes : ''
     },
+    guideGroup: r.guideGroup ? {
+      isGuide: true,
+      tourists: r.guideGroup.tourists,
+      agency: r.guideGroup.agency || ''
+    } : undefined,
     payment: {
       intentId: r.payment?.intentId,
       provider: r.payment?.provider,
@@ -390,6 +396,7 @@ function applyApprovedPayment(reservation, result) {
     type: 'paid',
     label: `Pago aprobado · comprobante ${reservation.receipt.number}`
   });
+  syncGuideGroupStatus(reservation.code, 'confirmed', now);
   saveDb();
   return reservation;
 }
@@ -433,6 +440,7 @@ function cancelReservation(reservation, { reason, by = 'customer', refundAmount 
     type: 'cancelled',
     label: `Cancelación (${by === 'admin' ? 'administración' : 'cliente'}) · reembolso ${reservation.currency} ${amount.toFixed(2)}`
   });
+  syncGuideGroupStatus(reservation.code, 'cancelled', now);
   if (reservation.payment?.status === 'paid') reservation.payment.status = amount > 0 ? 'refund_pending' : 'paid';
 
   let refund = null;
@@ -939,6 +947,11 @@ async function handleApi(req, res, url) {
       total: reservation.total,
       currency: reservation.currency,
       status: reservation.status,
+      guideGroup: reservation.guideGroup ? {
+        isGuide: true,
+        tourists: reservation.guideGroup.tourists,
+        agency: reservation.guideGroup.agency || ''
+      } : undefined,
       paymentUrl: `/pago.html?code=${encodeURIComponent(reservation.code)}&token=${encodeURIComponent(reservation.token)}`,
       confirmationUrl: `/confirmacion.html?code=${encodeURIComponent(reservation.code)}&token=${encodeURIComponent(reservation.token)}`
     });
@@ -1087,7 +1100,8 @@ async function handleApi(req, res, url) {
         r.code.toLowerCase().includes(q) ||
         r.customer.name.toLowerCase().includes(q) ||
         r.customer.email.toLowerCase().includes(q) ||
-        r.tourName.toLowerCase().includes(q)
+        r.tourName.toLowerCase().includes(q) ||
+        (r.guideGroup?.agency && r.guideGroup.agency.toLowerCase().includes(q))
       );
     }
     list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1689,6 +1703,17 @@ async function handleApi(req, res, url) {
       res.writeHead(200);
       return res.end(html);
     }
+  }
+
+  // Cueva y Tours · Consultar reservas de guías con grupo
+  if (method === 'GET' && p === '/api/admin/tours/guide-groups') {
+    requireAdmin(req);
+    const tourId = url.searchParams.get('tourId');
+    const date = url.searchParams.get('date');
+    const status = url.searchParams.get('status');
+    const q = url.searchParams.get('q');
+    const list = getGuideGroupBookings({ tourId, date, status, q });
+    return sendJson(res, 200, { ok: true, total: list.length, guideGroups: list });
   }
 
   if (method === 'GET' && p === '/api/admin/report') {
