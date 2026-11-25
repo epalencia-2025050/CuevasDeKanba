@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 import { operatesOn, normalizeWeekday } from '../server/store.js';
 import { createApp } from '../server/index.js';
 import { createConfig, withRuntime } from '../server/runtime.js';
@@ -17,13 +18,15 @@ function setupApp() {
     GOOGLE_CLIENT_SECRET: 'synthetic'
   });
   const initial = withRuntime({ config }, createInitialStore);
-  initial.users.push({
-    id: 'admin',
-    name: 'admin',
-    role: 'admin',
-    email: 'admin@example.invalid',
-    password: initial.admin.password
-  });
+  for (const role of ['user', 'admin']) {
+    initial.users.push({
+      id: role,
+      name: role,
+      role,
+      email: `${role}@example.invalid`,
+      password: initial.admin.password
+    });
+  }
   initial.admin = { passwordPolicyVersion: 0 };
   const database = memoryRepository(initial);
   const services = {
@@ -54,7 +57,17 @@ function setupApp() {
     return response.headers.getSetCookie().find((c) => c.startsWith('kanba_user=')).split(';')[0];
   }
 
-  return { app, request, loginAdmin, database };
+  async function loginUser() {
+    const response = await request('/api/auth/login', '', 'POST', {
+      email: 'user@example.invalid',
+      password: 'synthetic-password',
+      role: 'user'
+    });
+    assert.equal(response.status, 200);
+    return response.headers.getSetCookie().find((c) => c.startsWith('kanba_user=')).split(';')[0];
+  }
+
+  return { app, request, loginAdmin, loginUser, database };
 }
 
 test('normalizeWeekday maps numbers, strings, Spanish abbreviations and full names', () => {
@@ -370,4 +383,207 @@ test('Admin modal bindOperatingDays: restricts weekdays to [2026-11-23, 2026-11-
   endField.value = '2026-11-23';
   startField.trigger('change');
   assert.equal(checks.inputs.every(i => !i.disabled), true, 'Invalid range does not break/block unexpectedly');
+
+  // 6. Tour fijo / recurrente checkbox: When isFixedCheck is checked, all days remain enabled regardless of date range
+  const fixedCheck = {
+    name: 'isFixed',
+    checked: true,
+    addEventListener(type, fn) {
+      this._listener = fn;
+    },
+    trigger() {
+      if (this._listener) this._listener();
+    }
+  };
+  startField.value = '2026-11-23';
+  endField.value = '2026-11-24'; // Only Lun and Mar if bounded
+  bindOperatingDays(startField, endField, checks, fixedCheck);
+  assert.equal(checks.inputs.every(i => !i.disabled), true, 'Fixed tour mode keeps all 7 weekdays enabled');
+
+  // Unchecking fixed mode restores the closed date range limitation
+  fixedCheck.checked = false;
+  fixedCheck.trigger();
+  const enabledAfterUncheck = checks.inputs.filter(i => !i.disabled).map(i => Number(i.value));
+  assert.deepEqual(enabledAfterUncheck, [1, 2], 'Disabling fixed mode reapplies the date range filter');
+});
+
+test('Recurring tours (isFixed): weekly recurrence, per-date seat independence, sold-out behavior and hold release', async () => {
+  const { request, loginAdmin, loginUser, database } = setupApp();
+  const adminCookie = await loginAdmin();
+  const userCookie = await loginUser();
+
+  // 1. Admin creates recurring tour with Mondays (1) and Fridays (5), without closed date range
+  const createTourRes = await request('/api/admin/tours', adminCookie, 'POST', {
+    name: 'Aventura Recurrente Kanba',
+    isFixed: true,
+    price: 150,
+    capacity: 10,
+    maxParticipants: 10,
+    duration: '3 horas',
+    durationMinutes: 180,
+    difficulty: 'Moderada',
+    times: ['10:00'],
+    days: [1, 5] // Mondays and Fridays
+  });
+  assert.equal(createTourRes.status, 201);
+  const createdTourData = await createTourRes.json();
+  assert.equal(createdTourData.tour.isFixed, true);
+  assert.equal(createdTourData.tour.startDate, '');
+  assert.equal(createdTourData.tour.endDate, '');
+  const tourId = createdTourData.tour.id;
+
+  // Configure advance booking policy allowing up to 60 days and higher pending limit for test suite
+  await database.transaction((unit) => {
+    unit.document.settings.booking = { cutoffHours: 0, advanceDays: 60, holdMinutes: 20, pendingLimit: 20 };
+    unit.dirty = true;
+  });
+
+  // 2. Query availability over 14 days starting 2026-11-30 (Monday)
+  // Calendar dates:
+  // 2026-11-30: Monday (Week 1)
+  // 2026-12-04: Friday (Week 1)
+  // 2026-12-07: Monday (Week 2)
+  // 2026-12-11: Friday (Week 2)
+  const availRes = await request(`/api/availability?tour=${tourId}&days=14&from=2026-11-30`);
+  assert.equal(availRes.status, 200);
+  const { daysList } = await availRes.json();
+  const operatingDates = daysList.map(d => d.date);
+  assert.deepEqual(operatingDates, ['2026-11-30', '2026-12-04', '2026-12-07', '2026-12-11']);
+
+  // All departures start with 10 available seats
+  daysList.forEach(day => {
+    const tourEntry = day.tours.find(t => t.tourId === tourId);
+    assert.ok(tourEntry);
+    assert.equal(tourEntry.departures[0].capacity, 10);
+    assert.equal(tourEntry.departures[0].left, 10);
+    assert.equal(tourEntry.departures[0].status, 'open');
+  });
+
+  const customer = (name = 'Turista Valido') => ({
+    name,
+    email: 'viajero@example.invalid',
+    phone: '55551111',
+    country: 'Guatemala',
+    acceptPolicies: true,
+    acceptTerms: true
+  });
+
+  // 3. Independent seat availability: Book 2 seats on Week 1 Monday (2026-11-30 at 10:00)
+  const bookRes1 = await request('/api/reservations', userCookie, 'POST', {
+    requestId: crypto.randomUUID(),
+    tourId,
+    date: '2026-11-30',
+    time: '10:00',
+    participants: 2,
+    customer: customer('Grupo Uno'),
+    participantNames: ['Persona 1', 'Persona 2']
+  });
+  assert.equal(bookRes1.status, 201);
+  const book1Json = await bookRes1.json();
+  assert.ok(book1Json.code);
+
+  // Check availability again:
+  // Week 1 Monday must have 8 seats left (10 - 2)
+  // Week 2 Monday (2026-12-07) MUST still have 10 seats left! (Per-date natural decoupling)
+  const availRes2 = await request(`/api/availability?tour=${tourId}&days=14&from=2026-11-30`);
+  const { daysList: daysList2 } = await availRes2.json();
+
+  const w1Mon = daysList2.find(d => d.date === '2026-11-30').tours.find(t => t.tourId === tourId).departures[0];
+  const w2Mon = daysList2.find(d => d.date === '2026-12-07').tours.find(t => t.tourId === tourId).departures[0];
+
+  assert.equal(w1Mon.left, 8, 'Week 1 Monday has 8 seats left');
+  assert.equal(w1Mon.taken, 2);
+  assert.equal(w2Mon.left, 10, 'Week 2 Monday remains untouched with 10 seats left');
+  assert.equal(w2Mon.taken, 0);
+
+  // 4. Fill remaining 8 seats on Week 1 Monday
+  const bookRes2 = await request('/api/reservations', userCookie, 'POST', {
+    requestId: crypto.randomUUID(),
+    tourId,
+    date: '2026-11-30',
+    time: '10:00',
+    participants: 8,
+    customer: customer('Grupo Dos'),
+    participantNames: Array.from({ length: 8 }, (_, i) => `Persona ${i + 3}`)
+  });
+  assert.equal(bookRes2.status, 201);
+
+  // Week 1 Monday is now sold out (0 seats, status soldout)
+  const availRes3 = await request(`/api/availability?tour=${tourId}&days=14&from=2026-11-30`);
+  const { daysList: daysList3 } = await availRes3.json();
+  const w1MonSoldout = daysList3.find(d => d.date === '2026-11-30').tours.find(t => t.tourId === tourId).departures[0];
+  assert.equal(w1MonSoldout.left, 0);
+  assert.equal(w1MonSoldout.status, 'soldout');
+
+  // Attempting to book Week 1 Monday rejected with 409 sold_out
+  const overbookRes = await request('/api/reservations', userCookie, 'POST', {
+    requestId: crypto.randomUUID(),
+    tourId,
+    date: '2026-11-30',
+    time: '10:00',
+    participants: 1,
+    customer: customer('Rechazado'),
+    participantNames: ['Rechazado']
+  });
+  assert.equal(overbookRes.status, 409);
+  const overbookJson = await overbookRes.json();
+  assert.equal(overbookJson.error.code, 'sold_out');
+
+  // User can select the following week: Booking Week 2 Monday succeeds cleanly
+  const bookWeek2 = await request('/api/reservations', userCookie, 'POST', {
+    requestId: crypto.randomUUID(),
+    tourId,
+    date: '2026-12-07',
+    time: '10:00',
+    participants: 4,
+    customer: customer('Semana Siguiente'),
+    participantNames: Array.from({ length: 4 }, (_, i) => `Turista Sig ${i + 1}`)
+  });
+  assert.equal(bookWeek2.status, 201);
+
+  // 5. Backend validations:
+  // Rejects booking on a non-operating weekday (e.g. Wednesday 2026-12-02) -> 422 unavailable
+  const nonOperatingRes = await request('/api/reservations', userCookie, 'POST', {
+    requestId: crypto.randomUUID(),
+    tourId,
+    date: '2026-12-02',
+    time: '10:00',
+    participants: 1,
+    customer: customer('No Opera'),
+    participantNames: ['No Opera']
+  });
+  assert.equal(nonOperatingRes.status, 422);
+  const nonOpJson = await nonOperatingRes.json();
+  assert.equal(nonOpJson.error.code, 'unavailable');
+
+  // Rejects booking on past date -> 409 past
+  const pastRes = await request('/api/reservations', userCookie, 'POST', {
+    requestId: crypto.randomUUID(),
+    tourId,
+    date: '2020-01-06',
+    time: '10:00',
+    participants: 1,
+    customer: customer('Pasado'),
+    participantNames: ['Pasado']
+  });
+  assert.equal(pastRes.status, 409);
+  const pastJson = await pastRes.json();
+  assert.equal(pastJson.error.code, 'past');
+
+  // 6. 20-minute hold release:
+  // Expire the hold of the 8 participants on Week 1 Monday
+  await database.transaction((unit) => {
+    const r2 = unit.document.reservations.find(r => r.participants === 8 && r.tourId === tourId);
+    if (r2) {
+      r2.holdExpiresAt = new Date(Date.now() - 60000).toISOString();
+    }
+    unit.dirty = true;
+  });
+
+  // Now querying Week 1 Monday shows 8 seats freed (left: 8, from initial 2 held)
+  const availResRestored = await request(`/api/availability?tour=${tourId}&days=14&from=2026-11-30`);
+  const { daysList: daysListRestored } = await availResRestored.json();
+  const w1MonRestored = daysListRestored.find(d => d.date === '2026-11-30').tours.find(t => t.tourId === tourId).departures[0];
+  assert.equal(w1MonRestored.left, 8, 'Hold release restores the 8 seats on Week 1 Monday');
+  assert.equal(w1MonRestored.status, 'open');
 });

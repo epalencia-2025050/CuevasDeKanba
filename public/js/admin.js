@@ -1119,6 +1119,7 @@
       body.append(el('h3', '', tour.name), el('div', 'tour-id', tour.id));
       const meta = el('div', 'tour-admin-meta');
       [
+        ['Modalidad', tour.isFixed ? 'Fijo / Recurrente' : (tour.startDate && tour.endDate ? `${tour.startDate} al ${tour.endDate}` : (tour.startDate ? `Desde ${tour.startDate}` : 'Fijo / Recurrente'))],
         ['Precio', money(tour.price)],
         ['Duración', tour.duration],
         ['Cupo', `${tour.capacity} por salida`],
@@ -1177,7 +1178,7 @@
     return wrap;
   }
 
-  function bindOperatingDays(start, end, checks) {
+  function bindOperatingDays(start, end, checks, isFixedCheck = null) {
     if (!checks) return () => {};
     const inputs = checks.querySelectorAll ? checks.querySelectorAll('input') : [];
     function utcDay(value) {
@@ -1188,9 +1189,10 @@
       return Number.isFinite(epoch) && new Date(epoch).toISOString().slice(0, 10) === trimmed ? epoch : NaN;
     }
     function refresh() {
-      const first = start ? utcDay(start.value) : NaN;
-      const last = end ? utcDay(end.value) : NaN;
-      const hasClosedRange = Number.isFinite(first) && Number.isFinite(last) && first <= last;
+      const fixed = !!(isFixedCheck && isFixedCheck.checked);
+      const first = (!fixed && start) ? utcDay(start.value) : NaN;
+      const last = (!fixed && end) ? utcDay(end.value) : NaN;
+      const hasClosedRange = !fixed && Number.isFinite(first) && Number.isFinite(last) && first <= last;
       const allowed = new Set();
       if (hasClosedRange) {
         for (let day = first; day <= last && allowed.size < 7; day += 86400000) {
@@ -1203,13 +1205,13 @@
         if (isDisabled) input.checked = false;
         const label = input.closest ? input.closest('label') : input.parentElement;
         if (label) {
-          if (label.classList?.toggle) label.classList.toggle('is-disabled', isDisabled);
+          if (label.classList && label.classList.toggle) label.classList.toggle('is-disabled', isDisabled);
           label.title = isDisabled ? 'Este día no cae dentro del rango de fechas del tour.' : '';
         }
       }
     }
-    for (const field of [start, end]) {
-      if (field?.addEventListener) {
+    for (const field of [start, end, isFixedCheck]) {
+      if (field && field.addEventListener) {
         field.addEventListener('input', refresh);
         field.addEventListener('change', refresh);
       }
@@ -1218,7 +1220,7 @@
     return (predicate) => {
       inputs.forEach(input => {
         if (!input.disabled) {
-          input.checked = Boolean(predicate(Number(input.value)));
+          input.checked = !!predicate(Number(input.value));
         }
       });
     };
@@ -1226,8 +1228,20 @@
 
   function openTourForm(tour = null) {
     const editing = Boolean(tour);
+    const isFixedTour = Boolean(tour ? (tour.isFixed || tour.fixed || tour.recurring || (!tour.startDate && !tour.endDate && !tour.fechaInicio && !tour.fechaFin)) : false);
     const form = el('form');
     const grid = el('div', 'form-grid');
+    const fixedWrap = el('label', 'inline-check full tour-fixed-mode');
+    const fixedInput = el('input');
+    fixedInput.type = 'checkbox';
+    fixedInput.name = 'isFixed';
+    fixedInput.id = 'isFixedTourInput';
+    fixedInput.checked = isFixedTour;
+    fixedWrap.append(fixedInput, document.createTextNode('Tour fijo / recurrente (opera todas las semanas en los días activos sin rango cerrado de fechas)'));
+
+    const startField = formField('Fecha de inicio', 'startDate', isFixedTour ? '' : (tour?.startDate || tour?.fechaInicio || ''), { type: 'date' });
+    const endField = formField('Fecha de finalización', 'endDate', isFixedTour ? '' : (tour?.endDate || tour?.fechaFin || ''), { type: 'date' });
+
     grid.append(
       formField('Identificador', 'id', tour?.id || '', { readOnly: editing, placeholder: 'se genera del nombre', hint: editing ? 'No se puede cambiar.' : undefined }),
       formField('Nombre', 'name', tour?.name || ''),
@@ -1242,11 +1256,29 @@
       formField('Punto de encuentro', 'meetingPoint', tour?.meetingPoint || '', { full: true }),
       formField('Horarios (separados por coma)', 'times', (tour?.times || []).join(', '), { full: true, placeholder: 'HH:MM' }),
       formField('Descripción', 'description', [tour?.description, tour?.longDescription].filter(Boolean).join('\n\n'), { textarea: true, full: true, rows: 5 }),
-      formField('Fecha de inicio', 'startDate', tour?.startDate || tour?.fechaInicio || '', { type: 'date' }),
-      formField('Fecha de finalización', 'endDate', tour?.endDate || tour?.fechaFin || '', { type: 'date' }),
+      fixedWrap,
+      startField,
+      endField,
       formField('Hora de inicio', 'startTime', tour?.startTime || tour?.horaInicio || '', { type: 'time' }),
       formField('Hora de finalización', 'endTime', tour?.endTime || tour?.horaFin || '', { type: 'time' }),
     );
+
+    const startInput = startField.querySelector('input');
+    const endInput = endField.querySelector('input');
+    function syncFixedMode(fixed) {
+      if (startInput) startInput.disabled = fixed;
+      if (endInput) endInput.disabled = fixed;
+      startField.classList.toggle('is-dimmed', fixed);
+      endField.classList.toggle('is-dimmed', fixed);
+      if (fixed) {
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+      }
+    }
+    fixedInput.addEventListener('change', () => {
+      syncFixedMode(fixedInput.checked);
+    });
+    syncFixedMode(isFixedTour);
 
     const extras = el('fieldset', 'tour-editor-section full');
     extras.append(el('legend', '', 'Incluye'));
@@ -1320,7 +1352,7 @@
       check.append(input, document.createTextNode(label));
       checks.append(check);
     });
-    const selectDays = bindOperatingDays(grid.querySelector('[name=startDate]'), grid.querySelector('[name=endDate]'), checks);
+    const selectDays = bindOperatingDays(grid.querySelector('[name=startDate]'), grid.querySelector('[name=endDate]'), checks, fixedInput);
     const shortcuts = el('div', 'tour-item');
     for (const [label, predicate] of [['Todos', () => true], ['Entre semana', day => day >= 1 && day <= 5], ['Ninguno', () => false]]) {
       const button = el('button', 'btn btn-outline', label);
@@ -1359,6 +1391,7 @@
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      const isFixed = Boolean(form.elements.namedItem('isFixed')?.checked);
       const data = {
         id: form.elements.namedItem('id')?.value.trim() || undefined,
         name: form.elements.namedItem('name')?.value.trim(),
@@ -1375,9 +1408,15 @@
         image,
         description: form.elements.namedItem('description')?.value.trim(),
         includes: $$('input[name="includeItem"]', form).map(input => input.value.trim()).filter(Boolean),
-        ...Object.fromEntries(['startDate', 'endDate', 'startTime', 'endTime'].map(key => [key, form.elements.namedItem(key)?.value || ''])),
-        fechaInicio: form.elements.namedItem('startDate')?.value || '',
-        fechaFin: form.elements.namedItem('endDate')?.value || '',
+        isFixed,
+        fixed: isFixed,
+        recurring: isFixed,
+        startDate: isFixed ? '' : (form.elements.namedItem('startDate')?.value || ''),
+        endDate: isFixed ? '' : (form.elements.namedItem('endDate')?.value || ''),
+        fechaInicio: isFixed ? '' : (form.elements.namedItem('startDate')?.value || ''),
+        fechaFin: isFixed ? '' : (form.elements.namedItem('endDate')?.value || ''),
+        startTime: form.elements.namedItem('startTime')?.value || '',
+        endTime: form.elements.namedItem('endTime')?.value || '',
         horaInicio: form.elements.namedItem('startTime')?.value || '',
         horaFin: form.elements.namedItem('endTime')?.value || '',
         days: $$('input[name="days"]:checked', form).map((input) => Number(input.value)),
@@ -1407,7 +1446,7 @@
         field.reportValidity();
         field.setCustomValidity('');
       };
-      if (data.endDate && data.startDate && data.endDate < data.startDate) return fieldError('endDate', 'Elige una fecha igual o posterior al inicio.');
+      if (!isFixed && data.endDate && data.startDate && data.endDate < data.startDate) return fieldError('endDate', 'Elige una fecha igual o posterior al inicio.');
       if (data.endTime && data.startTime && data.endTime < data.startTime) return fieldError('endTime', 'La hora final debe ser igual o posterior al inicio.');
       for (const time of data.times) {
         if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return fieldError('times', 'Usa el formato HH:MM para cada salida.');

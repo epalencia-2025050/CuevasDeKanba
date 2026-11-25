@@ -559,16 +559,19 @@ function cleanTour(input, existing = null) {
       || Number(input.maxParticipants) > capacity) {
     throw new AppError('Revisa el cupo, los participantes y la duración.', 422, 'validation');
   }
-  const startDate = String(input.startDate !== undefined ? input.startDate : (input.fechaInicio !== undefined ? input.fechaInicio : existing?.startDate || existing?.fechaInicio || '')).trim();
-  const endDate = String(input.endDate !== undefined ? input.endDate : (input.fechaFin !== undefined ? input.fechaFin : existing?.endDate || existing?.fechaFin || '')).trim();
+  const isFixed = input.isFixed === true || input.isFixed === 'true' || input.fixed === true || input.fixed === 'true' || input.recurring === true || input.recurring === 'true';
+  const startDate = isFixed ? '' : String(input.startDate !== undefined ? input.startDate : (input.fechaInicio !== undefined ? input.fechaInicio : existing?.startDate || existing?.fechaInicio || '')).trim();
+  const endDate = isFixed ? '' : String(input.endDate !== undefined ? input.endDate : (input.fechaFin !== undefined ? input.fechaFin : existing?.endDate || existing?.fechaFin || '')).trim();
   const startTime = String(input.startTime !== undefined ? input.startTime : (input.horaInicio !== undefined ? input.horaInicio : existing?.startTime || existing?.horaInicio || '')).trim();
   const endTime = String(input.endTime !== undefined ? input.endTime : (input.horaFin !== undefined ? input.horaFin : existing?.endTime || existing?.horaFin || '')).trim();
   const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
   const validTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
   const reject = message => { throw new AppError(message, 422, 'validation'); };
-  if (startDate && !validDate(startDate)) reject('Fecha de inicio inválida.');
-  if (endDate && !validDate(endDate)) reject('Fecha de finalización inválida.');
-  if (startDate && endDate && endDate < startDate) reject('La fecha final debe ser igual o posterior a la inicial.');
+  if (!isFixed) {
+    if (startDate && !validDate(startDate)) reject('Fecha de inicio inválida.');
+    if (endDate && !validDate(endDate)) reject('Fecha de finalización inválida.');
+    if (startDate && endDate && endDate < startDate) reject('La fecha final debe ser igual o posterior a la inicial.');
+  }
   if (startTime && !validTime(startTime)) reject('Hora de inicio inválida.');
   if (endTime && !validTime(endTime)) reject('Hora de finalización inválida.');
   if (startTime && endTime && endTime < startTime) reject('La hora final debe ser igual o posterior a la inicial.');
@@ -579,7 +582,7 @@ function cleanTour(input, existing = null) {
   }
   const { longDescription, minParticipants, ...previous } = existing || {};
   let normalizedDays = [...new Set(days)].sort((a, b) => a - b);
-  if (startDate && endDate && validDate(startDate) && validDate(endDate) && startDate <= endDate) {
+  if (!isFixed && startDate && endDate && validDate(startDate) && validDate(endDate) && startDate <= endDate) {
     const allowed = new Set();
     const [y1, m1, d1] = startDate.split('-').map(Number);
     const [y2, m2, d2] = endDate.split('-').map(Number);
@@ -594,6 +597,9 @@ function cleanTour(input, existing = null) {
   }
   return {
     ...previous,
+    isFixed,
+    fixed: isFixed,
+    recurring: isFixed,
     startDate,
     endDate,
     startTime,

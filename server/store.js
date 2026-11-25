@@ -349,14 +349,18 @@ export function publicSite() {
 
 export function publicTour(t) {
   const { secret, minParticipants, ...rest } = t;
-  const startDate = rest.startDate || rest.fechaInicio || '';
-  const endDate = rest.endDate || rest.fechaFin || '';
+  const isFixed = Boolean(rest.isFixed || rest.fixed || rest.recurring || (!rest.startDate && !rest.endDate && !rest.fechaInicio && !rest.fechaFin));
+  const startDate = isFixed && !rest.startDate ? '' : (rest.startDate || rest.fechaInicio || '');
+  const endDate = isFixed && !rest.endDate ? '' : (rest.endDate || rest.fechaFin || '');
   const startTime = rest.startTime || rest.horaInicio || '';
   const endTime = rest.endTime || rest.horaFin || '';
   const rawDays = rest.days ?? rest.diasOperacion ?? rest.dias ?? [];
   const days = (Array.isArray(rawDays) ? rawDays : [rawDays]).map(normalizeWeekday).filter(d => d !== null);
   return {
     ...rest,
+    isFixed,
+    fixed: isFixed,
+    recurring: isFixed,
     startDate,
     endDate,
     startTime,
@@ -423,10 +427,13 @@ export function departureStatus(tour, date, time, taken) {
 
 export function operatesOn(tour, date, time) {
   if (!tour || typeof tour !== 'object') return false;
-  const startDate = tour.startDate || tour.fechaInicio || null;
-  const endDate = tour.endDate || tour.fechaFin || null;
-  if (startDate && date < startDate) return false;
-  if (endDate && date > endDate) return false;
+  const isFixed = Boolean(tour.isFixed || tour.fixed || tour.recurring || (!tour.startDate && !tour.endDate && !tour.fechaInicio && !tour.fechaFin));
+  if (!isFixed) {
+    const startDate = tour.startDate || tour.fechaInicio || null;
+    const endDate = tour.endDate || tour.fechaFin || null;
+    if (startDate && date < startDate) return false;
+    if (endDate && date > endDate) return false;
+  }
 
   const weekday = dayOfWeek(date);
   const rawDays = Array.isArray(tour.days)

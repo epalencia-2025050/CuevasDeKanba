@@ -825,6 +825,51 @@ svg { display: block; }
 .date-btn.selected { background: var(--deep); border-color: var(--deep); }
 .date-btn.selected .dow, .date-btn.selected .day, .date-btn.selected .month { color: var(--cream); }
 .date-btn:disabled { opacity: .32; cursor: not-allowed; background: rgba(14,36,32,.03); }
+.date-btn.is-soldout {
+  opacity: .8;
+  border-style: dashed;
+  border-color: rgba(184, 51, 42, .45);
+  background: rgba(184, 51, 42, .04);
+}
+.date-btn.is-soldout:hover {
+  border-color: var(--rust);
+  opacity: 1;
+}
+.date-btn.is-soldout.selected {
+  background: #5a201c;
+  border-color: #5a201c;
+}
+.date-btn .soldout-tag {
+  display: inline-block;
+  font-size: 7.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--rust);
+  background: rgba(184, 51, 42, .12);
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-top: 2px;
+  line-height: 1.1;
+}
+.date-btn.selected .soldout-tag {
+  color: #fff;
+  background: rgba(255, 255, 255, .25);
+}
+.field.is-dimmed {
+  opacity: .45;
+}
+.field.is-dimmed input {
+  background: rgba(14, 36, 32, .04);
+  cursor: not-allowed;
+}
+.tour-fixed-mode {
+  padding: 10px 14px;
+  background: rgba(43, 94, 82, .07);
+  border: 1px dashed var(--moss);
+  border-radius: 8px;
+  font-weight: 600;
+}
 .date-btn.today .dow { color: var(--amber-deep); }
 .time-section { margin-top: 26px; }
 .time-section h4 { font-size: 12px; font-weight: 700; color: var(--deep); margin-bottom: 12px; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }

@@ -787,8 +787,9 @@
       const today = state.site.today;
       const advance = state.site.settings?.booking?.advanceDays;
       const hasAdvance = /^\d+$/.test(String(advance));
-      const tourStart = tour.startDate || tour.fechaInicio || null;
-      const tourEnd = tour.endDate || tour.fechaFin || null;
+      const isFixed = Boolean(tour.isFixed || tour.fixed || tour.recurring || (!tour.startDate && !tour.endDate && !tour.fechaInicio && !tour.fechaFin));
+      const tourStart = isFixed ? null : (tour.startDate || tour.fechaInicio || null);
+      const tourEnd = isFixed ? null : (tour.endDate || tour.fechaFin || null);
       let from = tourStart && tourStart > today ? tourStart : today;
       // With no sales horizon, preview one API page starting at the first operating date.
       const limit = new Date((hasAdvance ? today : from) + 'T00:00:00Z');
@@ -857,13 +858,14 @@
       const month = new Intl.DateTimeFormat('es-GT', { month: 'short', timeZone: 'UTC' }).format(date).replace('.', '');
       const dayNum = String(Number(day.date.split('-')[2]));
       const button = el('button', {
-        className: `date-btn${state.date === day.date ? ' selected' : ''}${day.date === today ? ' today' : ''}`,
-        attrs: { type: 'button', disabled: !available, 'aria-pressed': String(state.date === day.date) },
+        className: `date-btn${state.date === day.date ? ' selected' : ''}${day.date === today ? ' today' : ''}${!available ? ' is-soldout' : ''}`,
+        attrs: { type: 'button', 'aria-pressed': String(state.date === day.date) },
         dataset: { date: day.date }
       }, [
         el('span', { className: 'dow', text: dow }),
         el('span', { className: 'day', text: dayNum }),
-        el('span', { className: 'month', text: month })
+        el('span', { className: 'month', text: month }),
+        ...(!available ? [el('span', { className: 'soldout-tag', text: 'Lleno' })] : [])
       ]);
       button.addEventListener('click', () => selectDate(day.date));
       strip.append(button);
@@ -884,23 +886,22 @@
 
   function selectDate(date) {
     const day = state.availability.find((item) => item.date === date);
-    if (!day || !dayHasSeats(day)) {
-      showAvailabilityNote('Ese día no tiene cupos disponibles. Elige otra fecha.');
-      return;
-    }
+    if (!day) return;
+    const available = dayHasSeats(day);
     state.date = date;
     state.time = null;
     renderDates();
     renderTimes();
     renderSummary();
-    updateToStep3();
-    const entry = tourEntryFor(date);
-    if (entry && entry.closed) showAvailabilityNote('La cueva está cerrada ese día por mantenimiento o clima. Elige otra fecha.');
-    else hideAvailabilityNote();
-    setText('selectedDateLabel', `· ${formatLong(date)}`);
-    if (day && entry && !entry.departures.some((item) => item.left > 0)) {
-      showAvailabilityNote('No quedan cupos en esta fecha. Prueba otro día.');
+    if (available) {
+      updateToStep3();
+      const entry = tourEntryFor(date);
+      if (entry && entry.closed) showAvailabilityNote('La cueva está cerrada ese día por mantenimiento o clima. Elige otra fecha.');
+      else hideAvailabilityNote();
+    } else {
+      showAvailabilityNote('Esta fecha está completa / agotada. Puedes elegir la misma salida en la siguiente semana o seleccionar otra fecha con cupos disponibles.');
     }
+    setText('selectedDateLabel', `· ${formatLong(date)}`);
   }
 
   function renderTimes() {
